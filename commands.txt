@@ -1,0 +1,4 @@
+pipreqs . --ignore .venv,__pycache__
+
+pipreqs . --ignore .venv,__pycache__ --force
+# 忽略指定文件/目录，并强制覆盖已存在的 requirements.txt
