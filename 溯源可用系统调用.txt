@@ -1,0 +1,108 @@
+## 1. Process -> Process
+
+| 系统调用 | 统一事件类型 | 建议级别 | 建边语义与理由 |
+|---|---|---|---|
+| `clone`、`clone3`、`fork`、`vfork` | `PROC_CREATE` | 核心 | 父进程创建子进程 |
+| `execve`、`execveat` | `PROC_EXEC` | 核心 | 进程执行或替换为新程序 |
+
+建议：
+
+- `execve`、`execveat` 的目标程序同时生成 `File -> Process` 边。
+
+---
+
+## 2. Process -> File
+
+| 系统调用 | 统一事件类型 | 建议级别 | 建边条件与理由 |
+|---|---|---|---|
+| `write`、`writev`、`pwrite`、`pwrite64`、`pwritev`、`pwritev2` | `FILE_WRITE` | 核心 | 成功向文件写入数据 |
+| `open`、`openat`、`openat2`、`creat` | `FILE_CREATE` | 核心 | 包含 `O_CREAT`，创建文件 |
+| `open`、`openat`、`openat2`、`creat` | `FILE_TRUNCATE` | 核心 | 包含 `O_TRUNC`，清空或截断文件 |
+| `unlink`、`unlinkat` | `FILE_REMOVE` | 核心 | 删除文件目录项，对载荷清理和反取证很重要 |
+| `rename`、`renameat`、`renameat2` | `FILE_RENAME` | 核心 | 改名、移动、交换或覆盖文件 |
+| `truncate`、`ftruncate` | `FILE_TRUNCATE` | 核心 | 修改文件长度，可能清空文件 |
+| `copy_file_range` | `FILE_COPY_WRITE` | 核心 | 将内容写入目标文件 |
+| `mmap` | `FILE_MAP_WRITE` | 按需 | 文件以 `MAP_SHARED` 和 `PROT_WRITE` 映射 |
+| `link`、`linkat`、`symlink`、`symlinkat` | `FILE_LINK` | 按需 | 创建硬链接或符号链接，适合路径劫持和持久化分析 |
+| `chmod`、`fchmod`、`fchmodat` | `FILE_MODE_CHANGE` | 按需 | 修改权限，重点关注 `setuid`、`setgid` 或高危权限 |
+| `chown`、`fchown`、`fchownat` | `FILE_OWNER_CHANGE` | 按需 | 修改文件所有者，重点关注高权限用户 |
+| `setxattr`、`lsetxattr`、`fsetxattr`、`removexattr` | `FILE_XATTR_CHANGE` | 按需 | 修改扩展属性，重点关注 `security.capability` |
+| `splice` | `FILE_WRITE` | 按需 | 目标 FD 为文件且确实产生写入 |
+
+---
+
+## 3. File -> Process
+
+| 系统调用 | 统一事件类型 | 建议级别 | 建边条件与理由 |
+|---|---|---|---|
+| `read`、`readv`、`pread`、`pread64`、`preadv`、`preadv2` | `FILE_READ` | 核心 | 进程读取文件内容 |
+| `execve`、`execveat` | `FILE_EXEC` | 核心 | 文件内容被加载并执行 |
+| `mmap` | `FILE_MAP` | 核心 | 映射 ELF、动态库、配置文件或其他文件内容 |
+| `open`、`openat`、`openat2` | `FILE_OPEN` | 按需 | 打开文件，但不表示已经读取内容 |
+| `stat`、`lstat`、`fstat`、`fstatat`、`statx` | `FILE_OBSERVE` | 按需 | 获取文件元数据 |
+| `access`、`faccessat`、`faccessat2` | `FILE_OBSERVE` | 按需 | 检查文件访问权限 |
+| `readlink`、`readlinkat` | `FILE_OBSERVE` | 按需 | 读取符号链接目标 |
+| `getdents`、`getdents64` | `DIR_ENUM` | 按需 | 枚举目录，常用于文件发现和侦察 |
+| `getxattr`、`lgetxattr`、`fgetxattr`、`listxattr` | `FILE_OBSERVE` | 按需 | 查询扩展属性 |
+| `sendfile` | `FILE_READ` | 核心 | 文件内容被内核读取并发送到网络 |
+| `splice` | `FILE_READ` | 按需 | 源 FD 为文件且文件内容被搬运 |
+| `copy_file_range` | `FILE_COPY_READ` | 核心 | 源文件内容被读取并复制 |
+
+---
+
+## 4. Process -> Network
+
+| 系统调用 | 统一事件类型 | 建议级别 | 建边条件与理由 |
+|---|---|---|---|
+| `send`、`sendto`、`sendmsg`、`sendmmsg` | `NET_SEND` | 核心 | 发送网络数据 |
+| socket FD 上的 `write`、`writev` | `NET_SEND` | 核心 | 通过普通写接口发送网络数据 |
+| `connect` | `NET_CONNECT` | 核心 | 建立出站连接，常用于 C2 通信 |
+| `bind` | `NET_BIND` | 核心 | 将 socket 绑定到本地地址 |
+| `listen` | `NET_LISTEN` | 核心 | 创建网络监听服务 |
+| `sendfile` | `NET_SEND` | 核心 | 文件内容直接发送到网络，边属性标记数据来源为文件 |
+| `splice` | `NET_SEND` | 按需 | 目标 FD 为 socket 时记录 |
+
+---
+
+## 5. Network -> Process
+
+| 系统调用 | 统一事件类型 | 建议级别 | 建边条件与理由 |
+|---|---|---|---|
+| `recv`、`recvfrom`、`recvmsg`、`recvmmsg` | `NET_RECV` | 核心 | 接收网络数据 |
+| socket FD 上的 `read`、`readv` | `NET_RECV` | 核心 | 通过普通读取接口接收网络数据 |
+| `accept`、`accept4` | `NET_ACCEPT` | 核心 | 接收新的网络连接 |
+| `splice` | `NET_RECV` | 按需 | 源 FD 为 socket 且网络数据被搬运 |
+
+---
+
+## 最终统一事件类型
+
+| 事件类型 | 对应系统调用 |
+|---|---|
+| `PROC_CREATE` | `clone`、`clone3`、`fork`、`vfork` |
+| `PROC_EXEC` | `execve`、`execveat` |
+| `FILE_READ` | `read`、`readv`、`pread*`、`sendfile`、部分 `splice` |
+| `FILE_WRITE` | `write`、`writev`、`pwrite*`、部分 `splice` |
+| `FILE_OPEN` | `open`、`openat`、`openat2` |
+| `FILE_CREATE` | `open*`、`creat` 搭配 `O_CREAT` |
+| `FILE_REMOVE` | `unlink`、`unlinkat` |
+| `FILE_RENAME` | `rename`、`renameat`、`renameat2` |
+| `FILE_TRUNCATE` | `truncate`、`ftruncate`、`open*` 搭配 `O_TRUNC` |
+| `FILE_COPY_READ` | `copy_file_range` 源文件侧 |
+| `FILE_COPY_WRITE` | `copy_file_range` 目标文件侧 |
+| `FILE_MAP` | `mmap` 产生的文件读取或执行关系 |
+| `FILE_MAP_WRITE` | `mmap` 的共享可写映射 |
+| `FILE_LINK` | `link`、`linkat`、`symlink`、`symlinkat` |
+| `FILE_MODE_CHANGE` | `chmod`、`fchmod`、`fchmodat` |
+| `FILE_OWNER_CHANGE` | `chown`、`fchown`、`fchownat` |
+| `FILE_XATTR_CHANGE` | xattr 修改类调用 |
+| `FILE_OBSERVE` | `stat*`、`access*`、`readlink*`、xattr 查询类调用 |
+| `DIR_ENUM` | `getdents`、`getdents64` |
+| `NET_SEND` | `send*`、socket 上的 `write*`、`sendfile`、部分 `splice` |
+| `NET_RECV` | `recv*`、socket 上的 `read*`、部分 `splice` |
+| `NET_CONNECT` | `connect` |
+| `NET_BIND` | `bind` |
+| `NET_LISTEN` | `listen` |
+| `NET_ACCEPT` | `accept`、`accept4` |
+
+这种命名可以同时满足两个目标：**系统调用变体被统一归并，攻击语义又不会被过度抽象**。
