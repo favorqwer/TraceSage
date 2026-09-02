@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""流式统计 sysdig JSONL 日志中的 26 个字段（14 个原始字段 + 12 个派生字段）。
+"""流式统计 sysdig JSONL 日志中的字段和溯源可用系统调用。
 
 用法:
     python analyze_attack_log.py [输入文件] [-n 记录数] [-w 进程数]
@@ -17,16 +17,17 @@
     python analyze_attack_log/analyze_attack_log.py analyze_attack_log/attack.jsonl -w 4          # 用 4 个进程并行
 
 统计字段:
-    原始字段 (14): evt.num, evt.rawtime, proc.pid, thread.tid, proc.ppid,
+    原始字段 (12): evt.num, evt.rawtime, proc.pid,
                   proc.exepath, proc.name, proc.args, proc.cwd, fd.l4proto,
                   evt.dir, evt.type, evt.args, evt.latency
-    派生字段 (12): proc.cmdline, proc.exeline, fd.num, fd.type, fd.name,
+    派生字段 (9): fd.type, fd.name,
                   fd.lip, fd.lport, fd.rip, fd.rport, evt.res, evt.failed, evt.arg.filename
 
 输出:
     - 终端打印统计摘要（各字段的 present/missing/unique/avg/Top 值）
     - 同时写入 {输入文件名}.stats.txt（如 attack.stats.txt）
     - 全局汇总：失败事件数、事件类型分布、进程名分布、fd 类型分布
+    - 按“溯源可用系统调用.txt”定义的统一事件类型汇总调用次数
 """
 
 
@@ -55,20 +56,23 @@ except ImportError:  # 多进程时会自动退回单进程，避免 hash seed �
 
 
 RAW_FIELDS = [
-    "evt.num", "evt.rawtime", "proc.pid", "thread.tid", "proc.ppid",
+    "evt.num", "evt.rawtime", "proc.pid",
     "proc.exepath", "proc.name", "proc.args", "proc.cwd", "fd.l4proto",
     "evt.dir", "evt.type", "evt.args", "evt.latency",
 ]
 DERIVED_FIELDS = [
-    "proc.cmdline", "proc.exeline", "fd.num", "fd.type", "fd.name",
+    "fd.type", "fd.name",
     "fd.lip", "fd.lport", "fd.rip", "fd.rport", "evt.res", "evt.failed", "evt.arg.filename",
 ]
 ALL_FIELDS = RAW_FIELDS + DERIVED_FIELDS
+FIELD_INDEX = {field: index for index, field in enumerate(ALL_FIELDS)}
 DEFAULT_TOP_N = 10
-FD_FIELDS = ("fd.num", "fd.type", "fd.name", "fd.lip", "fd.lport", "fd.rip", "fd.rport")
+SYSCALL_REFERENCE_FILENAME = "溯源可用系统调用.txt"
+SYSCALL_REFERENCE_PATH = Path(__file__).resolve().parent.parent / SYSCALL_REFERENCE_FILENAME
+FD_FIELDS = ("fd.type", "fd.name", "fd.lip", "fd.lport", "fd.rip", "fd.rport")
 NUMERIC_FIELDS = {
-    "evt.num", "evt.rawtime", "proc.pid", "thread.tid", "proc.ppid",
-    "evt.latency", "fd.num", "fd.lport", "fd.rport", "evt.res",
+    "evt.num", "evt.rawtime", "proc.pid",
+    "evt.latency", "fd.lport", "fd.rport", "evt.res",
 }
 
 FD_RE = re.compile(r"\bfd=(\d+)")
@@ -77,6 +81,65 @@ FILENAME_RE = re.compile(r"(?:^|\s)filename=")
 TYPE_RE = re.compile(r"^<([^>]+)>")
 INT_PREFIX_RE = re.compile(r"^[+-]?\d+")
 ERRNO_RE = re.compile(r"^E[A-Z0-9_]+(?:\b|\))")
+MARKDOWN_CODE_RE = re.compile(r"`([^`]+)`")
+
+
+def load_unified_event_mapping(
+    reference_path: Path = SYSCALL_REFERENCE_PATH,
+) -> Tuple[list[str], Dict[str, list[str]]]:
+    """读取系统调用文档，返回统一事件类型顺序及“系统调用 -> 事件类型”映射。"""
+    try:
+        lines = reference_path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return [], {}
+
+    event_types: list[str] = []
+    event_seen: set[str] = set()
+    syscall_to_events: Dict[str, list[str]] = {}
+    in_syscall_table = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("| 系统调用 |"):
+            in_syscall_table = True
+            continue
+        if not in_syscall_table:
+            continue
+        if not stripped or not stripped.startswith("|"):
+            in_syscall_table = False
+            continue
+        if stripped.startswith("|---"):
+            continue
+        cells = [cell.strip() for cell in stripped.split("|")]
+        if len(cells) < 3:
+            continue
+        names = [
+            name.strip()
+            for name in MARKDOWN_CODE_RE.findall(cells[1])
+            if re.fullmatch(r"[A-Za-z0-9_]+", name.strip())
+        ]
+        unified_types = [
+            event_type.strip()
+            for event_type in MARKDOWN_CODE_RE.findall(cells[2])
+            if re.fullmatch(r"[A-Z][A-Z0-9_]+", event_type.strip())
+        ]
+        if not names or not unified_types:
+            continue
+        for event_type in unified_types:
+            if event_type not in event_seen:
+                event_seen.add(event_type)
+                event_types.append(event_type)
+        for name in names:
+            mapped = syscall_to_events.setdefault(name, [])
+            for event_type in unified_types:
+                if event_type not in mapped:
+                    mapped.append(event_type)
+    return event_types, syscall_to_events
+
+
+def load_syscall_names(reference_path: Path = SYSCALL_REFERENCE_PATH) -> list[str]:
+    """兼容旧调用：返回文档中去重后的系统调用名称。"""
+    _, mapping = load_unified_event_mapping(reference_path)
+    return list(mapping)
 
 
 def _balanced_parenthesized(text: str, start: int) -> Tuple[str, int]:
@@ -94,17 +157,16 @@ def _balanced_parenthesized(text: str, start: int) -> Tuple[str, int]:
 
 
 def parse_fd_values(args: str) -> Tuple[Any, ...]:
-    empty = (None, None, None, None, None, None, None)
+    empty = (None, None, None, None, None, None)
     if not args or "fd=" not in args:
         return empty
     match = FD_RE.search(args or "")
     if not match:
         return empty
 
-    fd_num = int(match.group(1))
     pos = match.end()
     if pos >= len(args) or args[pos] != "(":
-        return (fd_num, None, None, None, None, None, None)
+        return empty
 
     name, _ = _balanced_parenthesized(args, pos)
     type_match = TYPE_RE.match(name)
@@ -122,7 +184,7 @@ def parse_fd_values(args: str) -> Tuple[Any, ...]:
         local, remote = (part.strip() for part in fd_name_for_parse.split("->", 1))
         fd_lip, fd_lport = parse_endpoint(local)
         fd_rip, fd_rport = parse_endpoint(remote)
-    return fd_num, fd_type, fd_name, fd_lip, fd_lport, fd_rip, fd_rport
+    return fd_type, fd_name, fd_lip, fd_lport, fd_rip, fd_rport
 
 
 def parse_fd_args(args: str) -> Dict[str, Any]:
@@ -190,11 +252,6 @@ def parse_filename(args: str) -> Optional[str]:
 
 def restore_fields(event: Dict[str, Any]) -> Dict[str, Any]:
     values = {field: event.get(field) for field in RAW_FIELDS}
-    name = event.get("proc.name") or ""
-    args = event.get("proc.args") or ""
-    exepath = event.get("proc.exepath") or ""
-    values["proc.cmdline"] = f"{name}{args}"
-    values["proc.exeline"] = f"{exepath}{args}"
     evt_args = event.get("evt.args") or ""
     values.update(parse_fd_args(evt_args))
     values["evt.res"], values["evt.failed"] = parse_res(evt_args)
@@ -205,14 +262,11 @@ def restore_fields(event: Dict[str, Any]) -> Dict[str, Any]:
 def restore_values(event: Dict[str, Any]) -> list[Any]:
     """统计专用的定长列表路径，避免每条记录创建派生字段字典。"""
     raw_values = [event.get(field) for field in RAW_FIELDS]
-    name = event.get("proc.name") or ""
-    args = event.get("proc.args") or ""
-    exepath = event.get("proc.exepath") or ""
     evt_args = event.get("evt.args") or ""
     fd_values = parse_fd_values(evt_args)
     evt_res, evt_failed = parse_res(evt_args)
     filename = parse_filename(evt_args)
-    return raw_values + [f"{name}{args}", f"{exepath}{args}", *fd_values, evt_res, evt_failed, filename]
+    return raw_values + [*fd_values, evt_res, evt_failed, filename]
 
 
 class HyperLogLog:
@@ -389,15 +443,15 @@ def _analyze_range(
         try:
             values = restore_values(event or {})
             update_stats_batch(stats_list, values)
-            if values[24] is True:
+            if values[FIELD_INDEX["evt.failed"]] is True:
                 failed_events += 1
-            evt_type = values[11]
+            evt_type = values[FIELD_INDEX["evt.type"]]
             if evt_type not in (None, ""):
                 event_types[str(evt_type)] += 1
-            proc_name = values[6]
+            proc_name = values[FIELD_INDEX["proc.name"]]
             if proc_name not in (None, ""):
                 process_names[str(proc_name)] += 1
-            fd_type = values[17]
+            fd_type = values[FIELD_INDEX["fd.type"]]
             if fd_type not in (None, ""):
                 fd_types[str(fd_type)] += 1
         except Exception:
@@ -454,9 +508,35 @@ def _finalize_result(
     top_n: int,
     max_records: Optional[int],
     workers: int,
+    unified_event_types: list[str],
+    syscall_to_events: Dict[str, list[str]],
 ) -> Dict[str, Any]:
     def top(counter: Counter) -> list[Dict[str, Any]]:
         return [{"value": value, "count": count} for value, count in counter.most_common(top_n)]
+
+    processed = chunk["processed"]
+    unified_stats = [
+        {
+            "event_type": event_type,
+            "count": sum(
+                chunk["event_types"].get(syscall, 0)
+                for syscall, mapped_types in syscall_to_events.items()
+                if event_type in mapped_types
+            ),
+            "rate": (
+                sum(
+                    chunk["event_types"].get(syscall, 0)
+                    for syscall, mapped_types in syscall_to_events.items()
+                    if event_type in mapped_types
+                ) / processed
+            ) if processed else 0.0,
+            "syscalls": [
+                syscall for syscall, mapped_types in syscall_to_events.items()
+                if event_type in mapped_types
+            ],
+        }
+        for event_type in unified_event_types
+    ]
 
     return {
         "meta": {
@@ -468,12 +548,15 @@ def _finalize_result(
             "max_records": max_records,
             "stopped_early": chunk["stopped_early"],
             "workers": workers,
+            "syscall_reference": str(SYSCALL_REFERENCE_PATH),
+            "unified_event_type_count": len(unified_event_types),
         },
         "global": {
             "failed_events": chunk["failed_events"],
             "event_types": top(chunk["event_types"]),
             "process_names": top(chunk["process_names"]),
             "fd_types": top(chunk["fd_types"]),
+            "unified_event_stats": unified_stats,
         },
         "fields": {field: chunk["stats"][field].as_dict() for field in ALL_FIELDS},
     }
@@ -485,13 +568,16 @@ def analyze(
     max_records: Optional[int] = None,
     workers: int = 1,
 ) -> Dict[str, Any]:
+    unified_event_types, syscall_to_events = load_unified_event_mapping()
     # 前 N 条必须保持文件顺序；没有稳定哈希时也不能安全合并 HLL。
     if max_records is not None or xxhash is None:
         workers = 1
     size = path.stat().st_size
     if workers <= 1 or size == 0:
         chunk = _analyze_range(path, 0, size, top_n, max_records)
-        return _finalize_result(path, chunk, top_n, max_records, workers)
+        return _finalize_result(
+            path, chunk, top_n, max_records, workers, unified_event_types, syscall_to_events
+        )
 
     ranges = []
     for index in range(workers):
@@ -504,7 +590,9 @@ def analyze(
     merged = chunks[0]
     for chunk in chunks[1:]:
         _merge_chunks(merged, chunk)
-    return _finalize_result(path, merged, top_n, max_records, workers)
+    return _finalize_result(
+        path, merged, top_n, max_records, workers, unified_event_types, syscall_to_events
+    )
 
 
 def format_summary(result: Dict[str, Any]) -> str:
@@ -515,6 +603,10 @@ def format_summary(result: Dict[str, Any]) -> str:
     lines.append(f"非法 JSON 行: {meta['invalid_json_lines']:,}，字段恢复异常: {meta['restore_error_lines']:,}")
     lines.append(f"失败事件: {global_stats['failed_events']:,}")
     lines.append(f"统计进程数: {meta['workers']}")
+    if meta["unified_event_type_count"]:
+        lines.append(f"统一事件类型: {meta['unified_event_type_count']:,} 个")
+    else:
+        lines.append(f"系统调用清单: 未找到（{SYSCALL_REFERENCE_FILENAME}）")
     if meta["max_records"] is not None:
         state = "已达到上限并停止" if meta["stopped_early"] else "未达到上限（文件已结束）"
         lines.append(f"记录上限: {meta['max_records']:,}，{state}")
@@ -526,11 +618,18 @@ def format_summary(result: Dict[str, Any]) -> str:
         top_text = ", ".join(f"{x['value']} ({x['count']})" for x in item["top"][:3])
         avg = "" if item["avg"] is None else f"{item['avg']:.3f}"
         lines.append(f"{field:<16} {item['present']:>12,} {item['missing']:>12,} {item['unique']:>12,} {avg:>14}  {top_text}")
+    if global_stats["unified_event_stats"]:
+        lines.append("")
+        lines.append("统一事件类型统计（按溯源可用系统调用.txt 映射）:")
+        lines.append(f"{'统一事件类型':<22} {'次数':>12} {'占有效记录':>14}  对应系统调用")
+        for item in global_stats["unified_event_stats"]:
+            calls = ", ".join(item["syscalls"])
+            lines.append(f"{item['event_type']:<22} {item['count']:>12,} {item['rate']:>13.3%}  {calls}")
     return "\n".join(lines)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="流式统计 sysdig JSONL 日志中的 26 个字段")
+    parser = argparse.ArgumentParser(description="流式统计 sysdig JSONL 日志中的 21 个字段")
     parser.add_argument("input", nargs="?", default="attack.jsonl", help="输入 JSONL 文件，默认 attack.jsonl")
     parser.add_argument(
         "-n", type=int,

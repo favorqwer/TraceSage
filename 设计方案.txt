@@ -1,0 +1,75 @@
+
+
+不考虑多主机
+
+特殊情况：
+- execve 的父子进程边使用开始记录事件号；
+- rename 的新文件边使用结束记录事件号；
+- accept 当前使用结束记录事件号；
+
+存入数据库很慢如何优化？
+
+根据相关字段判断无效的记录、未匹配到的每一行记录、都应该记录下来
+
+
+
+我目前的项目是根据sysdig日志建模出一张溯源图，溯源图由三类顶点和五种事件边以及顶点和事件边的属性组成，打算将溯源图存储在neo4j数据库中
+
+日志解析过程如下：
+读取一行记录->匹配记录对->提取顶点->根据系统调用和顶点类型生成边->将顶点和边存入数据库
+
+根据相关字段判断记录是否有效该如何判断？
+比如我觉得evt.failed=True的事件可以直接跳过，给我说明还有哪些字段可以判断
+
+格式解析是否成功如何判断？我提供的json日志有必要做这一步检查吗？
+
+从一对记录提取顶点：
+1.记录对->提取当前进程->构造Process顶点->按照pid + name去重
+2.记录对->检查evt.args->存在path->构造File顶点->按照文件路径去重
+3.记录对->检查evt.args->存在protocol + lip + lport + rip + rport->构造Network顶点->按照网络五元组去重
+4.记录对->没有上述可识别的对象->如何处理？
+
+
+"E:\Work\TraceSage\溯源可用属性.txt"、"E:\Work\TraceSage\溯源可用系统调用.txt"都是可以参考的资料
+
+
+三类顶点
+Process：
+process_id=pid + name
+pid=proc.pid
+name=proc.name
+exepath=proc.exepath
+args=proc.args
+cwd=proc.cwd
+
+File：
+file_id=path
+path：优先从fd=5(<f>/tmp/a)这样的fd=路径中提取，若提取不到则取evt.arg.filename
+type=fd.type
+
+Network：
+network_id=protocol + lip + lport + rip + rport
+protocol=fd.l4proto
+lip=fd.lip
+lport=fd.lport
+rip=fd.rip
+rport=fd.rport
+
+
+
+五种事件边
+Process -> Process
+Process -> File
+File -> Process
+Process -> Network
+Network -> Process
+
+
+event_id=起始evt.num + 结束evt.num
+starttime：> 进入记录的时间
+endtime：< 退出记录的时间，也是事件真正完成的时间
+syscall=evt.type
+action：规范化后的溯源动作，如 FILE_READ、FILE_WRITE、NET_SEND
+res=evt.res
+
+

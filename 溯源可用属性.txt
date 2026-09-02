@@ -1,20 +1,13 @@
-## 判断标记
 
-- **一定存在**：Sysdig 对该类事件固定提供，通常每条记录都有值。
-- **条件存在**：仅在特定事件类型或状态下有值，其他情况可能为 `<NA>`。
-- **可能为空**：依赖采集状态、容器环境、内核能力或 `.scap` 是否保存相关数据。
-- 使用 `-p` 时，建议在格式串前加 `*`，字段缺失时会输出 `<NA>`，不会丢弃整行。
 
 ```bash
 sudo sysdig -w capture.scap
 
-sudo sysdig -r capture.scap -j -p '\*%evt.num %evt.rawtime %proc.pid %thread.tid %proc.ppid %proc.exepath %proc.name %proc.args %proc.cwd %fd.l4proto %evt.dir %evt.type %evt.args %evt.latency' > attack.jsonl
+sudo sysdig -r capture.scap -j -p '\*%evt.num %evt.rawtime %proc.pid %proc.exepath %proc.name %proc.args %proc.cwd %fd.l4proto %evt.dir %evt.type %evt.args %evt.latency' > attack.jsonl
 ```
 
 其余字段的恢复关系是：
-proc.cmdline = proc.name + proc.args
-proc.exeline = proc.exepath + proc.args
-fd.num       <- evt.args 中的 fd=
+proc.exeline 由 proc.exepath + proc.args 合成
 fd.type      <- evt.args 中 FD 描述符类型，例如 <f>、<4t>
 fd.name      <- evt.args 中 FD 的解析名称
 fd.lip       <- fd.name 中 socket tuple 的本地地址
@@ -26,43 +19,24 @@ evt.arg.filename      <- evt.args 中的 filename=
 evt.failed   <- 根据 res= 的错误值判断
 
 
-## 进程与线程属性
+
 
 | 属性 | 作用 | 是否一定存在 |
 |---|---|---|
 | `proc.pid` | 产生事件的进程 ID | 进程事件通常存在，其他事件可能为空 |
-| `thread.tid` | 产生事件的线程 ID | 线程或系统调用事件通常存在 |
-| `proc.ppid` | 当前进程的父进程 ID | 进程状态可解析时存在 |
-| `proc.exepath` | 可执行文件的完整路径 | 进程信息可解析时存在 |
 | `proc.name` | 可执行文件名称，不包含路径 | 进程事件通常存在 |
+| `proc.exepath` | 可执行文件的完整路径 | 进程信息可解析时存在 |
 | `proc.args` | 启动进程时传入的参数 | 进程信息可用时存在 |
-| `proc.cmdline` | `proc.name` 与 `proc.args` 拼接后的完整命令行 | 根据进程信息恢复 |
-| `proc.exeline` | `proc.exepath` 与 `proc.args` 拼接后的完整命令行 | 根据进程信息恢复 |
 | `proc.cwd` | 事件发生时进程的当前工作目录 | 进程状态和工作目录可解析时存在 |
-
-## 文件与文件描述符属性
-
-| 属性 | 作用 | 是否一定存在 |
-|---|---|---|
-| `fd.num` | 文件描述符编号 | FD 相关系统调用中存在 |
+| `proc.exeline` | 进程执行命令，可以由 proc.exepath + proc.args 合成，不作为独立字段采集或存储 | 进程信息可用时存在 |
 | `fd.type` | 文件描述符类型，如 `file`、`directory`、`pipe`、`socket` 等 | 当前事件包含 FD 时存在 |
 | `fd.name` | 文件描述符的完整名称；文件通常是路径，socket 通常是连接元组 | FD 名称解析成功时存在 |
 | `evt.arg.filename` | 系统调用传入的文件名或路径参数 | 事件参数中包含 `filename=` 时存在 |
-
-## 网络属性
-
-| 属性 | 作用 | 是否一定存在 |
-|---|---|---|
 | `fd.l4proto` | 四层网络协议，如 TCP、UDP、ICMP、RAW | 网络 FD 事件中有意义 |
 | `fd.lip` | socket 的本地 IP 地址 | 当前 FD 为 IP socket 时存在 |
 | `fd.lport` | socket 的本地端口 | 协议包含端口信息时存在 |
 | `fd.rip` | socket 的远程 IP 地址 | 已解析远端地址时存在 |
 | `fd.rport` | socket 的远程端口 | 已解析远端端口时存在 |
-
-## 事件属性
-
-| 属性 | 作用 | 是否一定存在 |
-|---|---|---|
 | `evt.num` | 事件编号 | 正常捕获事件中一定存在 |
 | `evt.rawtime` | Unix epoch 起始的绝对纳秒时间 | 正常捕获事件中一定存在 |
 | `evt.dir` | 事件方向：`>` 表示进入，`<` 表示退出 | 系统调用事件通常存在 |
