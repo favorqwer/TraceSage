@@ -24,7 +24,6 @@ class EventEdge:
         self._start_ns = start_ns
         self._end_ns = end_ns
         self._event_no = event_no
-        self._synthetic_reverse: Optional[bool] = None
         self._host: Optional[str] = None
 
     @property
@@ -58,14 +57,6 @@ class EventEdge:
     @property
     def event_no(self) -> int:
         return self._event_no
-
-    @property
-    def synthetic_reverse(self) -> Optional[bool]:
-        return self._synthetic_reverse
-
-    @synthetic_reverse.setter
-    def synthetic_reverse(self, value: Optional[bool]) -> None:
-        self._synthetic_reverse = value
 
     @property
     def event(self) -> str:

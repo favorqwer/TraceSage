@@ -118,8 +118,10 @@ class MySysdigLogParser:
         self._pending_files: Dict[str, FileEntity] = {}
         self._pending_processes: Dict[str, Process] = {}
         self._pending_networks: Dict[str, NetworkEntity] = {}
+
+        self._incomplete_network_count = 0
+        self._no_object_count = 0
         self._answering: Dict[Fingerprint, SystemCall] = {}
-        self._back_flow: Dict[str, EventEdge] = {}
         self._forward_flow: Dict[str, EventEdge] = {}
 
         # --- edge queues ---
@@ -236,20 +238,8 @@ class MySysdigLogParser:
                         parent_node, p_end_node, self._next_event_id(),
                         "execve", 0, start_ns, end_ns, int(event_no_start),
                     )
-                    forward_link.synthetic_reverse = False
                     self._queue_process_process_edge(forward_link)
                     self._forward_flow[key_parent] = forward_link
-
-                    event_no_end = m_end.get("eventno", "0")
-                    back_link = EventEdge(
-                        p_end_node, parent_node, self._next_event_id(),
-                        "execve", 0, start_ns, end_ns, int(event_no_end),
-                    )
-                    back_link.synthetic_reverse = True
-                    self._queue_process_process_edge(back_link)
-                    self._back_flow[
-                        m_end.get("pid", "") + m_end.get("process", "")
-                    ] = back_link
 
         execve_sc = SystemCall(
             "execve", "PtoP",
@@ -257,7 +247,7 @@ class MySysdigLogParser:
         ).add_action(_execve_action)
         self._answering[execve_sc.finger_print] = execve_sc
 
-        # --- accept (special: NtoP + PtoN reverse) ---
+        # --- accept (special: NtoP) ---
         def _accept_action(
             m_start: Dict[str, str],
             m_end: Dict[str, str],
@@ -267,6 +257,10 @@ class MySysdigLogParser:
             p = e_end[0]  # Process
             p_node = EntityNode(p)
             n = e_end[1]  # NetworkEntity
+            if n is None:
+                # 无完整五元组的 accept（如内核 fd 地址）-> 不建边，可审计
+                self._incomplete_network_count += 1
+                return
             n_node = EntityNode(n)
             ts_end = m_end.get("timestamp", "0.0")
             end_ns = self._parse_timestamp_ns(ts_end)
@@ -276,15 +270,7 @@ class MySysdigLogParser:
                 n_node, p_node, self._next_event_id(),
                 "accept", 0, end_ns, end_ns, int(event_no_end),
             )
-            np_edge.synthetic_reverse = False
             self._queue_network_process_edge(np_edge)
-
-            pn_edge = EventEdge(
-                p_node, n_node, self._next_event_id(),
-                "accept", 0, end_ns, end_ns, int(event_no_end),
-            )
-            pn_edge.synthetic_reverse = True
-            self._queue_process_network_edge(pn_edge)
 
         accept_sc = SystemCall(
             "accept", "NtoP",
@@ -307,6 +293,9 @@ class MySysdigLogParser:
             p = e_end[0]  # Process
             p_node = EntityNode(p)
             n = e_end[1]  # NetworkEntity
+            if n is None:
+                self._incomplete_network_count += 1
+                return
             n_node = EntityNode(n)
 
             np_edge = EventEdge(
@@ -479,6 +468,8 @@ class MySysdigLogParser:
         )
         self._print_pairing_summary()
         print(f"skipped log line#: {self._skipped_log_lines}")
+        print(f"incomplete network (no full 4-tuple): {self._incomplete_network_count}")
+        print(f"no object (pipe/socket/anon_inode): {self._no_object_count}")
         self._print_skipped_line_summary()
         self._flush_buffered_records(True)
 
@@ -678,6 +669,10 @@ class MySysdigLogParser:
             res[1] = self._get_or_create_file(path, path)
         elif process_file is not None:
             res[1] = self._get_or_create_file(process_file, process_file)
+        elif "pipe" in file_socket:
+            # 管道（pipe）：按设计不构造 File 顶点、也不建边 -> NO_OBJECT
+            self._no_object_count += 1
+            res[1] = None
         elif (
             "sip" in file_socket
             and "sport" in file_socket
@@ -688,6 +683,10 @@ class MySysdigLogParser:
                 file_socket["sip"], file_socket["sport"],
                 file_socket["dip"], file_socket["dport"],
             )
+        elif "socket" in file_socket:
+            # socket 但无完整四元组（如 unix socket `ffff->ffff`、内核 fd 地址）
+            self._incomplete_network_count += 1
+            res[1] = None
         else:
             res[1] = None
 
@@ -761,10 +760,6 @@ class MySysdigLogParser:
         end_time = m_end.get("timestamp", "0.0")
         end_ns = self._parse_timestamp_ns(end_time)
         key = m_end.get("pid", "") + m_end.get("process", "")
-
-        bf = self._back_flow.get(key)
-        if bf is not None and bf.end_ns < end_ns:
-            bf.end_ns = end_ns
 
         ff = self._forward_flow.get(key)
         if ff is not None and ff.end_ns < end_ns:

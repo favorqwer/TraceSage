@@ -5,3 +5,6 @@ input/
 output/
 sysdig.wiki/
 analyze_attack_log/attack*
+
+1_Multi_Stage_Data_Exfiltration.txt
+attack.jsonl

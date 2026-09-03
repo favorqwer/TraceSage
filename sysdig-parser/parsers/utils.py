@@ -2,8 +2,9 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 _FILE_DESCRIPTOR_PATTERN = re.compile(r"^fd=\S*\(<f>(?P<path>.*)\)$")
+_PIPE_DESCRIPTOR_PATTERN = re.compile(r"^fd=\S*\(<p>(?P<name>.*)\)$")
 _SOCKET_DESCRIPTOR_PATTERN = re.compile(
-    r"^fd=\S*\(<(?P<family>[46])(?P<transport>[tu])?>(?P<endpoint>.*)\)$"
+    r"^fd=\S*\(<(?P<family>[46u])(?P<transport>[tu])?>(?P<endpoint>.*)\)$"
 )
 _ENDPOINT_PATTERN = re.compile(r"^(?P<host>.+):(?P<port>\d+)$")
 _PID_TOKEN_PATTERN = re.compile(r"^\(\d+\)$")
@@ -62,13 +63,22 @@ class Utils:
 
     @staticmethod
     def extract_file_and_socket(s: str) -> Dict[str, str]:
-        """Extract file path or socket endpoint info from the 'fd=...' field."""
+        """Extract file path or socket endpoint info from the 'fd=...' field.
+
+        Returns a dict with keys among: path / sip,sport,dip,dport / pipe / socket.
+        - `<f>path`          -> {'path': path}
+        - `<p>pipe:[N]`      -> {'pipe': 'pipe:[N]'}   (非文件，但可表示)
+        - `<u>...` / `<4t>...`
+          - 若含 `lip:lport->rip:rport` -> {'sip',...,'dport'} + 'socket'
+          - 否则（内核 fd 地址如 ffff...->ffff...，或空）-> {'socket': '<u>...'}
+        """
         path: Optional[str] = None
         src_ip: Optional[str] = None
         src_port: Optional[str] = None
         dest_ip: Optional[str] = None
         dest_port: Optional[str] = None
         socket: Optional[str] = None
+        pipe: Optional[str] = None
         res: Dict[str, str] = {}
 
         if "fd=" in s:
@@ -77,18 +87,32 @@ class Utils:
             if file_match:
                 path = Utils._normalize_descriptor_path(file_match.group("path"))
             else:
-                socket_match = _SOCKET_DESCRIPTOR_PATTERN.match(fd)
-                if socket_match:
-                    socket = socket_match.group("endpoint")
-                    if socket:
-                        ports_and_ip = Utils._get_ip_and_ports(socket)
-                        src_ip = ports_and_ip[0]
-                        src_port = ports_and_ip[1]
-                        dest_ip = ports_and_ip[2]
-                        dest_port = ports_and_ip[3]
+                pipe_match = _PIPE_DESCRIPTOR_PATTERN.match(fd)
+                if pipe_match:
+                    pipe = pipe_match.group("name")
+                else:
+                    socket_match = _SOCKET_DESCRIPTOR_PATTERN.match(fd)
+                    if socket_match:
+                        socket_ep = socket_match.group("endpoint")
+                        socket = fd[socket_match.start() :]
+                        if socket_ep and "->" in socket_ep and "ffff" not in socket_ep:
+                            try:
+                                ports_and_ip = Utils._get_ip_and_ports(socket_ep)
+                                src_ip = ports_and_ip[0]
+                                src_port = ports_and_ip[1]
+                                dest_ip = ports_and_ip[2]
+                                dest_port = ports_and_ip[3]
+                            except ValueError:
+                                # 内核 fd 地址解析不到真实 IP -> 保留 socket 名
+                                src_ip = None
+                                src_port = None
+                                dest_ip = None
+                                dest_port = None
 
         if path is not None:
             res["path"] = path
+        elif pipe is not None:
+            res["pipe"] = pipe
         if src_ip is not None:
             res["sip"] = src_ip
         if src_port is not None:
