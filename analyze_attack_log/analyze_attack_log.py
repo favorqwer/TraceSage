@@ -20,13 +20,13 @@
     原始字段 (12): evt.num, evt.rawtime, proc.pid,
                   proc.exepath, proc.name, proc.args, proc.cwd, fd.l4proto,
                   evt.dir, evt.type, evt.args, evt.latency
-    派生字段 (9): fd.type, fd.name,
-                  fd.lip, fd.lport, fd.rip, fd.rport, evt.res, evt.failed, evt.arg.filename
+    派生字段 (8): fd.type, fd.name,
+                  fd.lip, fd.lport, fd.rip, fd.rport, evt.res, evt.arg.filename
 
 输出:
     - 终端打印统计摘要（各字段的 present/missing/unique/avg/Top 值）
     - 同时写入 {输入文件名}.stats.txt（如 attack.stats.txt）
-    - 全局汇总：失败事件数、事件类型分布、进程名分布、fd 类型分布
+    - 全局汇总：事件类型分布、进程名分布、fd 类型分布
     - 按“溯源可用系统调用.txt”定义的统一事件类型汇总调用次数
 """
 
@@ -62,7 +62,7 @@ RAW_FIELDS = [
 ]
 DERIVED_FIELDS = [
     "fd.type", "fd.name",
-    "fd.lip", "fd.lport", "fd.rip", "fd.rport", "evt.res", "evt.failed", "evt.arg.filename",
+    "fd.lip", "fd.lport", "fd.rip", "fd.rport", "evt.res", "evt.arg.filename",
 ]
 ALL_FIELDS = RAW_FIELDS + DERIVED_FIELDS
 FIELD_INDEX = {field: index for index, field in enumerate(ALL_FIELDS)}
@@ -80,7 +80,6 @@ RES_RE = re.compile(r"\bres=([^\s]+)")
 FILENAME_RE = re.compile(r"(?:^|\s)filename=")
 TYPE_RE = re.compile(r"^<([^>]+)>")
 INT_PREFIX_RE = re.compile(r"^[+-]?\d+")
-ERRNO_RE = re.compile(r"^E[A-Z0-9_]+(?:\b|\))")
 MARKDOWN_CODE_RE = re.compile(r"`([^`]+)`")
 
 
@@ -210,19 +209,18 @@ def parse_endpoint(endpoint: str) -> Tuple[Optional[str], Optional[int]]:
     return endpoint, None
 
 
-def parse_res(args: str) -> Tuple[Any, bool]:
+def parse_res(args: str) -> Any:
     if not args or "res=" not in args:
-        return None, False
+        return None
     match = RES_RE.search(args or "")
     if not match:
-        return None, False
+        return None
     token = match.group(1)
     number = INT_PREFIX_RE.match(token)
     if number:
         value: Any = int(number.group(0))
-        return value, value < 0
-    # sysdig may render errno names such as EAGAIN; keep the original token.
-    return token, bool(ERRNO_RE.match(token))
+        return value
+    return token
 
 
 def parse_filename(args: str) -> Optional[str]:
@@ -254,7 +252,7 @@ def restore_fields(event: Dict[str, Any]) -> Dict[str, Any]:
     values = {field: event.get(field) for field in RAW_FIELDS}
     evt_args = event.get("evt.args") or ""
     values.update(parse_fd_args(evt_args))
-    values["evt.res"], values["evt.failed"] = parse_res(evt_args)
+    values["evt.res"] = parse_res(evt_args)
     values["evt.arg.filename"] = parse_filename(evt_args)
     return values
 
@@ -264,9 +262,9 @@ def restore_values(event: Dict[str, Any]) -> list[Any]:
     raw_values = [event.get(field) for field in RAW_FIELDS]
     evt_args = event.get("evt.args") or ""
     fd_values = parse_fd_values(evt_args)
-    evt_res, evt_failed = parse_res(evt_args)
+    evt_res = parse_res(evt_args)
     filename = parse_filename(evt_args)
-    return raw_values + [*fd_values, evt_res, evt_failed, filename]
+    return raw_values + [*fd_values, evt_res, filename]
 
 
 class HyperLogLog:
@@ -429,7 +427,7 @@ def _analyze_range(
     max_records: Optional[int] = None,
 ) -> Dict[str, Any]:
     stats, stats_list = _new_stats(top_n)
-    processed = invalid = restore_errors = failed_events = 0
+    processed = invalid = restore_errors = 0
     event_types = Counter()
     process_names = Counter()
     fd_types = Counter()
@@ -443,8 +441,6 @@ def _analyze_range(
         try:
             values = restore_values(event or {})
             update_stats_batch(stats_list, values)
-            if values[FIELD_INDEX["evt.failed"]] is True:
-                failed_events += 1
             evt_type = values[FIELD_INDEX["evt.type"]]
             if evt_type not in (None, ""):
                 event_types[str(evt_type)] += 1
@@ -464,7 +460,6 @@ def _analyze_range(
         "processed": processed,
         "invalid": invalid,
         "restore_errors": restore_errors,
-        "failed_events": failed_events,
         "event_types": event_types,
         "process_names": process_names,
         "fd_types": fd_types,
@@ -481,7 +476,6 @@ def _merge_chunks(destination: Dict[str, Any], source: Dict[str, Any]) -> None:
     destination["processed"] += source["processed"]
     destination["invalid"] += source["invalid"]
     destination["restore_errors"] += source["restore_errors"]
-    destination["failed_events"] += source["failed_events"]
     destination["event_types"].update(source["event_types"])
     destination["process_names"].update(source["process_names"])
     destination["fd_types"].update(source["fd_types"])
@@ -552,7 +546,6 @@ def _finalize_result(
             "unified_event_type_count": len(unified_event_types),
         },
         "global": {
-            "failed_events": chunk["failed_events"],
             "event_types": top(chunk["event_types"]),
             "process_names": top(chunk["process_names"]),
             "fd_types": top(chunk["fd_types"]),
@@ -601,7 +594,6 @@ def format_summary(result: Dict[str, Any]) -> str:
     global_stats = result["global"]
     lines.append(f"处理有效记录: {meta['processed_lines']:,}")
     lines.append(f"非法 JSON 行: {meta['invalid_json_lines']:,}，字段恢复异常: {meta['restore_error_lines']:,}")
-    lines.append(f"失败事件: {global_stats['failed_events']:,}")
     lines.append(f"统计进程数: {meta['workers']}")
     if meta["unified_event_type_count"]:
         lines.append(f"统一事件类型: {meta['unified_event_type_count']:,} 个")
@@ -629,7 +621,7 @@ def format_summary(result: Dict[str, Any]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="流式统计 sysdig JSONL 日志中的 21 个字段")
+    parser = argparse.ArgumentParser(description="流式统计 sysdig JSONL 日志中的 20 个字段")
     parser.add_argument("input", nargs="?", default="attack.jsonl", help="输入 JSONL 文件，默认 attack.jsonl")
     parser.add_argument(
         "-n", type=int,

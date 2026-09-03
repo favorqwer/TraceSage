@@ -21,7 +21,7 @@ TraceSage 使用 Sysdig 导出的 JSONL 日志构建主机级溯源图，并将�
 - `input/`：输入数据，当前主要是 `input/sysdig/` 下的攻击场景查询或日志输入文件。
 - `output/`：解析、建模、导入或质量检查产生的输出；新增产物优先放在这里，不要污染项目根目录。
 - `sysdig.wiki/`：Sysdig 日志格式和字段语义的参考资料。优先阅读其中的 User Guide 和 Quick Reference Guide。
-- `analyze_attack_log/`：日志统计工具。 `analyze_attack_log.py` 按 JSONL 流式读取日志，统计原始字段、派生字段、失败事件、事件类型、进程名、FD 类型和统一系统调用类型。
+- `analyze_attack_log/`：日志统计工具。 `analyze_attack_log.py` 按 JSONL 流式读取日志，统计原始字段、派生字段、解析异常、事件类型、进程名、FD 类型和统一系统调用类型。
 - `sysdig-parser/`：旧版 Java/PostgreSQL 解析器，仅作为行为和历史数据模型参考。**绝对不能直接照搬代码、SQL、类结构或 PostgreSQL 导入实现**；新实现必须使用 Python，并独立设计 Neo4j 数据访问层。
 - `requirements.txt`：当前 Python 依赖清单。
 - `.venv/`：项目虚拟环境。
@@ -68,4 +68,3 @@ python -m pip install -r requirements.txt
 - 新代码使用 Python，并遵循现有项目的命名、类型标注、日志和错误处理风格。
 - 不确定的领域语义以用户最新说明、`sysdig.wiki/`为优先依据；旧版 `sysdig-parser` 只能帮助理解历史行为。
 - 对不支持或有歧义的 Sysdig 事件，宁可保留为可审计的未建模记录，也不要静默猜测并写入错误溯源关系。
-

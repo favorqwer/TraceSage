@@ -1,7 +1,7 @@
+__pycache__/
 .venv/
 .env
 input/
 output/
 sysdig.wiki/
 analyze_attack_log/attack*
-sysdig-parser/
