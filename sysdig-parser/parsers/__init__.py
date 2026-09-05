@@ -11,11 +11,11 @@ from .system_call_factory import SystemCallFactory
 from .action import Action
 from .utils import Utils
 from .my_sysdig_log_parser import MySysdigLogParser
-from .postgres import Postgres
+from .neo4j_writer import Neo4jWriter
 
 __all__ = [
     "Entity", "FileEntity", "NetworkEntity", "Process",
     "EntityNode", "EventEdge", "Fingerprint", "MetaConfig",
     "SystemCall", "SystemCallFactory", "Action", "Utils",
-    "MySysdigLogParser", "Postgres",
+    "MySysdigLogParser", "Neo4jWriter",
 ]

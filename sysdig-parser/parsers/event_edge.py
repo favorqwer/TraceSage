@@ -1,4 +1,3 @@
-from typing import Optional
 from .entity_node import EntityNode
 
 
@@ -14,7 +13,6 @@ class EventEdge:
         size: int,
         start_ns: int,
         end_ns: int,
-        event_no: int,
     ) -> None:
         self._source = source
         self._sink = sink
@@ -23,8 +21,6 @@ class EventEdge:
         self._size = size
         self._start_ns = start_ns
         self._end_ns = end_ns
-        self._event_no = event_no
-        self._host: Optional[str] = None
 
     @property
     def id(self) -> int:
@@ -55,21 +51,9 @@ class EventEdge:
         self._end_ns = value
 
     @property
-    def event_no(self) -> int:
-        return self._event_no
-
-    @property
     def event(self) -> str:
         return self._event
 
     @property
     def size(self) -> int:
         return self._size
-
-    @property
-    def host(self) -> Optional[str]:
-        return self._host
-
-    @host.setter
-    def host(self, value: Optional[str]) -> None:
-        self._host = value

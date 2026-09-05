@@ -5,16 +5,16 @@
     python analyze_attack_log.py [输入文件] [-n 记录数] [-w 进程数]
 
 参数:
-    input              输入 JSONL 文件路径，默认 attack.jsonl
+    input              输入 JSONL 文件路径，默认 input/sysdig/attack.jsonl
     -n N               最多统计 N 条有效 JSON 记录；不指定则统计整个文件
                        指定后自动使用单进程
     -w, --workers N    并行进程数，0=自动（默认，最多 8 个）
                        指定 -n 时自动单进程；xxhash 不可用时也退回单进程
 
 示例:
-    python analyze_attack_log/analyze_attack_log.py analyze_attack_log/attack.jsonl               # 统计整个文件，自动并行
-    python analyze_attack_log/analyze_attack_log.py analyze_attack_log/attack.jsonl -n 10000      # 只统计前 10000 条
-    python analyze_attack_log/analyze_attack_log.py analyze_attack_log/attack.jsonl -w 4          # 用 4 个进程并行
+    python analyze_attack_log/analyze_attack_log.py input/sysdig/attack.jsonl               # 统计整个文件，自动并行
+    python analyze_attack_log/analyze_attack_log.py input/sysdig/attack.jsonl -n 10000      # 只统计前 10000 条
+    python analyze_attack_log/analyze_attack_log.py input/sysdig/attack.jsonl -w 4          # 用 4 个进程并行
 
 统计字段:
     原始字段 (12): evt.num, evt.rawtime, proc.pid,
@@ -622,7 +622,7 @@ def format_summary(result: Dict[str, Any]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="流式统计 sysdig JSONL 日志中的 20 个字段")
-    parser.add_argument("input", nargs="?", default="attack.jsonl", help="输入 JSONL 文件，默认 attack.jsonl")
+    parser.add_argument("input", nargs="?", default="input/sysdig/attack.jsonl", help="输入 JSONL 文件，默认 input/sysdig/attack.jsonl")
     parser.add_argument(
         "-n", type=int,
         help="最多统计多少条有效 JSON 记录；不指定则统计整个文件",

@@ -2,7 +2,7 @@
 Python port of the Java sysdig-parser.
 
 Usage:
-    python main.py <logFile> postgres/<dbName> [hostId] [startUid] [startEventId]
+    python main.py <logFile> neo4j [startEventId] [--dry-run]
 """
 
 import sys
@@ -13,28 +13,59 @@ from parsers.my_sysdig_log_parser import MySysdigLogParser
 
 def print_usage() -> None:
     print(
-        "Usage: python main.py <logFile> <postgres/<dbName>> "
-        "[hostId] [startUid] [startEventId]",
+        "Usage: python main.py <logFile> neo4j [startEventId] [--dry-run]",
         file=sys.stderr,
     )
 
 
 def is_supported_db_target(db_str: str) -> bool:
-    return db_str is not None and db_str.startswith("postgres/") and len(db_str) > len("postgres/")
+    # 精确匹配：startswith 会放过 neo4jxyz 之类的拼写错误，
+    # 让错误漏到 parser 内部抛出裸 traceback。
+    return db_str == "neo4j"
+
+
+def _parse_optional_flags(argv: list) -> tuple:
+    """Extract --dry-run flag; reject unknown options (typo protection).
+
+    未知选项若被静默当作位置参数，会顺位挤占 <startEventId> 并在 int()
+    处抛出裸 traceback，这里直接报错并提示用法。"""
+    dry_run = False
+    positional = []
+    for arg in argv:
+        if arg == "--dry-run":
+            dry_run = True
+        elif arg.startswith("-"):
+            raise ValueError(f"Unknown option: {arg} (supported: --dry-run)")
+        else:
+            positional.append(arg)
+    return positional, dry_run
 
 
 def main() -> None:
     print("#################ParsersMain start....")
 
-    if len(sys.argv) < 3:
+    try:
+        args, dry_run = _parse_optional_flags(sys.argv[1:])
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
         print_usage()
         sys.exit(1)
 
-    log_file = sys.argv[1]
-    db_str = sys.argv[2]
-    host_id = int(sys.argv[3]) if len(sys.argv) >= 4 else -1
-    start_uid = int(sys.argv[4]) if len(sys.argv) >= 5 else 1
-    start_event_id = int(sys.argv[5]) if len(sys.argv) >= 6 else 1
+    if len(args) < 2:
+        print_usage()
+        sys.exit(1)
+
+    log_file = args[0]
+    db_str = args[1]
+    try:
+        start_event_id = int(args[2]) if len(args) >= 3 else 1
+    except ValueError:
+        print(
+            f"Invalid startEventId: {args[2]!r} (must be an integer)",
+            file=sys.stderr,
+        )
+        print_usage()
+        sys.exit(1)
 
     if not os.path.isfile(log_file):
         print(f"Log file not found: {log_file}", file=sys.stderr)
@@ -43,13 +74,16 @@ def main() -> None:
     if not is_supported_db_target(db_str):
         print(
             f"Unsupported database backend '{db_str}'. "
-            "sysdig-parser only supports postgres/<dbName>.",
+            "sysdig-parser supports: neo4j.",
             file=sys.stderr,
         )
         print_usage()
         sys.exit(1)
 
-    parser = MySysdigLogParser(log_file, db_str, host_id, start_uid, start_event_id)
+    parser = MySysdigLogParser(
+        log_file, db_str, start_event_id,
+        dry_run=dry_run,
+    )
     parser.parse_entry()
 
 

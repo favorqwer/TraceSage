@@ -6,29 +6,21 @@ TraceSage 使用 Sysdig 导出的 JSONL 日志构建主机级溯源图，并将�
 
 ## 2. 目录与资料
 
-- `input/`：输入数据，当前主要是 `input/sysdig/` 下的攻击场景查询或日志输入文件。
-- `output/`：解析、建模、导入或质量检查产生的输出
+- `README.md`：项目目录说明与常用命令。
+- `input/sysdig/`：输入数据，包含 JSONL 日志（如 `attack.jsonl`）、sysdig 纯文本导出和攻击场景查询（`*.llm.query`）。
+- `output/`：解析、建模、导入或质量检查产生的输出（日志、对比报告、SQL 备份、统计结果）。
 - `sysdig.wiki/`：Sysdig 日志格式和字段语义的参考资料。优先阅读其中的 User Guide 和 Quick Reference Guide。
+- `tools/`：独立小工具与一次性诊断脚本（导出健全性检查、PG/Neo4j 诊断对比）。
 - `analyze_attack_log/`：日志统计工具。 `analyze_attack_log.py` 按 JSONL 流式读取日志，统计原始字段、派生字段、解析异常、事件类型、进程名、FD 类型和统一系统调用类型。
-- `sysdig-parser/`： PostgreSQL 解析器。
+- `sysdig-parser/`：溯源图解析导入器（单主机 Sysdig JSONL 日志 → Neo4j）。
 - `requirements.txt`：当前 Python 依赖清单。
 - `.venv/`：项目虚拟环境。
 - `input/`、`output/` 中的日志可能很大，处理时应采用流式或分块方式，避免一次性载入内存。
 
 ## 3. 运行环境与依赖
 
-- 全部 Python 命令都应在项目虚拟环境中执行。Windows PowerShell 示例：
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-```
-
-- 也可以直接调用 `\.venv\Scripts\python.exe`，以避免误用系统 Python。
-- 当前依赖包括 `orjson` 和 `xxhash`；标准库回退逻辑应保持可用，除非任务明确要求新增依赖。
+- 全部 Python 命令都应在项目虚拟环境中执行。
 - 新增依赖时同步更新 `requirements.txt`，不要把依赖只安装在本机而不记录。
-- 代码、命令、路径和配置默认使用 ASCII；已有中文资料不需要改写。
-- 不要把 `.env` 中的密码、令牌或本地数据库配置写进源码、日志、测试夹具或 `AGENTS.md`。
 
 ## 4. Neo4j 导入约定
 
@@ -38,20 +30,17 @@ python -m pip install -r requirements.txt
 - 事务失败时要能定位批次范围，并避免在重试时产生重复数据。
 - 数据库连接信息从环境变量或 `.env` 读取，禁止硬编码。
 - 导入前后输出顶点数、关系数、跳过数、异常数、未匹配数和耗时；大日志处理必须可观察。
-- 不要把 PostgreSQL 表名、SQL 方言、旧版数值 ID 生成方式直接迁移到 Neo4j。Neo4j 身份应围绕上述 `process_id`、`file_id`、`network_id` 和 `event_id` 设计。
+- 导入结果的正确性对比，固定以 PostgreSQL 库 `1_Multi_Stage_Data_Exfiltration`（第一个攻击场景）为基准库；对比工具为 `sysdig-parser/compare_pg_neo4j.py`；完整对比记录与差异归因见 `output/neo4j-pg-comparison-20260904.md`。
+- 对比时进程顶点数差异（PG 约 560 vs Neo4j 约 433）及含进程端点的边键差异属**预期**：PG 基准库以 tid 记录进程，本解析器以 pid 建顶点。不要将其视为错误，也不要试图"修复"。
+- 其余已知的良性差异（2026-09-04 对比确认）：PG 中 46 条 p2p 为旧版合成反向边（f4ec524 已按设计移除）；PG 中 152 条 rename 边 File 路径为空串（旧解析器未提取路径，现解析器已提出真实路径）。
 
 ## 5. 性能与可维护性
 
 - 对大文件使用流式 JSON 解析、有限大小缓冲和分批写入。
 - 可在解析、建模、导入之间使用有界队列或分阶段批处理，但必须保留顺序/配对所需的上下文。
 - 不要为了并行而破坏进入/退出配对、事件时间顺序或统计结果的确定性。
-- 优先复用 `analyze_attack_log` 中验证过的字段恢复逻辑和统计思路，但重新实现为适合本项目的 Python 模块，不要复制脚本中的整体结构。
 - 任何性能优化都应以可重复的计数、耗时和内存指标验证；先保证语义正确，再优化导入吞吐。
 
 ## 6. 修改边界
 
-- 默认只修改完成当前任务所需的文件，不做无关重构，不提交 Git。
 - 修改前先阅读相关模块和现有资料；不要覆盖用户已有的未提交改动。
-- 新代码使用 Python，并遵循现有项目的命名、类型标注、日志和错误处理风格。
-- 不确定的领域语义以用户最新说明、`sysdig.wiki/`为优先依据
-- 对不支持或有歧义的 Sysdig 事件，宁可保留为可审计的未建模记录，也不要静默猜测并写入错误溯源关系。

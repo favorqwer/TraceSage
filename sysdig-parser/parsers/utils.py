@@ -1,55 +1,123 @@
 import re
 from typing import Dict, List, Optional, Tuple
 
+try:
+    import orjson as _orjson  # type: ignore
+except ImportError:  # 标准库回退
+    _orjson = None
+
+import json as _json_stdlib
+
+
+# JSONL（sysdig -j 导出）中一条事件记录必须具备的原始字段。
+# 即 analyze_attack_log.RAW_FIELDS 的 12 项去掉 proc.args 和 fd.l4proto 后的 10 项；
+# 缺失任一字段视为无效行（跳过并计数）。
+# proc.args 和 fd.l4proto 作为可选字段解析（见 parse_jsonl_entry 的 proc_args / l4proto），
+# 不加入必填键：缺少这两个键的旧日志行仍可解析，不会被跳过。
+_REQUIRED_JSONL_KEYS = (
+    "evt.num",
+    "evt.rawtime",
+    "evt.dir",
+    "evt.type",
+    "evt.args",
+    "evt.latency",
+    "proc.pid",
+    "proc.name",
+    "proc.exepath",
+    "proc.cwd",
+)
+
 _FILE_DESCRIPTOR_PATTERN = re.compile(r"^fd=\S*\(<f>(?P<path>.*)\)$")
 _PIPE_DESCRIPTOR_PATTERN = re.compile(r"^fd=\S*\(<p>(?P<name>.*)\)$")
 _SOCKET_DESCRIPTOR_PATTERN = re.compile(
     r"^fd=\S*\(<(?P<family>[46u])(?P<transport>[tu])?>(?P<endpoint>.*)\)$"
 )
 _ENDPOINT_PATTERN = re.compile(r"^(?P<host>.+):(?P<port>\d+)$")
-_PID_TOKEN_PATTERN = re.compile(r"^\(\d+\)$")
+
+
+def _loads_json_line(line: str):
+    if _orjson is not None:
+        return _orjson.loads(line)
+    return _json_stdlib.loads(line)
 
 
 class Utils:
     """Utility methods for parsing Sysdig log lines and extracting fields."""
 
     @staticmethod
-    def parse_entry(entry: str) -> Optional[Dict[str, str]]:
-        """Parse a single Sysdig JSONL line into a field map."""
+    def _json_str(value) -> str:
+        """JSON 字段值 -> 字符串；null -> ""（绝不产生 'None' 字面量）。
+        非字符串标量（如 int 型 proc.pid）按 str() 转换。"""
+        if value is None:
+            return ""
+        return value if isinstance(value, str) else str(value)
+
+    @staticmethod
+    def parse_jsonl_entry(entry: str) -> Optional[Dict[str, str]]:
+        """Parse a single Sysdig JSONL record (sysdig -j) into a canonical field
+        map consumed by the rest of the parsing pipeline.
+
+        Field mapping (JSONL key -> canonical key):
+            evt.num      -> eventno (str)
+            evt.rawtime  -> timestamp ("sec.nsec", int ns converted losslessly)
+            (absent)     -> cpu = "0" (JSONL 导出无此列，占位)
+            proc.name    -> process
+            proc.pid     -> pid
+            evt.dir      -> direction ("<" / ">")
+            evt.type     -> event
+            proc.cwd     -> cwd
+            evt.latency  -> latency
+            proc.exepath -> exepath
+            evt.args     -> args
+            proc.args    -> proc_args (可选字段：进程命令行，缺失/空 -> "")
+            fd.l4proto   -> l4proto   (可选字段：socket 四层协议，缺失/空 -> "")
+
+        proc_args / l4proto 为可选映射（不加入 _REQUIRED_JSONL_KEYS），
+        缺少这两个键的旧日志行仍可正常解析，不会被跳过。
+
+        JSON null 一律映射为 ""（绝不产生 'None' 字面量）：proc.pid /
+        proc.name 为 null（无进程上下文，如内核调度 switch 事件）的记录由
+        MySysdigLogParser._validate_parsed_entry 以精确理由跳过；proc.cwd /
+        proc.exepath / evt.args 为 null 时映射为 ""，经 _normalize_optional_text
+        归一为 None（顶点不写该属性）。
+
+        Returns None for malformed/incomplete records (caller counts as skipped).
+        """
         try:
-            fields = entry.split(" ")
-            pid_index = -1
-            for i, f in enumerate(fields):
-                if _PID_TOKEN_PATTERN.match(f):
-                    pid_index = i
-                    break
-            if pid_index == -1:
-                return None
-
-            process_arr = fields[3:pid_index]
-            process_str = " ".join(process_arr)
-            res: Dict[str, str] = {}
-            res["raw"] = entry
-            res["eventno"] = fields[0]
-            res["timestamp"] = fields[1]
-            res["cpu"] = fields[2]
-            res["process"] = process_str
-            res["pid"] = fields[pid_index][1:-1]
-            res["direction"] = fields[pid_index + 1]
-            res["event"] = fields[pid_index + 2]
-            res["cwd"] = fields[pid_index + 3][4:]
-
-            if fields[-1] == "(deleted)":
-                res["latency"] = fields[-3][8:]
-                res["exepath"] = fields[-2][8:]
-                res["args"] = " ".join(fields[pid_index + 4 : -3])
-            else:
-                res["latency"] = fields[-2][8:]
-                res["exepath"] = fields[-1][8:]
-                res["args"] = " ".join(fields[pid_index + 4 : -2])
-            return res
+            obj = _loads_json_line(entry)
         except Exception:
             return None
+        if not isinstance(obj, dict):
+            return None
+        for key in _REQUIRED_JSONL_KEYS:
+            if key not in obj:
+                return None
+        try:
+            rawtime = int(obj["evt.rawtime"])
+            eventno = str(int(obj["evt.num"]))
+            latency = str(int(obj["evt.latency"] or 0))
+        except (TypeError, ValueError):
+            return None
+        direction = str(obj["evt.dir"])
+        if direction not in (">", "<"):
+            return None
+        sec, nsec = divmod(rawtime, 1_000_000_000)
+        return {
+            "raw": entry,
+            "eventno": eventno,
+            "timestamp": f"{sec}.{nsec:09d}",
+            "cpu": "0",
+            "process": Utils._json_str(obj["proc.name"]),
+            "pid": Utils._json_str(obj["proc.pid"]),
+            "direction": direction,
+            "event": Utils._json_str(obj["evt.type"]),
+            "cwd": Utils._json_str(obj["proc.cwd"]),
+            "latency": latency,
+            "exepath": Utils._json_str(obj["proc.exepath"]),
+            "args": Utils._json_str(obj["evt.args"]),
+            "proc_args": Utils._json_str(obj.get("proc.args")),
+            "l4proto": Utils._json_str(obj.get("fd.l4proto")),
+        }
 
     @staticmethod
     def extract_size(s: str) -> int:
@@ -65,12 +133,21 @@ class Utils:
     def extract_file_and_socket(s: str) -> Dict[str, str]:
         """Extract file path or socket endpoint info from the 'fd=...' field.
 
-        Returns a dict with keys among: path / sip,sport,dip,dport / pipe / socket.
-        - `<f>path`          -> {'path': path}
-        - `<p>pipe:[N]`      -> {'pipe': 'pipe:[N]'}   (非文件，但可表示)
+        Returns a dict with keys among: path / sip,sport,dip,dport / pipe / socket
+        / fd_type。
+        - `<f>path`          -> {'path': path, 'fd_type': 'f'}
+        - `<p>pipe:[N]`      -> {'pipe': 'pipe:[N]', 'fd_type': 'p'}  (非文件，但可表示)
         - `<u>...` / `<4t>...`
           - 若含 `lip:lport->rip:rport` -> {'sip',...,'dport'} + 'socket'
           - 否则（内核 fd 地址如 ffff...->ffff...，或空）-> {'socket': '<u>...'}
+          - 均附带 'fd_type'（尖括号内原始类型符，如 'u' / '4t' / '6u'）
+        - `fd=N` 无 `(<...>)` 标记（如 `fd=8`）或标记不在
+          f/p/4/6/u 之列（如目录 `<d>`）-> 结果不含 'fd_type'
+
+        'fd_type' 是尖括号内的原始类型符（fd.typechar），仅当 fd 带括号标记且能
+        识别时才存在。当前解析器未把它写入顶点属性（File.type 已移除：值域仅
+        'file'，与 :File 标签冗余），保留提取作为将来目录顶点（<d>）方案的
+        基础能力与调试信息。
         """
         path: Optional[str] = None
         src_ip: Optional[str] = None
@@ -79,6 +156,7 @@ class Utils:
         dest_port: Optional[str] = None
         socket: Optional[str] = None
         pipe: Optional[str] = None
+        fd_type: Optional[str] = None
         res: Dict[str, str] = {}
 
         if "fd=" in s:
@@ -86,13 +164,18 @@ class Utils:
             file_match = _FILE_DESCRIPTOR_PATTERN.match(fd)
             if file_match:
                 path = Utils._normalize_descriptor_path(file_match.group("path"))
+                fd_type = "f"
             else:
                 pipe_match = _PIPE_DESCRIPTOR_PATTERN.match(fd)
                 if pipe_match:
                     pipe = pipe_match.group("name")
+                    fd_type = "p"
                 else:
                     socket_match = _SOCKET_DESCRIPTOR_PATTERN.match(fd)
                     if socket_match:
+                        fd_type = socket_match.group("family") + (
+                            socket_match.group("transport") or ""
+                        )
                         socket_ep = socket_match.group("endpoint")
                         socket = fd[socket_match.start() :]
                         if socket_ep and "->" in socket_ep and "ffff" not in socket_ep:
@@ -123,6 +206,8 @@ class Utils:
             res["dport"] = dest_port
         if socket is not None and socket:
             res["socket"] = socket
+        if fd_type is not None:
+            res["fd_type"] = fd_type
         return res
 
     @staticmethod

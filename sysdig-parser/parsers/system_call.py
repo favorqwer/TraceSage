@@ -7,14 +7,7 @@ from .action import Action
 class SystemCall:
     """Handler for a single system call event, with a list of actions to execute on match."""
 
-    def __init__(
-        self,
-        name: str,
-        type_: str,
-        finger_print: Fingerprint,
-    ) -> None:
-        self.name = name
-        self.type = type_
+    def __init__(self, finger_print: Fingerprint) -> None:
         self.finger_print = finger_print
         self.on_match: List[Action] = []
 
