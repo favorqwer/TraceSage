@@ -91,6 +91,11 @@ class SysdigLogParser:
     def get_or_create_file(self, file_key, path):
         return self._registry.get_or_create_file(file_key, path)
 
+    def get_or_create_network(self, sip, sport, dip, dport, protocol=""):
+        return self._registry.get_or_create_network(
+            sip, sport, dip, dport, protocol=protocol
+        )
+
     def register_forward_flow(self, key: str, edge: EventEdge) -> None:
         self._edge_queues.register_forward(key, edge)
 

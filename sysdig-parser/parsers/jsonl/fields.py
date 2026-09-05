@@ -17,11 +17,20 @@ _ENDPOINT_PATTERN = re.compile(r"^(?P<host>.+):(?P<port>\d+)$")
 
 def extract_size(s: str) -> int:
     """Extract the return value from 'res=...' in the args string.
-    Returns -1 if the result is negative or missing."""
+    Returns -1 if the result is negative, missing, or unparseable.
+
+    部分系统调用（fcntl/dup/clone/eventfd...）的返回值带括号说明
+    （res=0(<f>/dev/null)、res=20982(gjs)），只取括号前的数字部分。
+    """
     if "res=" in s:
         size_str = s[s.index("res=") + 4 :].split(" ")[0]
         if not size_str.startswith("-"):
-            return int(size_str)
+            if "(" in size_str:
+                size_str = size_str[: size_str.index("(")]
+            try:
+                return int(size_str)
+            except ValueError:
+                return -1
     return -1
 
 
