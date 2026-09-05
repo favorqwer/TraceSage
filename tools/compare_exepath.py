@@ -9,7 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sysdig-parser")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sysdig-parser" / "parsers"))
 
 import psycopg2
-from parsers.neo4j_writer import Neo4jWriter, load_dotenv
+from parsers.config import load_dotenv
+from parsers.storage.neo4j_writer import Neo4jWriter
 
 load_dotenv()
 

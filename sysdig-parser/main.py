@@ -9,7 +9,7 @@ import sys
 import os
 from typing import List, Tuple
 
-from parsers.sysdig_log_parser import SysdigLogParser
+from parsers import SysdigLogParser
 
 
 def print_usage() -> None:

@@ -28,7 +28,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import psycopg2  # noqa: E402
-from parsers.neo4j_writer import Neo4jWriter, load_dotenv  # noqa: E402
+from parsers.config import load_dotenv  # noqa: E402
+from parsers.storage.neo4j_writer import Neo4jWriter  # noqa: E402
 
 load_dotenv()
 

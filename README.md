@@ -19,7 +19,14 @@ TraceSage/
 ├── sysdig-parser/            # 溯源图解析导入器（JSONL → Neo4j）
 │   ├── main.py               # 入口
 │   ├── compare_pg_neo4j.py   # PG 基准库 vs Neo4j 正确性对比
-│   └── parsers/              # 解析、建模、Neo4j 写入
+│   └── parsers/              # 解析器包（按层分子包）
+│       ├── pipeline/         # 解析管线：主循环、进出配对、实体注册、边缓冲
+│       ├── model/            # 纯图模型：顶点（Process/File/Network）、EntityNode、EventEdge
+│       ├── jsonl/            # Sysdig JSONL 行级解析：记录解码、args 字段抽取
+│       ├── dispatch/         # 系统调用分发：Fingerprint/SystemCall、动作注册
+│       ├── storage/          # Neo4j 批量写入
+│       ├── config.py         # 环境变量/.env 配置（横切）
+│       └── reporting.py      # 进度与跳过行上报（横切）
 └── sysdig.wiki/              # Sysdig 日志格式与字段语义参考资料
 ```
 

@@ -1,8 +1,6 @@
 from typing import Optional
 
-from .file_entity import FileEntity
-from .network_entity import NetworkEntity
-from .process import Process
+from .entities import FileEntity, NetworkEntity, Process
 
 
 class EntityNode:

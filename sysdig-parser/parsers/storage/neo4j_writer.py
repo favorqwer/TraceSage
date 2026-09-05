@@ -6,9 +6,8 @@ driver, parameterized Cypher, MERGE with unique constraints, and batched
 transactions (configurable batch size).
 
 Connection settings are read from the environment (NEO4J_URI / NEO4J_USER /
-NEO4J_PASSWORD / NEO4J_DATABASE); a small stdlib-only .env loader is included
-so the project's .env file works without python-dotenv.  Credentials are never
-hardcoded and never logged.
+NEO4J_PASSWORD / NEO4J_DATABASE); the stdlib-only .env loader lives in
+parsers.config.  Credentials are never hardcoded and never logged.
 
 Performance notes:
 - Every MATCH/MERGE uses a *label* so the unique-constraint index is hit
@@ -21,22 +20,16 @@ Performance notes:
 """
 
 import os
-import re
-from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from .event_edge import EventEdge
-from .file_entity import FileEntity
-from .network_entity import NetworkEntity
-from .process import Process
+from ..config import load_dotenv, resolve_batch_size
+from ..model.entities import FileEntity, NetworkEntity, Process
+from ..model.event_edge import EventEdge
 
 try:
     from neo4j import GraphDatabase
 except ImportError:  # pragma: no cover - module-level guard is in main
     GraphDatabase = None
-
-_DEFAULT_BATCH_SIZE = 5000
-_BATCH_SIZE_ENV = "PROGQL_NEO4J_BATCH_SIZE"
 
 # Fixed endpoint labels per relationship type (AGENTS.md §1: 五种方向化事件边).
 _REL_LABELS: Dict[str, Tuple[str, str]] = {
@@ -53,52 +46,6 @@ _ID_PROP: Dict[str, str] = {
     "File": "file_id",
     "Network": "network_id",
 }
-
-
-def load_dotenv(path: Optional[str] = None) -> None:
-    """Minimal .env loader (stdlib only): KEY=VALUE lines, # comments, no variable
-    expansion, never overrides existing environment variables.  When ``path`` is not
-    given, searches the cwd and its parents for the first existing .env."""
-    target: Optional[Path] = None
-    if path is not None:
-        candidate = Path(path)
-        if candidate.is_file():
-            target = candidate
-    else:
-        current = Path.cwd()
-        for _ in range(6):  # project layout: .env sits at repo root
-            candidate = current / ".env"
-            if candidate.is_file():
-                target = candidate
-                break
-            parent = current.parent
-            if parent == current:
-                break
-            current = parent
-    if target is None:
-        return
-    pattern = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
-    with target.open("r", encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            match = pattern.match(line)
-            if match:
-                key, value = match.group(1), match.group(2)
-                os.environ.setdefault(key, value)
-
-
-def _resolve_batch_size() -> int:
-    raw = os.environ.get(_BATCH_SIZE_ENV)
-    if raw is not None:
-        try:
-            value = int(raw.strip())
-            if value > 0:
-                return value
-        except ValueError:
-            pass
-    return _DEFAULT_BATCH_SIZE
 
 
 class Neo4jWriter:
@@ -147,7 +94,7 @@ class Neo4jWriter:
             raise RuntimeError(
                 "neo4j driver is not installed. Run: pip install neo4j"
             )
-        self._batch_size = batch_size or _resolve_batch_size()
+        self._batch_size = batch_size or resolve_batch_size()
         self._driver = GraphDatabase.driver(self._uri, auth=(self._user, self._password))
         self._stats = {
             "processes": 0,
