@@ -9,7 +9,7 @@ class EventEdge:
         source: EntityNode,
         sink: EntityNode,
         edge_id: int,
-        optype: str,
+        event: str,
         size: int,
         start_ns: int,
         end_ns: int,
@@ -17,7 +17,7 @@ class EventEdge:
         self._source = source
         self._sink = sink
         self._id = edge_id
-        self._event = optype
+        self._event = event
         self._size = size
         self._start_ns = start_ns
         self._end_ns = end_ns

@@ -22,7 +22,6 @@ Performance notes:
 
 import os
 import re
-import time
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -294,22 +293,7 @@ class Neo4jWriter:
     # ------------------------------------------------------------------
     # Edges
     # ------------------------------------------------------------------
-    def insert_p2p_edges(self, edges: Iterable[EventEdge]) -> None:
-        self._insert_edges(edges, "p2p")
-
-    def insert_p2f_edges(self, edges: Iterable[EventEdge]) -> None:
-        self._insert_edges(edges, "p2f")
-
-    def insert_f2p_edges(self, edges: Iterable[EventEdge]) -> None:
-        self._insert_edges(edges, "f2p")
-
-    def insert_p2n_edges(self, edges: Iterable[EventEdge]) -> None:
-        self._insert_edges(edges, "p2n")
-
-    def insert_n2p_edges(self, edges: Iterable[EventEdge]) -> None:
-        self._insert_edges(edges, "n2p")
-
-    def _insert_edges(self, edges: Iterable[EventEdge], rel_type: str) -> None:
+    def insert_edges(self, edges: Iterable[EventEdge], rel_type: str) -> None:
         """Batch-insert one direction of edges.
 
         Each edge references source/sink vertices by their MERGE key
@@ -346,12 +330,12 @@ class Neo4jWriter:
     @staticmethod
     def _entity_key(node) -> Optional[str]:
         """Return the MERGE-key value for an EntityNode source/sink, or None."""
-        if node.f is not None:
-            return node.f.path
-        if node.n is not None:
-            return node.n.src_and_dst_ip
-        if node.p is not None:
-            return node.p.pid_and_name
+        if node.file is not None:
+            return node.file.path
+        if node.network is not None:
+            return node.network.src_and_dst_ip
+        if node.process is not None:
+            return node.process.pid_and_name
         return None
 
     # ------------------------------------------------------------------

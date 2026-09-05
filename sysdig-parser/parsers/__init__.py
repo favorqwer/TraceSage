@@ -9,13 +9,12 @@ from .meta_config import MetaConfig
 from .system_call import SystemCall
 from .system_call_factory import SystemCallFactory
 from .action import Action
-from .utils import Utils
-from .my_sysdig_log_parser import MySysdigLogParser
+from .sysdig_log_parser import SysdigLogParser
 from .neo4j_writer import Neo4jWriter
 
 __all__ = [
     "Entity", "FileEntity", "NetworkEntity", "Process",
     "EntityNode", "EventEdge", "Fingerprint", "MetaConfig",
-    "SystemCall", "SystemCallFactory", "Action", "Utils",
-    "MySysdigLogParser", "Neo4jWriter",
+    "SystemCall", "SystemCallFactory", "Action",
+    "SysdigLogParser", "Neo4jWriter",
 ]

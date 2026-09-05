@@ -7,8 +7,8 @@ from .action import Action
 class SystemCall:
     """Handler for a single system call event, with a list of actions to execute on match."""
 
-    def __init__(self, finger_print: Fingerprint) -> None:
-        self.finger_print = finger_print
+    def __init__(self, fingerprint: Fingerprint) -> None:
+        self.fingerprint = fingerprint
         self.on_match: List[Action] = []
 
     def add_action(self, action: Action) -> "SystemCall":
@@ -17,10 +17,10 @@ class SystemCall:
 
     def react(
         self,
-        m_start: Dict[str, str],
-        m_end: Dict[str, str],
-        e_start: List[Optional[Entity]],
-        e_end: List[Optional[Entity]],
+        start_rec: Dict[str, str],
+        end_rec: Dict[str, str],
+        start_entities: List[Optional[Entity]],
+        end_entities: List[Optional[Entity]],
     ) -> None:
         for action in self.on_match:
-            action(m_start, m_end, e_start, e_end)
+            action(start_rec, end_rec, start_entities, end_entities)

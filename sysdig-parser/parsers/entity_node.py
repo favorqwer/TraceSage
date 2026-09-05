@@ -11,45 +11,49 @@ class EntityNode:
 
     def __init__(self, entity: object) -> None:
         if isinstance(entity, FileEntity):
-            self._f: Optional[FileEntity] = entity
-            self._n: Optional[NetworkEntity] = None
-            self._p: Optional[Process] = None
+            self._file: Optional[FileEntity] = entity
+            self._network: Optional[NetworkEntity] = None
+            self._process: Optional[Process] = None
         elif isinstance(entity, Process):
-            self._f = None
-            self._n = None
-            self._p = entity
+            self._file = None
+            self._network = None
+            self._process = entity
         elif isinstance(entity, NetworkEntity):
-            self._f = None
-            self._n = entity
-            self._p = None
+            self._file = None
+            self._network = entity
+            self._process = None
         else:
             raise TypeError(f"Unsupported entity type: {type(entity)}")
 
     @property
-    def f(self) -> Optional[FileEntity]:
-        return self._f
+    def file(self) -> Optional[FileEntity]:
+        return self._file
 
     @property
-    def n(self) -> Optional[NetworkEntity]:
-        return self._n
+    def network(self) -> Optional[NetworkEntity]:
+        return self._network
 
     @property
-    def p(self) -> Optional[Process]:
-        return self._p
+    def process(self) -> Optional[Process]:
+        return self._process
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EntityNode):
             return NotImplemented
-        return self._f == other._f and self._n == other._n and self._p == other._p
+        return (
+            self._file == other._file
+            and self._network == other._network
+            and self._process == other._process
+        )
 
     def __hash__(self) -> int:
-        return hash((self._f, self._n, self._p))
+        return hash((self._file, self._network, self._process))
 
     def __repr__(self) -> str:
-        if self._f is not None:
-            return f"File({self._f.path})"
-        if self._n is not None:
-            return f"Network({self._n.src_and_dst_ip})"
-        if self._p is not None:
-            return f"Process({self._p.pid_and_name})"
+        if self._file is not None:
+            return f"File({self._file.path})"
+        if self._network is not None:
+            return f"Network({self._network.src_and_dst_ip})"
+        if self._process is not None:
+            return f"Process({self._process.pid_and_name})"
         return "EntityNode(<empty>)"

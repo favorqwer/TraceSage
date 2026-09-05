@@ -7,8 +7,9 @@ Usage:
 
 import sys
 import os
+from typing import List, Tuple
 
-from parsers.my_sysdig_log_parser import MySysdigLogParser
+from parsers.sysdig_log_parser import SysdigLogParser
 
 
 def print_usage() -> None:
@@ -24,7 +25,7 @@ def is_supported_db_target(db_str: str) -> bool:
     return db_str == "neo4j"
 
 
-def _parse_optional_flags(argv: list) -> tuple:
+def _parse_optional_flags(argv: List[str]) -> Tuple[List[str], bool]:
     """Extract --dry-run flag; reject unknown options (typo protection).
 
     未知选项若被静默当作位置参数，会顺位挤占 <startEventId> 并在 int()
@@ -80,7 +81,7 @@ def main() -> None:
         print_usage()
         sys.exit(1)
 
-    parser = MySysdigLogParser(
+    parser = SysdigLogParser(
         log_file, db_str, start_event_id,
         dry_run=dry_run,
     )

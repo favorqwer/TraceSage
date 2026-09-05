@@ -1,10 +1,12 @@
 import os
 import re
 import time
-from collections import defaultdict, deque
+from collections import deque
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Dict, Deque, List, Optional, Tuple
+from typing import Dict, Deque, List, Optional, Tuple
 
+from .action import Action
 from .entity import Entity
 from .file_entity import FileEntity
 from .network_entity import NetworkEntity
@@ -15,7 +17,12 @@ from .fingerprint import Fingerprint
 from .meta_config import MetaConfig
 from .system_call import SystemCall
 from .system_call_factory import SystemCallFactory
-from .utils import Utils
+from .utils import (
+    extract_file_and_socket,
+    extract_process_file,
+    extract_size,
+    parse_jsonl_entry,
+)
 from .neo4j_writer import Neo4jWriter
 
 _DEFAULT_FLUSH_EDGE_LIMIT = 50000
@@ -42,64 +49,54 @@ _PARENT_PATTERN = re.compile(r"ptid=(?P<parentPID>\d+)\((?P<parent>.+?)\)")
 # fd.l4proto 中“非真实协议”的取值：视为解析不出来，不写入 Network.protocol。
 _L4PROTO_NOT_APPLICABLE = frozenset({"", "<NA>"})
 
+# 五种方向化事件边（AGENTS.md §1）。
+_EDGE_RELS = ("p2p", "p2f", "f2p", "p2n", "n2p")
 
+# MetaConfig 驱动的四类通用方向：
+#   rel -> (工厂实体类型, 系统调用名集合, start_entities 中作为边源/汇的下标)
+# 这四类系统调用的两端实体都取自进入记录
+# （start_entities[0]=Process，[1]=File/Network），方向由下标决定。
+# 顺序须与旧版逐段注册一致（ftop -> ptof -> ntop -> pton），
+# 保证同名系统调用（如 rename 同时在 ftop/ptof 中）的覆盖结果不变。
+_GENERIC_SYSCALL_DIRECTIONS = (
+    ("f2p", FileEntity, MetaConfig.ftop_system_calls, 1, 0),
+    ("p2f", FileEntity, MetaConfig.ptof_system_calls, 0, 1),
+    ("n2p", NetworkEntity, MetaConfig.ntop_system_calls, 1, 0),
+    ("p2n", NetworkEntity, MetaConfig.pton_system_calls, 0, 1),
+)
+
+
+@dataclass(frozen=True, slots=True)
 class _EventKey:
     """Primary key for pairing enter/exit records: (start_ns, tid, event)."""
 
-    __slots__ = ("start_ns", "tid", "event")
-
-    def __init__(self, start_ns: int, tid: str, event: str) -> None:
-        self.start_ns = start_ns
-        self.tid = tid
-        self.event = event
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, _EventKey):
-            return NotImplemented
-        return (
-            self.start_ns == other.start_ns
-            and self.tid == other.tid
-            and self.event == other.event
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.start_ns, self.tid, self.event))
+    start_ns: int
+    tid: str
+    event: str
 
 
+@dataclass(frozen=True, slots=True)
 class _ThreadEventKey:
     """Secondary key for pairing: (tid, event) without timestamp."""
 
-    __slots__ = ("tid", "event")
-
-    def __init__(self, tid: str, event: str) -> None:
-        self.tid = tid
-        self.event = event
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, _ThreadEventKey):
-            return NotImplemented
-        return self.tid == other.tid and self.event == other.event
-
-    def __hash__(self) -> int:
-        return hash((self.tid, self.event))
+    tid: str
+    event: str
 
 
+@dataclass(frozen=True, slots=True, eq=False)
 class _PendingStart:
-    __slots__ = ("key", "thread_event_key", "entry", "start_ns")
+    """A buffered enter (>) record awaiting its matching exit record."""
 
-    def __init__(
-        self,
-        key: _EventKey,
-        thread_event_key: _ThreadEventKey,
-        entry: Dict[str, str],
-    ) -> None:
-        self.key = key
-        self.thread_event_key = thread_event_key
-        self.entry = entry
-        self.start_ns = key.start_ns
+    key: _EventKey
+    thread_event_key: _ThreadEventKey
+    entry: Dict[str, str]
+
+    @property
+    def start_ns(self) -> int:
+        return self.key.start_ns
 
 
-class MySysdigLogParser:
+class SysdigLogParser:
     """Core parser that reads a Sysdig JSONL log, pairs enter/exit records,
     extracts entities, generates provenance edges, and flushes to Neo4j."""
 
@@ -130,24 +127,16 @@ class MySysdigLogParser:
 
         self._incomplete_network_count = 0
         self._no_object_count = 0
-        self._answering: Dict[Fingerprint, SystemCall] = {}
+        self._syscall_handlers: Dict[Fingerprint, SystemCall] = {}
         self._forward_flow: Dict[str, EventEdge] = {}
 
-        # --- edge queues ---
-        self._process_file_lst: List[EventEdge] = []
-        self._file_process_lst: List[EventEdge] = []
-        self._process_network_lst: List[EventEdge] = []
-        self._network_process_lst: List[EventEdge] = []
-        self._process_process_lst: List[EventEdge] = []
+        # --- edge queues（按关系类型缓冲；p2p 只在导入结束的最终 flush 写入）---
+        self._edge_queues: Dict[str, List[EventEdge]] = {rel: [] for rel in _EDGE_RELS}
 
         # --- counters ---
         self._event_id = start_event_id
         self._flush_rounds = 0
-        self._total_process_file_edges = 0
-        self._total_file_process_edges = 0
-        self._total_process_network_edges = 0
-        self._total_network_process_edges = 0
-        self._total_process_process_edges = 0
+        self._edge_totals: Dict[str, int] = {rel: 0 for rel in _EDGE_RELS}
         self._total_log_bytes = 0
         self._bytes_read = 0
         self._scanned_lines = 0
@@ -183,60 +172,41 @@ class MySysdigLogParser:
     # System call registration
     # ==================================================================
     def _register_system_calls(self) -> None:
-        # --- FtoP (File → Process) ---
-        f2p_factory = SystemCallFactory(FileEntity, None)
-        f2p_factory.add_action(self._update_p2p_links).add_action(self._add_f2p_event)
-        for sc_name in MetaConfig.ftop_system_call:
-            sc = f2p_factory.get_system_call(sc_name)
-            self._answering[sc.finger_print] = sc
-
-        # --- PtoF (Process → File) ---
-        p2f_factory = SystemCallFactory(FileEntity, None)
-        p2f_factory.add_action(self._update_p2p_links).add_action(self._add_p2f_event)
-        for sc_name in MetaConfig.ptof_system_call:
-            sc = p2f_factory.get_system_call(sc_name)
-            self._answering[sc.finger_print] = sc
-
-        # --- NtoP (Network → Process) ---
-        n2p_factory = SystemCallFactory(NetworkEntity, None)
-        n2p_factory.add_action(self._update_p2p_links).add_action(self._add_n2p_event)
-        for sc_name in MetaConfig.ntop_system_call:
-            sc = n2p_factory.get_system_call(sc_name)
-            self._answering[sc.finger_print] = sc
-
-        # --- PtoN (Process → Network) ---
-        p2n_factory = SystemCallFactory(NetworkEntity, None)
-        p2n_factory.add_action(self._update_p2p_links).add_action(self._add_p2n_event)
-        for sc_name in MetaConfig.pton_system_call:
-            sc = p2n_factory.get_system_call(sc_name)
-            self._answering[sc.finger_print] = sc
+        # --- 通用方向（MetaConfig 驱动：f2p / p2f / n2p / p2n）---
+        for rel, entity_cls, syscall_names, src_idx, dst_idx in _GENERIC_SYSCALL_DIRECTIONS:
+            factory = SystemCallFactory(entity_cls, None)
+            factory.add_action(self._update_p2p_links)
+            factory.add_action(self._make_edge_action(rel, src_idx, dst_idx))
+            for sc_name in syscall_names:
+                sc = factory.get_system_call(sc_name)
+                self._syscall_handlers[sc.fingerprint] = sc
 
         # --- execve (special: PtoP + file edge) ---
         def _execve_action(
-            m_start: Dict[str, str],
-            m_end: Dict[str, str],
-            e_start: List[Optional[Entity]],
-            e_end: List[Optional[Entity]],
+            start_rec: Dict[str, str],
+            end_rec: Dict[str, str],
+            start_entities: List[Optional[Entity]],
+            end_entities: List[Optional[Entity]],
         ) -> None:
-            p_start = e_start[0]  # Process
-            p_end = e_end[0]  # Process
+            p_start = start_entities[0]  # Process
+            p_end = end_entities[0]  # Process
             p_end_node = EntityNode(p_end)
-            f = e_start[1]  # FileEntity (executable)
+            f = start_entities[1]  # FileEntity (executable)
             file_node = EntityNode(f)
-            exe_path = m_start.get("exepath", "")
-            ts_start = m_start.get("timestamp", "0.0")
-            ts_end = m_end.get("timestamp", "0.0")
+            exe_path = start_rec.get("exepath", "")
+            ts_start = start_rec.get("timestamp", "0.0")
+            ts_end = end_rec.get("timestamp", "0.0")
             start_ns = self._parse_timestamp_ns(ts_start)
             end_ns = self._parse_timestamp_ns(ts_end)
-            args = m_end.get("args", "")
+            args = end_rec.get("args", "")
 
             if "res=0" in args:
                 if f.path != "<NA>":
-                    e = EventEdge(
+                    edge = EventEdge(
                         file_node, p_end_node, self._next_event_id(),
                         "execve", 0, start_ns, end_ns,
                     )
-                    self._queue_file_process_edge(e)
+                    self._queue_edge("f2p", edge)
 
                 parent_match = _PARENT_PATTERN.search(args)
                 if parent_match:
@@ -247,89 +217,89 @@ class MySysdigLogParser:
                         key_parent, pid_parent, name_parent, exe_path
                     )
                     parent_node = EntityNode(parent)
-                    forward_link = EventEdge(
+                    forward_edge = EventEdge(
                         parent_node, p_end_node, self._next_event_id(),
                         "execve", 0, start_ns, end_ns,
                     )
-                    self._queue_process_process_edge(forward_link)
-                    self._forward_flow[key_parent] = forward_link
+                    self._queue_edge("p2p", forward_edge)
+                    self._forward_flow[key_parent] = forward_edge
 
         execve_sc = SystemCall(
             Fingerprint("execve", FileEntity, None),
         ).add_action(_execve_action)
-        self._answering[execve_sc.finger_print] = execve_sc
+        self._syscall_handlers[execve_sc.fingerprint] = execve_sc
 
         # --- accept (special: NtoP) ---
         def _accept_action(
-            m_start: Dict[str, str],
-            m_end: Dict[str, str],
-            e_start: List[Optional[Entity]],
-            e_end: List[Optional[Entity]],
+            start_rec: Dict[str, str],
+            end_rec: Dict[str, str],
+            start_entities: List[Optional[Entity]],
+            end_entities: List[Optional[Entity]],
         ) -> None:
-            p = e_end[0]  # Process
+            p = end_entities[0]  # Process
             p_node = EntityNode(p)
-            n = e_end[1]  # NetworkEntity
+            n = end_entities[1]  # NetworkEntity
             if n is None:
                 # 无完整五元组的 accept（如内核 fd 地址）-> 不建边，可审计
                 self._incomplete_network_count += 1
                 return
             n_node = EntityNode(n)
-            ts_end = m_end.get("timestamp", "0.0")
+            ts_end = end_rec.get("timestamp", "0.0")
             end_ns = self._parse_timestamp_ns(ts_end)
 
-            np_edge = EventEdge(
+            edge = EventEdge(
                 n_node, p_node, self._next_event_id(),
                 "accept", 0, end_ns, end_ns,
             )
-            self._queue_network_process_edge(np_edge)
+            self._queue_edge("n2p", edge)
 
         accept_sc = SystemCall(
             Fingerprint("accept", None, NetworkEntity),
         ).add_action(_accept_action)
-        self._answering[accept_sc.finger_print] = accept_sc
+        self._syscall_handlers[accept_sc.fingerprint] = accept_sc
 
         # --- fcntl (special: NtoP) ---
         def _fcntl_action(
-            m_start: Dict[str, str],
-            m_end: Dict[str, str],
-            e_start: List[Optional[Entity]],
-            e_end: List[Optional[Entity]],
+            start_rec: Dict[str, str],
+            end_rec: Dict[str, str],
+            start_entities: List[Optional[Entity]],
+            end_entities: List[Optional[Entity]],
         ) -> None:
-            ts_start = m_start.get("timestamp", "0.0")
-            ts_end = m_end.get("timestamp", "0.0")
+            ts_start = start_rec.get("timestamp", "0.0")
+            ts_end = end_rec.get("timestamp", "0.0")
             start_ns = self._parse_timestamp_ns(ts_start)
             end_ns = self._parse_timestamp_ns(ts_end)
-            p = e_end[0]  # Process
+            p = end_entities[0]  # Process
             p_node = EntityNode(p)
-            n = e_end[1]  # NetworkEntity
+            n = end_entities[1]  # NetworkEntity
             if n is None:
                 self._incomplete_network_count += 1
                 return
             n_node = EntityNode(n)
 
-            np_edge = EventEdge(
+            edge = EventEdge(
                 n_node, p_node, self._next_event_id(),
                 "fcntl", 0, start_ns, end_ns,
             )
-            self._queue_network_process_edge(np_edge)
+            self._queue_edge("n2p", edge)
 
         fcntl_sc = SystemCall(
             Fingerprint("fcntl", None, NetworkEntity),
         ).add_action(_fcntl_action)
-        self._answering[fcntl_sc.finger_print] = fcntl_sc
+        self._syscall_handlers[fcntl_sc.fingerprint] = fcntl_sc
 
         # --- rename (special: PtoF + FtoP) ---
         def _rename_action(
-            m_start: Dict[str, str],
-            m_end: Dict[str, str],
-            e_start: List[Optional[Entity]],
-            e_end: List[Optional[Entity]],
+            start_rec: Dict[str, str],
+            end_rec: Dict[str, str],
+            start_entities: List[Optional[Entity]],
+            end_entities: List[Optional[Entity]],
         ) -> None:
-            ts_start = m_start.get("timestamp", "0.0")
-            ts_end = m_end.get("timestamp", "0.0")
+            ts_start = start_rec.get("timestamp", "0.0")
+            ts_end = end_rec.get("timestamp", "0.0")
             start_ns = self._parse_timestamp_ns(ts_start)
             end_ns = self._parse_timestamp_ns(ts_end)
-            args = m_end.get("args", "")
+            args = end_rec.get("args", "")
             rename_match = _RENAME_PATHS.search(args)
             if not rename_match:
                 return
@@ -337,29 +307,29 @@ class MySysdigLogParser:
             old_path = self._normalize_rename_path(rename_match.group("old"))
             new_path = self._normalize_rename_path(rename_match.group("new"))
 
-            p = e_start[0]  # Process
+            p = start_entities[0]  # Process
             p_node = EntityNode(p)
 
             old_file = self._get_or_create_file(old_path, old_path)
             old_f_node = EntityNode(old_file)
-            fp_edge = EventEdge(
+            f2p_edge = EventEdge(
                 old_f_node, p_node, self._next_event_id(),
                 "rename", 0, start_ns, end_ns,
             )
-            self._queue_file_process_edge(fp_edge)
+            self._queue_edge("f2p", f2p_edge)
 
             new_file = self._get_or_create_file(new_path, new_path)
             new_f_node = EntityNode(new_file)
-            pf_edge = EventEdge(
+            p2f_edge = EventEdge(
                 p_node, new_f_node, self._next_event_id(),
                 "rename", 0, start_ns, end_ns,
             )
-            self._queue_process_file_edge(pf_edge)
+            self._queue_edge("p2f", p2f_edge)
 
         rename_sc = SystemCall(
             Fingerprint("rename", None, None),
         ).add_action(_rename_action)
-        self._answering[rename_sc.finger_print] = rename_sc
+        self._syscall_handlers[rename_sc.fingerprint] = rename_sc
 
     @staticmethod
     def _normalize_rename_path(path: Optional[str]) -> str:
@@ -406,7 +376,6 @@ class MySysdigLogParser:
         )
         self._maybe_report_progress(True, "startup")
 
-        lines = 0
         parse_failure: Optional[Exception] = None
 
         try:
@@ -424,17 +393,16 @@ class MySysdigLogParser:
 
                     should_flush = False
                     try:
-                        line_map = Utils.parse_jsonl_entry(current_line)
-                        if line_map is None:
+                        record = parse_jsonl_entry(current_line)
+                        if record is None:
                             raise ValueError("Sysdig entry could not be parsed")
-                        self._validate_parsed_entry(line_map)
+                        self._validate_parsed_entry(record)
 
-                        if line_map.get("direction") == ">":
-                            self._store_incomplete_start(line_map)
+                        if record.get("direction") == ">":
+                            self._store_incomplete_start(record)
                         else:
-                            lines += 1
-                            self._processed_event_lines = lines
-                            self._process_event(line_map)
+                            self._processed_event_lines += 1
+                            self._process_event(record)
                             should_flush = self._should_flush_buffered_records()
                     except Exception as e:
                         self._log_skipped_line(self._scanned_lines, current_line, e)
@@ -457,13 +425,13 @@ class MySysdigLogParser:
             raise parse_failure
 
         try:
-            print(f"log line#: {lines}")
+            print(f"log line#: {self._processed_event_lines}")
             print(
-                f"np: {self._total_network_process_edges} "
-                f"pn: {self._total_process_network_edges} "
-                f"pf: {self._total_process_file_edges} "
-                f"fp: {self._total_file_process_edges} "
-                f"pp: {self._total_process_process_edges}"
+                f"np: {self._edge_totals['n2p']} "
+                f"pn: {self._edge_totals['p2n']} "
+                f"pf: {self._edge_totals['p2f']} "
+                f"fp: {self._edge_totals['f2p']} "
+                f"pp: {self._edge_totals['p2p']}"
             )
             print(
                 f"n:{len(self._networks)} f:{len(self._files)} p:{len(self._processes)}"
@@ -492,66 +460,66 @@ class MySysdigLogParser:
     # ==================================================================
     # Validation
     # ==================================================================
-    def _validate_parsed_entry(self, line_map: Dict[str, str]) -> None:
+    def _validate_parsed_entry(self, record: Dict[str, str]) -> None:
         for field in ("eventno", "timestamp", "cpu", "process", "pid",
                       "direction", "event", "latency", "exepath", "args"):
-            if field not in line_map:
+            if field not in record:
                 raise ValueError(f"Missing parsed field: {field}")
 
-        int(line_map["eventno"])
+        int(record["eventno"])
         # Validate timestamp format
-        ts = line_map["timestamp"]
+        ts = record["timestamp"]
         ts_parts = ts.split(".")
         if len(ts_parts) < 2:
             raise ValueError(f"Timestamp has no nanosecond part: {ts}")
         int(ts_parts[0])
         int(ts_parts[1])
 
-        direction = line_map["direction"]
+        direction = record["direction"]
         if direction not in (">", "<"):
             raise ValueError(f"Unsupported syscall direction: {direction}")
 
         # 无进程上下文的记录（proc.pid/proc.name 为 JSON null，典型如内核调度
         # switch 事件）：无法归属到任何进程，永远不会产生边，只会堆积为永不
         # 配对的 pending。按精确理由跳过，保持跳过统计可审计。
-        if not line_map["pid"] or not line_map["process"]:
+        if not record["pid"] or not record["process"]:
             raise ValueError(
                 "Record has no process context (proc.pid/proc.name is null)"
             )
 
-        args = line_map["args"]
-        Utils.extract_file_and_socket(args)
-        Utils.extract_size(args)
+        args = record["args"]
+        extract_file_and_socket(args)
+        extract_size(args)
 
     # ==================================================================
     # Enter/exit pairing
     # ==================================================================
-    def _store_incomplete_start(self, line_map: Dict[str, str]) -> None:
+    def _store_incomplete_start(self, record: Dict[str, str]) -> None:
         self._pairing_start_records += 1
-        ts = line_map.get("timestamp", "0.0")
+        ts = record.get("timestamp", "0.0")
         start_ns = self._parse_timestamp_ns(ts)
-        tid = line_map.get("pid", "0")
-        event = line_map.get("event", "")
+        tid = record.get("pid", "0")
+        event = record.get("event", "")
 
         event_key = _EventKey(start_ns, tid, event)
         thread_key = _ThreadEventKey(tid, event)
 
-        pending = _PendingStart(event_key, thread_key, line_map)
+        pending = _PendingStart(event_key, thread_key, record)
 
         if event_key in self._incomplete_events:
             self._pairing_start_key_collisions += 1
         self._incomplete_events.setdefault(event_key, deque()).append(pending)
         self._incomplete_events_by_thread.setdefault(thread_key, deque()).append(pending)
 
-    def _process_event(self, line_map: Dict[str, str]) -> None:
+    def _process_event(self, record: Dict[str, str]) -> None:
         self._pairing_end_records += 1
-        ts = line_map.get("timestamp", "0.0")
+        ts = record.get("timestamp", "0.0")
         end_ns = self._parse_timestamp_ns(ts)
-        latency_str = line_map.get("latency", "0")
+        latency_str = record.get("latency", "0")
         latency_ns = int(latency_str) if latency_str.lstrip('-').isdigit() else 0
         expected_start_ns = end_ns - latency_ns
-        tid = line_map.get("pid", "0")
-        event = line_map.get("event", "")
+        tid = record.get("pid", "0")
+        event = record.get("event", "")
 
         # Step 1: exact match by EventKey
         event_key = _EventKey(expected_start_ns, tid, event)
@@ -570,50 +538,49 @@ class MySysdigLogParser:
             # Step 3: dummy start
             # 直接构造一个最小化的合成进入记录(args=!dummy!,无 fd 上下文)。
             self._pairing_dummy_starts += 1
-            _evt_name = line_map.get("event", "")
-            self._pairing_dummy_by_event[_evt_name] = (
-                self._pairing_dummy_by_event.get(_evt_name, 0) + 1
+            self._pairing_dummy_by_event[event] = (
+                self._pairing_dummy_by_event.get(event, 0) + 1
             )
-            dummy_entry = {
-                "raw": line_map.get("raw", ""),
+            dummy_record = {
+                "raw": record.get("raw", ""),
                 "eventno": "0",
-                "timestamp": line_map["timestamp"],
-                "cpu": line_map.get("cpu", "0"),
-                "process": line_map.get("process", ""),
-                "pid": line_map.get("pid", "0"),
+                "timestamp": record["timestamp"],
+                "cpu": record.get("cpu", "0"),
+                "process": record.get("process", ""),
+                "pid": record.get("pid", "0"),
                 "direction": ">",
-                "event": line_map.get("event", ""),
-                "cwd": line_map.get("cwd", ""),
-                "latency": line_map.get("latency", "0"),
-                "exepath": line_map.get("exepath", ""),
+                "event": record.get("event", ""),
+                "cwd": record.get("cwd", ""),
+                "latency": record.get("latency", "0"),
+                "exepath": record.get("exepath", ""),
                 "args": "!dummy!",
-                "proc_args": line_map.get("proc_args", ""),
-                "l4proto": line_map.get("l4proto", ""),
+                "proc_args": record.get("proc_args", ""),
+                "l4proto": record.get("l4proto", ""),
             }
-            sync_key = _EventKey(expected_start_ns, tid, event)
-            pending = _PendingStart(sync_key, _ThreadEventKey(tid, event), dummy_entry)
+            # event_key 即上方的精确匹配键（expected_start_ns/tid/event）
+            pending = _PendingStart(event_key, _ThreadEventKey(tid, event), dummy_record)
 
         # Extract entities from both start and end records
-        m_start = pending.entry
-        m_end = line_map
+        start_rec = pending.entry
+        end_rec = record
 
-        e_start = self._extract_entities(m_start)
-        e_end = self._extract_entities(m_end)
+        start_entities = self._extract_entities(start_rec)
+        end_entities = self._extract_entities(end_rec)
 
         # Build fingerprint and lookup handler
         fp = Fingerprint.to_fingerprint(
-            m_start.get("event", ""),
-            e_start[1] if len(e_start) > 1 else None,
-            e_end[1] if len(e_end) > 1 else None,
+            start_rec.get("event", ""),
+            start_entities[1] if len(start_entities) > 1 else None,
+            end_entities[1] if len(end_entities) > 1 else None,
         )
-        handler = self._answering.get(fp)
+        handler = self._syscall_handlers.get(fp)
         if handler is not None:
-            handler.react(m_start, m_end, e_start, e_end)
+            handler.react(start_rec, end_rec, start_entities, end_entities)
         else:
             # Unmatched fingerprint — log as skipped
             self._log_skipped_line(
                 self._scanned_lines,
-                m_start.get("raw", ""),
+                start_rec.get("raw", ""),
                 f"Unmatched fingerprint: {fp}",
             )
 
@@ -688,52 +655,52 @@ class MySysdigLogParser:
     # Entity extraction
     # ==================================================================
     def _extract_entities(
-        self, m: Dict[str, str]
+        self, record: Dict[str, str]
     ) -> List[Optional[Entity]]:
-        res: List[Optional[Entity]] = [None, None]
-        pid = m.get("pid", "")
-        process_name = m.get("process", "")
+        entities: List[Optional[Entity]] = [None, None]
+        pid = record.get("pid", "")
+        process_name = record.get("process", "")
         process_key = pid + process_name
-        exe_path = m.get("exepath", "")
-        proc_args = m.get("proc_args", "")
-        cwd = m.get("cwd", "")
-        res[0] = self._get_or_create_process(
+        exe_path = record.get("exepath", "")
+        proc_args = record.get("proc_args", "")
+        cwd = record.get("cwd", "")
+        entities[0] = self._get_or_create_process(
             process_key, pid, process_name, exe_path,
             args=proc_args, cwd=cwd,
         )
 
-        args = m.get("args", "")
-        file_socket = Utils.extract_file_and_socket(args)
-        process_file = Utils.extract_process_file(args)
+        args = record.get("args", "")
+        file_socket = extract_file_and_socket(args)
+        process_file = extract_process_file(args)
 
         if "path" in file_socket:
             path = file_socket["path"]
-            res[1] = self._get_or_create_file(path, path)
+            entities[1] = self._get_or_create_file(path, path)
         elif process_file is not None:
-            res[1] = self._get_or_create_file(process_file, process_file)
+            entities[1] = self._get_or_create_file(process_file, process_file)
         elif "pipe" in file_socket:
             # 管道（pipe）：按设计不构造 File 顶点、也不建边 -> NO_OBJECT
             self._no_object_count += 1
-            res[1] = None
+            entities[1] = None
         elif (
             "sip" in file_socket
             and "sport" in file_socket
             and "dip" in file_socket
             and "dport" in file_socket
         ):
-            res[1] = self._get_or_create_network(
+            entities[1] = self._get_or_create_network(
                 file_socket["sip"], file_socket["sport"],
                 file_socket["dip"], file_socket["dport"],
-                protocol=m.get("l4proto", ""),
+                protocol=record.get("l4proto", ""),
             )
         elif "socket" in file_socket:
             # socket 但无完整四元组（如 unix socket `ffff->ffff`、内核 fd 地址）
             self._incomplete_network_count += 1
-            res[1] = None
+            entities[1] = None
         else:
-            res[1] = None
+            entities[1] = None
 
-        return res
+        return entities
 
     # ==================================================================
     # Entity factories
@@ -826,153 +793,74 @@ class MySysdigLogParser:
     # ==================================================================
     def _update_p2p_links(
         self,
-        m_start: Dict[str, str],
-        m_end: Dict[str, str],
-        e_start: List[Optional[Entity]],
-        e_end: List[Optional[Entity]],
+        start_rec: Dict[str, str],
+        end_rec: Dict[str, str],
+        start_entities: List[Optional[Entity]],
+        end_entities: List[Optional[Entity]],
     ) -> None:
-        end_time = m_end.get("timestamp", "0.0")
+        end_time = end_rec.get("timestamp", "0.0")
         end_ns = self._parse_timestamp_ns(end_time)
-        key = m_end.get("pid", "") + m_end.get("process", "")
+        key = end_rec.get("pid", "") + end_rec.get("process", "")
 
-        ff = self._forward_flow.get(key)
-        if ff is not None and ff.end_ns < end_ns:
-            ff.end_ns = end_ns
+        forward_edge = self._forward_flow.get(key)
+        if forward_edge is not None and forward_edge.end_ns < end_ns:
+            forward_edge.end_ns = end_ns
 
-    def _add_p2f_event(
-        self,
-        m_start: Dict[str, str],
-        m_end: Dict[str, str],
-        e_start: List[Optional[Entity]],
-        e_end: List[Optional[Entity]],
-    ) -> None:
-        p = e_start[0]
-        p_node = EntityNode(p)
-        f = e_start[1]
-        f_node = EntityNode(f)
-        ts_start = m_start.get("timestamp", "0.0")
-        ts_end = m_end.get("timestamp", "0.0")
-        event = m_start.get("event", "")
-        start_ns = self._parse_timestamp_ns(ts_start)
-        end_ns = self._parse_timestamp_ns(ts_end)
-        args = m_end.get("args", "")
-        size = Utils.extract_size(args)
-        if size != -1:
-            e = EventEdge(
-                p_node, f_node, self._next_event_id(),
-                event, size, start_ns, end_ns,
-            )
-            self._queue_process_file_edge(e)
+    def _make_edge_action(self, rel: str, src_idx: int, dst_idx: int) -> Action:
+        """Build the edge action shared by the four MetaConfig-driven directions.
 
-    def _add_f2p_event(
-        self,
-        m_start: Dict[str, str],
-        m_end: Dict[str, str],
-        e_start: List[Optional[Entity]],
-        e_end: List[Optional[Entity]],
-    ) -> None:
-        p = e_start[0]
-        p_node = EntityNode(p)
-        f = e_start[1]
-        f_node = EntityNode(f)
-        ts_start = m_start.get("timestamp", "0.0")
-        ts_end = m_end.get("timestamp", "0.0")
-        event = m_start.get("event", "")
-        start_ns = self._parse_timestamp_ns(ts_start)
-        end_ns = self._parse_timestamp_ns(ts_end)
-        args = m_end.get("args", "")
-        size = Utils.extract_size(args)
-        if size != -1:
-            e = EventEdge(
-                f_node, p_node, self._next_event_id(),
-                event, size, start_ns, end_ns,
-            )
-            self._queue_file_process_edge(e)
+        两端实体都取自进入记录（start_entities[0]=Process，[1]=File/Network），
+        (src_idx, dst_idx) 决定边方向；size 取自退出记录 args 的 res=，
+        res 缺失或为负（size == -1）时不建边。
+        """
 
-    def _add_p2n_event(
-        self,
-        m_start: Dict[str, str],
-        m_end: Dict[str, str],
-        e_start: List[Optional[Entity]],
-        e_end: List[Optional[Entity]],
-    ) -> None:
-        p = e_start[0]
-        p_node = EntityNode(p)
-        n = e_start[1]
-        n_node = EntityNode(n)
-        ts_start = m_start.get("timestamp", "0.0")
-        ts_end = m_end.get("timestamp", "0.0")
-        event = m_start.get("event", "")
-        start_ns = self._parse_timestamp_ns(ts_start)
-        end_ns = self._parse_timestamp_ns(ts_end)
-        args = m_end.get("args", "")
-        size = Utils.extract_size(args)
-        if size != -1:
-            e = EventEdge(
-                p_node, n_node, self._next_event_id(),
-                event, size, start_ns, end_ns,
-            )
-            self._queue_process_network_edge(e)
+        def action(
+            start_rec: Dict[str, str],
+            end_rec: Dict[str, str],
+            start_entities: List[Optional[Entity]],
+            end_entities: List[Optional[Entity]],
+        ) -> None:
+            first_node = EntityNode(start_entities[0])
+            second_node = EntityNode(start_entities[1])
+            start_ns = self._parse_timestamp_ns(start_rec.get("timestamp", "0.0"))
+            end_ns = self._parse_timestamp_ns(end_rec.get("timestamp", "0.0"))
+            size = extract_size(end_rec.get("args", ""))
+            if size != -1:
+                edge = EventEdge(
+                    first_node if src_idx == 0 else second_node,
+                    first_node if dst_idx == 0 else second_node,
+                    self._next_event_id(),
+                    start_rec.get("event", ""),
+                    size,
+                    start_ns,
+                    end_ns,
+                )
+                self._queue_edge(rel, edge)
 
-    def _add_n2p_event(
-        self,
-        m_start: Dict[str, str],
-        m_end: Dict[str, str],
-        e_start: List[Optional[Entity]],
-        e_end: List[Optional[Entity]],
-    ) -> None:
-        p = e_start[0]
-        p_node = EntityNode(p)
-        n = e_start[1]
-        n_node = EntityNode(n)
-        ts_start = m_start.get("timestamp", "0.0")
-        ts_end = m_end.get("timestamp", "0.0")
-        event = m_start.get("event", "")
-        start_ns = self._parse_timestamp_ns(ts_start)
-        end_ns = self._parse_timestamp_ns(ts_end)
-        args = m_end.get("args", "")
-        size = Utils.extract_size(args)
-        if size != -1:
-            e = EventEdge(
-                n_node, p_node, self._next_event_id(),
-                event, size, start_ns, end_ns,
-            )
-            self._queue_network_process_edge(e)
+        return action
 
     # ==================================================================
     # Edge queue helpers
     # ==================================================================
-    def _queue_process_file_edge(self, edge: EventEdge) -> None:
-        self._process_file_lst.append(edge)
-        self._total_process_file_edges += 1
-
-    def _queue_file_process_edge(self, edge: EventEdge) -> None:
-        self._file_process_lst.append(edge)
-        self._total_file_process_edges += 1
-
-    def _queue_process_network_edge(self, edge: EventEdge) -> None:
-        self._process_network_lst.append(edge)
-        self._total_process_network_edges += 1
-
-    def _queue_network_process_edge(self, edge: EventEdge) -> None:
-        self._network_process_lst.append(edge)
-        self._total_network_process_edges += 1
-
-    def _queue_process_process_edge(self, edge: EventEdge) -> None:
-        self._process_process_lst.append(edge)
-        self._total_process_process_edges += 1
+    def _queue_edge(self, rel: str, edge: EventEdge) -> None:
+        """Buffer one edge of the given relation type and bump its total."""
+        self._edge_queues[rel].append(edge)
+        self._edge_totals[rel] += 1
 
     # ==================================================================
     # Flush
     # ==================================================================
     def _should_flush_buffered_records(self) -> bool:
-        total = (
-            len(self._process_file_lst)
-            + len(self._file_process_lst)
-            + len(self._process_network_lst)
-            + len(self._network_process_lst)
-        )
+        # p2p 边不计入 flush 阈值，只在导入结束的最终 flush 写入。
+        total = sum(len(self._edge_queues[rel]) for rel in ("p2f", "f2p", "p2n", "n2p"))
         return total >= self._flush_edge_limit
+
+    def _clear_edge_queues(self, include_p2p: bool) -> None:
+        """Empty the buffered edge queues; p2p only when included in the flush."""
+        for rel in ("p2f", "f2p", "p2n", "n2p"):
+            self._edge_queues[rel].clear()
+        if include_p2p:
+            self._edge_queues["p2p"].clear()
 
     def _flush_buffered_records(self, include_process_events: bool) -> None:
         has_pending_nodes = (
@@ -980,13 +868,10 @@ class MySysdigLogParser:
             or bool(self._pending_processes)
             or bool(self._pending_networks)
         )
-        has_buffered_edges = (
-            bool(self._process_file_lst)
-            or bool(self._file_process_lst)
-            or bool(self._process_network_lst)
-            or bool(self._network_process_lst)
+        has_buffered_edges = any(
+            self._edge_queues[rel] for rel in ("p2f", "f2p", "p2n", "n2p")
         )
-        has_process_edges = include_process_events and bool(self._process_process_lst)
+        has_process_edges = include_process_events and bool(self._edge_queues["p2p"])
 
         if not has_pending_nodes and not has_buffered_edges and not has_process_edges:
             return
@@ -1001,23 +886,18 @@ class MySysdigLogParser:
             f"files={len(self._pending_files)} "
             f"processes={len(self._pending_processes)} "
             f"networks={len(self._pending_networks)} "
-            f"fp={len(self._file_process_lst)} "
-            f"pf={len(self._process_file_lst)} "
-            f"np={len(self._network_process_lst)} "
-            f"pn={len(self._process_network_lst)} "
-            f"pp={len(self._process_process_lst) if include_process_events else 0}"
+            f"fp={len(self._edge_queues['f2p'])} "
+            f"pf={len(self._edge_queues['p2f'])} "
+            f"np={len(self._edge_queues['n2p'])} "
+            f"pn={len(self._edge_queues['p2n'])} "
+            f"pp={len(self._edge_queues['p2p']) if include_process_events else 0}"
         )
 
         if self._dry_run:
             self._pending_files.clear()
             self._pending_processes.clear()
             self._pending_networks.clear()
-            self._process_file_lst.clear()
-            self._file_process_lst.clear()
-            self._process_network_lst.clear()
-            self._network_process_lst.clear()
-            if include_process_events:
-                self._process_process_lst.clear()
+            self._clear_edge_queues(include_process_events)
             elapsed = int(time.time() * 1000) - flush_start
             print(
                 f"Flush #{self._flush_rounds} [dry-run] skipped DB write, "
@@ -1047,21 +927,16 @@ class MySysdigLogParser:
         writer.insert_networks(self._pending_networks.values())
 
         if include_process_events:
-            writer.insert_p2p_edges(self._process_process_lst)
-        writer.insert_p2f_edges(self._process_file_lst)
-        writer.insert_f2p_edges(self._file_process_lst)
-        writer.insert_p2n_edges(self._process_network_lst)
-        writer.insert_n2p_edges(self._network_process_lst)
+            writer.insert_edges(self._edge_queues["p2p"], "p2p")
+        writer.insert_edges(self._edge_queues["p2f"], "p2f")
+        writer.insert_edges(self._edge_queues["f2p"], "f2p")
+        writer.insert_edges(self._edge_queues["p2n"], "p2n")
+        writer.insert_edges(self._edge_queues["n2p"], "n2p")
 
         self._pending_files.clear()
         self._pending_processes.clear()
         self._pending_networks.clear()
-        self._process_file_lst.clear()
-        self._file_process_lst.clear()
-        self._process_network_lst.clear()
-        self._network_process_lst.clear()
-        if include_process_events:
-            self._process_process_lst.clear()
+        self._clear_edge_queues(include_process_events)
 
         elapsed = int(time.time() * 1000) - flush_start
         print(f"Flush #{self._flush_rounds} [neo4j] completed in {self._format_duration(elapsed)}.")

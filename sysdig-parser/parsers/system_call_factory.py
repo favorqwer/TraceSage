@@ -23,7 +23,7 @@ class SystemCallFactory:
         return self
 
     def get_system_call(self, event: str) -> SystemCall:
-        instance = SystemCall(Fingerprint(event, self._c1, self._c2))
+        system_call = SystemCall(Fingerprint(event, self._c1, self._c2))
         for action in self._on_match:
-            instance = instance.add_action(action)
-        return instance
+            system_call.add_action(action)
+        return system_call
