@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Dev tool: content-level comparison of TraceSage imports in PostgreSQL vs Neo4j.
 
-Both stores were imported from the SAME input (attack.jsonl) by the SAME parser.
+Both stores were imported from the SAME input (1_Multi_Stage_Data_Exfiltration.jsonl,
+the first attack scenario; formerly named attack.jsonl) by the SAME parser.
 This tool maps the two onto a common "entity-key edge" space and checks
 multiset equality.
 

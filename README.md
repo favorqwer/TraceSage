@@ -11,11 +11,10 @@ TraceSage/
 ├── README.md                 # 本文件
 ├── requirements.txt          # Python 依赖（pipreqs 生成）
 ├── .env                      # 数据库连接配置（不入库）
-├── input/sysdig/             # 输入数据：JSONL 日志、sysdig 纯文本导出、场景查询
+├── input/sysdig/             # 输入数据：6 个攻击场景的 JSONL 日志与同名 .query 场景查询
 ├── output/                   # 运行产物：导入日志、对比报告、SQL 备份、统计输出
 ├── docs/                     # （预留）项目文档
 ├── tools/                    # 独立小工具与一次性诊断脚本
-├── analyze_attack_log/       # 日志统计工具（字段/事件类型/进程/FD/系统调用）
 ├── sysdig-parser/            # 溯源图解析导入器（JSONL → Neo4j）
 │   ├── main.py               # 入口
 │   ├── compare_pg_neo4j.py   # PG 基准库 vs Neo4j 正确性对比
@@ -29,6 +28,41 @@ TraceSage/
 │       └── reporting.py      # 进度与跳过行上报（横切）
 └── sysdig.wiki/              # Sysdig 日志格式与字段语义参考资料
 ```
+
+## 攻击场景与数据库
+
+`input/sysdig/` 中每个攻击场景为一对 `<场景名>.jsonl`（Sysdig JSONL 日志）与
+`<场景名>.query`（攻击场景查询描述）。每个场景导入**独立的 Neo4j 数据库**，
+库名约定为 `tracesage-<场景名小写，_ 归一化为 ->`（Neo4j 库名只允许
+字母/数字/点/横线且统一小写）：
+
+| 场景 | JSONL 日志 | Neo4j 数据库 |
+|---|---|---|
+| 1 Multi-Stage Data Exfiltration | `1_Multi_Stage_Data_Exfiltration.jsonl` | `tracesage-1-multi-stage-data-exfiltration` |
+| 2 Masquerade Data Exfiltration | `2_Masquerade_Data_Exfiltration.jsonl` | `tracesage-2-masquerade-data-exfiltration` |
+| 3 SSH Spray | `3_SSH_Spray.jsonl` | `tracesage-3-ssh-spray` |
+| 4 Site Defacement | `4_Site_Defacement.jsonl` | `tracesage-4-site-defacement` |
+| 5 User Timer Resource Hijack | `5_User_Timer_Resource_Hijack.jsonl` | `tracesage-5-user-timer-resource-hijack` |
+| 6 SQLite Pipeline Pollution | `6_SQLite_Pipeline_Pollution.jsonl` | `tracesage-6-sqlite-pipeline-pollution` |
+
+- 数据库选择优先级：`--neo4j-database` > `.env`/环境的 `NEO4J_DATABASE` > 默认 `neo4j`。
+- 导入器不创建数据库：目标库必须已存在。多数据库需要 Neo4j Enterprise；
+  Community 版只有默认 `neo4j` 库，此时只能逐场景导入（换场景前先清库）。
+- 建库示例（对 `system` 库执行，横线开头的名字需反引号包裹）：
+
+  ```cypher
+  CREATE DATABASE `tracesage-1-multi-stage-data-exfiltration` IF NOT EXISTS
+  CREATE DATABASE `tracesage-2-masquerade-data-exfiltration` IF NOT EXISTS
+  CREATE DATABASE `tracesage-3-ssh-spray` IF NOT EXISTS
+  CREATE DATABASE `tracesage-4-site-defacement` IF NOT EXISTS
+  CREATE DATABASE `tracesage-5-user-timer-resource-hijack` IF NOT EXISTS
+  CREATE DATABASE `tracesage-6-sqlite-pipeline-pollution` IF NOT EXISTS
+  ```
+
+- 每个场景的 event_id 从 1 开始，仅在场景自己的库内保证唯一；重复导入同一
+  日志到同一库是幂等的。
+- PG/Neo4j 正确性对比与调查流程回归基线目前固定只针对第 1 个场景（见
+  AGENTS.md 第 4/7 节）。
 
 ## 运行环境
 
@@ -45,18 +79,30 @@ pip install -r requirements.txt
 
 ## 常用命令
 
+### 采集命令
+
+```bash
+sudo sysdig -w capture.scap
+
+# 每个攻击场景单独采集并保存为 <场景名>.jsonl，例如：
+sudo sysdig -r capture.scap -j -p '*%evt.num %evt.rawtime %proc.pid %proc.exepath %proc.name %proc.args %proc.cwd %fd.l4proto %evt.dir %evt.type %evt.args %evt.latency' > 1_Multi_Stage_Data_Exfiltration.jsonl
+```
+
 ```bash
 # 1. 检查 sysdig 导出是否完整（防止 -p 格式串问题导致事件被静默丢弃）
-python tools/check_sysdig_export.py input/sysdig/attack.jsonl
+python tools/check_sysdig_export.py input/sysdig/1_Multi_Stage_Data_Exfiltration.jsonl
 
-# 2. 日志统计（字段、事件类型、进程、FD、统一系统调用）
-python analyze_attack_log/analyze_attack_log.py input/sysdig/attack.jsonl
+# 2a. 单场景导入（目标库默认取 NEO4J_DATABASE，可用 --neo4j-database 显式指定；--dry-run 只解析不写库）
+python sysdig-parser/main.py input/sysdig/1_Multi_Stage_Data_Exfiltration.jsonl neo4j 1 \
+  --neo4j-database tracesage-1-multi-stage-data-exfiltration
+python sysdig-parser/main.py input/sysdig/1_Multi_Stage_Data_Exfiltration.jsonl neo4j 1 --dry-run
 
-# 3. 解析并导入 Neo4j（分批幂等写入，--dry-run 只解析不写库）
-python sysdig-parser/main.py input/sysdig/attack.jsonl neo4j 1
-python sysdig-parser/main.py input/sysdig/attack.jsonl neo4j 1 --dry-run
+# 2b. 六个场景批量导入：input/sysdig 下全部 *.jsonl 按文件名排序逐个导入，
+#     每个场景写入独立数据库 tracesage-<场景名小写>（要求各库已存在）；fail-fast
+python sysdig-parser/main.py --input-dir input/sysdig --all --neo4j-database-prefix tracesage-
+python sysdig-parser/main.py --input-dir input/sysdig --all --dry-run
 
-# 4. 与 PostgreSQL 基准库对比（基准库固定为 1_Multi_Stage_Data_Exfiltration）
+# 3. 与 PostgreSQL 基准库对比（基准库固定为第 1 个场景 1_Multi_Stage_Data_Exfiltration）
 python sysdig-parser/compare_pg_neo4j.py --pg-db 1_Multi_Stage_Data_Exfiltration
 ```
 
@@ -65,8 +111,8 @@ python sysdig-parser/compare_pg_neo4j.py --pg-db 1_Multi_Stage_Data_Exfiltration
 | 脚本 | 用途 |
 |---|---|
 | `check_sysdig_export.py` | 导出文件健全性检查：统计记录数与事件类型，识别被过滤的导出 |
-| `compare_exepath.py` | 一次性诊断：以 exepath 粒度归一化进程身份后对比 PG vs Neo4j |
-| `diag_tid_vs_pid.py` | 一次性诊断：验证对比差异是否全部来自 PG(tid) vs Neo4j(pid) |
+| `dump_parser_counters.py` | 解析等价性验证：dry-run 导出全部可观测计数（stats/逐理由跳过/配对/fd 表），`--baseline` 逐项 diff，性能重构前后必须全部一致 |
+| `dump_neo4j_content.py` | 图内容等价性验证：导出指定库全部顶点/边（含属性与端点身份）为规范化 JSON，`--baseline` 逐项 diff |
 
 ## 参考文档
 

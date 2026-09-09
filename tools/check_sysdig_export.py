@@ -40,7 +40,7 @@ except ImportError:  # pragma: no cover
 #
 # 注意：只保留核实过从不携带 `fd=` 的事件类型。connect/bind/listen/shutdown/
 # getsockopt/setsockopt/mmap/getdents/getdents64 在真实导出中带 `fd=`
-# （2026-09 用 attack.jsonl 逐类型核实），会出现在 fd 过滤型导出里，
+# （2026-09 用 1_Multi_Stage_Data_Exfiltration.jsonl（原 attack.jsonl）逐类型核实），会出现在 fd 过滤型导出里，
 # 不能作为签名，否则会削弱本检查的判别力（重名/目录 fd 系 dirfd=<d>）。
 _FD_LESS_TYPES = {
     "futex",

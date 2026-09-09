@@ -1,17 +1,17 @@
 """System call handler registration: the four special syscalls (execve /
 accept / fcntl / rename), the MetaConfig-driven generic directions
-(f2p / p2f / n2p / p2n), and three exit-record-based families added for
-attack-provenance coverage:
-
-- open family   (openat / openat2 / creat / fchmod / fchmodat):
-  进入记录 args 为空，文件实体只能从退出记录提取（fd=<f> 或 filename=）。
-  openat 按 flags 决定方向（写标志 -> p2f，否则 f2p）；creat/fchmod* 恒为 p2f。
-  退出记录带 res= 时（fchmod*），res<0 的失败操作不建边；openat/creat
-  的成败编码在 fd=（失败 fd=-N(errno) 提不出实体，自然跳过）。
+(f2p / p2f / n2p / p2n), and two exit-record-based families:
+- fchmod / fchmodat (chmod)：进入记录 args 为空，文件实体只能从退出记录
+  提取（fd=<f>）；退出记录带 res= 时，res<0 的失败操作不建边。
 - lifecycle family (unlink / unlinkat / mkdir / mkdirat / rmdir / symlink):
   路径在退出记录的字段中（非 at 变体 path=，*at 变体 name= 并附括号内
   解析路径，symlink 为 linkpath=），建 p2f 边（进程对文件生命周期
   的写类操作）；res<0 的失败操作不建边。
+- openat / openat2 / creat：不产出溯源边——读意图 open 的信息被 read
+  家族覆盖（同对 read 边），写意图 open 被 write 家族覆盖，仅存的独特
+  场景（O_TRUNC 截断且零写入）按调查目标放弃。指纹仍注册以免计入
+  unmatched，事件继续参与 execve/clone p2p 边 endtime 的延长（进程
+  活跃期语义不变）。
 - connect: 进入记录 fd 不带端点（fd=N(<4>)），四元组只能从退出记录的
   tuple= 字段解析，建 p2n 边；unix/内核地址 tuple 无法成顶点，不建边。
 - renameat/renameat2：与 rename 同语义的 *at 变体，共用 _rename_action。
@@ -39,8 +39,7 @@ generic-directions comment below), so keep the sequence unchanged.
 import re
 from typing import Dict, List, Optional, Protocol
 
-from ..jsonl.fields import extract_size
-from ..jsonl.record import parse_timestamp_ns
+from ..jsonl.record import record_size, record_start_ns
 from ..model.entities import Entity, FileEntity, NetworkEntity
 from ..model.entity_node import EntityNode
 from ..model.event_edge import EventEdge
@@ -57,16 +56,8 @@ _RENAME_PATHS = re.compile(
 _PARENT_PATTERN = re.compile(r"ptid=(?P<parentPID>\d+)\((?P<parent>.+?)\)")
 
 # flags=13377(O_DIRECTORY|O_RDONLY|...)：括号内的标志名列表。
-# open 家族据此判断打开方向；clone 家族据此过滤 CLONE_THREAD 线程克隆。
+# clone 家族据此过滤 CLONE_THREAD 线程克隆。
 _FLAGS_VALUE_PATTERN = re.compile(r"flags=\d*(?:\((?P<names>[^)]*)\))?")
-
-# openat 的写意图标志：命中任一按写类（p2f）建边，否则按读类（f2p）。
-# 不含 O_TMPFILE：本采集的 sysdig 会把 O_DIRECTORY 打开的符号 flags 展开
-# 出 O_TMPFILE（208/208 均伴随 O_DIRECTORY），纯读的目录打开会被误判为
-# 写；而真正的 O_TMPFILE 打开没有可解析路径，不会成顶点建边。
-_OPEN_WRITE_FLAGS = frozenset({
-    "O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_APPEND",
-})
 
 # clone/vfork 父侧退出记录：res=<子pid>(<子名>)（子侧记录 res=0，无括号）。
 _SPAWN_RES_PATTERN = re.compile(r"^res=(?P<cpid>\d+)\((?P<cname>[^)]*)\)")
@@ -98,10 +89,6 @@ def _flag_names(args: str) -> set:
     if match is None or match.group("names") is None:
         return set()
     return set(match.group("names").split("|"))
-
-
-def _open_is_write(args: str) -> bool:
-    return bool(_flag_names(args) & _OPEN_WRITE_FLAGS)
 
 
 def _parse_connect_tuple(args: str):
@@ -143,11 +130,17 @@ class ParserContext(Protocol):
 
 
 def _normalize_rename_path(path: Optional[str]) -> str:
+    """*at 变体的括号注记归一：仅当括号内是以 / 开头的解析路径时剥壳
+    （如 "rel(/abs/resolved)" -> "/abs/resolved"），其余括号视为路径
+    本身的字符——与 _normalize_exit_path 同一防护，避免把
+    "/tmp/a (copy)" 之类真实路径撕成 "copy"。"""
     if path is None:
         return ""
     normalized = path.strip()
     if normalized.endswith(")") and "(" in normalized:
-        normalized = normalized[normalized.index("(") + 1:-1].strip()
+        inner = normalized[normalized.index("(") + 1:-1].strip()
+        if inner.startswith("/"):
+            return inner
     return normalized
 
 
@@ -179,7 +172,7 @@ def _update_p2p_links(
     when the acting process is that parent — the child's own events never
     extend the edge.
     """
-    end_ns = parse_timestamp_ns(end_rec.get("timestamp", "0.0"))
+    end_ns = record_start_ns(end_rec)
     key = end_rec.get("pid", "") + end_rec.get("process", "")
     ctx.extend_forward_flow(key, end_ns)
 
@@ -202,9 +195,9 @@ def _make_edge_action(
     ) -> None:
         first_node = EntityNode(start_entities[0])
         second_node = EntityNode(start_entities[1])
-        start_ns = parse_timestamp_ns(start_rec.get("timestamp", "0.0"))
-        end_ns = parse_timestamp_ns(end_rec.get("timestamp", "0.0"))
-        size = extract_size(end_rec.get("args", ""))
+        start_ns = record_start_ns(start_rec)
+        end_ns = record_start_ns(end_rec)
+        size = record_size(end_rec)
         if size != -1:
             edge = EventEdge(
                 first_node if src_idx == 0 else second_node,
@@ -220,12 +213,11 @@ def _make_edge_action(
     return action
 
 
-def _make_open_family_action(ctx: ParserContext, event: str, always_write: bool):
-    """open 家族：文件实体来自退出记录（进入记录 args 为空）。
+def _make_chmod_action(ctx: ParserContext, event: str):
+    """fchmod/fchmodat（chmod）：文件实体来自退出记录（进入记录 args 为空）。
 
-    openat/openat2 按 flags 判断方向；creat/fchmod/fchmodat 语义上恒为
-    写类（always_write=True）。size 恒为 0：openat/creat 的 res 是 fd 号、
-    chmod 的 res 是状态码，都不是字节量。
+    退出记录带 res= 时，res<0 的失败操作不建边。size 恒为 0：chmod 的
+    res 是状态码，不是字节量。边 syscall 为归一名 chmod。
     """
 
     def action(
@@ -236,31 +228,41 @@ def _make_open_family_action(ctx: ParserContext, event: str, always_write: bool)
     ) -> None:
         _update_p2p_links(ctx, start_rec, end_rec, start_entities, end_entities)
         args = end_rec.get("args", "")
-        # openat/creat 的成败编码在 fd=（失败 fd=-N(errno)，提取不出实体，
-        # 自然跳过，且退出记录没有 res= 字段）；fchmod/fchmodat 的退出记录
-        # 带 res=，res<0（失败操作）不建边。因此仅在 res= 存在时检查。
-        if "res=" in args and extract_size(args) == -1:
+        if "res=" in args and record_size(end_rec) == -1:
             return
-        f = end_entities[1]  # FileEntity（退出记录 fd=<f> 或 filename=）
+        f = end_entities[1]  # FileEntity（退出记录 fd=<f>）
         if f is None:
             return
         p = end_entities[0]  # Process（取自退出记录，dummy start 时仍可靠）
         p_node = EntityNode(p)
         f_node = EntityNode(f)
-        start_ns = parse_timestamp_ns(start_rec.get("timestamp", "0.0"))
-        end_ns = parse_timestamp_ns(end_rec.get("timestamp", "0.0"))
-        if always_write or _open_is_write(args):
-            edge = EventEdge(
-                p_node, f_node, ctx.next_event_id(),
-                canonical_syscall(event), 0, start_ns, end_ns,
-            )
-            ctx.queue_edge("p2f", edge)
-        else:
-            edge = EventEdge(
-                f_node, p_node, ctx.next_event_id(),
-                canonical_syscall(event), 0, start_ns, end_ns,
-            )
-            ctx.queue_edge("f2p", edge)
+        start_ns = record_start_ns(start_rec)
+        end_ns = record_start_ns(end_rec)
+        edge = EventEdge(
+            p_node, f_node, ctx.next_event_id(),
+            canonical_syscall(event), 0, start_ns, end_ns,
+        )
+        ctx.queue_edge("p2f", edge)
+
+    return action
+
+
+def _make_open_link_extension_action(ctx: ParserContext):
+    """openat / openat2 / creat：不产出溯源边，只延长 p2p 边活跃期。
+
+    读意图 open 的信息被同对的 read 边覆盖，写意图 open 被 write 边覆盖；
+    仅存的独特场景（O_TRUNC 截断且零写入）按调查目标放弃。指纹仍注册，
+    事件不计入 unmatched，且继续参与 execve/clone p2p 边 endtime 的延长，
+    进程活跃期语义与建边时代保持一致。
+    """
+
+    def action(
+        start_rec: Dict[str, str],
+        end_rec: Dict[str, str],
+        start_entities: List[Optional[Entity]],
+        end_entities: List[Optional[Entity]],
+    ) -> None:
+        _update_p2p_links(ctx, start_rec, end_rec, start_entities, end_entities)
 
     return action
 
@@ -300,7 +302,7 @@ def _make_exit_path_action(ctx: ParserContext, event: str, fields):
         end_entities: List[Optional[Entity]],
     ) -> None:
         args = end_rec.get("args", "")
-        if extract_size(args) == -1:
+        if record_size(end_rec) == -1:
             return
         path = None
         for field in fields:
@@ -314,8 +316,8 @@ def _make_exit_path_action(ctx: ParserContext, event: str, fields):
         file = ctx.get_or_create_file(path, path)
         p_node = EntityNode(p)
         f_node = EntityNode(file)
-        start_ns = parse_timestamp_ns(start_rec.get("timestamp", "0.0"))
-        end_ns = parse_timestamp_ns(end_rec.get("timestamp", "0.0"))
+        start_ns = record_start_ns(start_rec)
+        end_ns = record_start_ns(end_rec)
         edge = EventEdge(
             p_node, f_node, ctx.next_event_id(),
             canonical_syscall(event), 0, start_ns, end_ns,
@@ -339,7 +341,7 @@ def _make_connect_action(ctx: ParserContext):
         end_entities: List[Optional[Entity]],
     ) -> None:
         args = end_rec.get("args", "")
-        if extract_size(args) == -1:
+        if record_size(end_rec) == -1:
             return
         endpoints = _parse_connect_tuple(args)
         if endpoints is None:
@@ -351,8 +353,8 @@ def _make_connect_action(ctx: ParserContext):
         )
         p_node = EntityNode(p)
         n_node = EntityNode(n)
-        start_ns = parse_timestamp_ns(start_rec.get("timestamp", "0.0"))
-        end_ns = parse_timestamp_ns(end_rec.get("timestamp", "0.0"))
+        start_ns = record_start_ns(start_rec)
+        end_ns = record_start_ns(end_rec)
         edge = EventEdge(
             p_node, n_node, ctx.next_event_id(),
             "connect", 0, start_ns, end_ns,
@@ -398,8 +400,8 @@ def _make_spawn_action(ctx: ParserContext, event: str):
         )
         p_node = EntityNode(p)
         c_node = EntityNode(child)
-        start_ns = parse_timestamp_ns(start_rec.get("timestamp", "0.0"))
-        end_ns = parse_timestamp_ns(end_rec.get("timestamp", "0.0"))
+        start_ns = record_start_ns(start_rec)
+        end_ns = record_start_ns(end_rec)
         edge = EventEdge(
             p_node, c_node, ctx.next_event_id(),
             canonical_syscall(event), 0, start_ns, end_ns,
@@ -427,7 +429,7 @@ def _make_bind_action(ctx: ParserContext):
         end_entities: List[Optional[Entity]],
     ) -> None:
         args = end_rec.get("args", "")
-        if extract_size(args) == -1:
+        if record_size(end_rec) == -1:
             return
         match = _BIND_ADDR_PATTERN.search(args)
         if match is None:
@@ -442,8 +444,8 @@ def _make_bind_action(ctx: ParserContext):
         )
         p_node = EntityNode(p)
         n_node = EntityNode(n)
-        start_ns = parse_timestamp_ns(start_rec.get("timestamp", "0.0"))
-        end_ns = parse_timestamp_ns(end_rec.get("timestamp", "0.0"))
+        start_ns = record_start_ns(start_rec)
+        end_ns = record_start_ns(end_rec)
         edge = EventEdge(
             p_node, n_node, ctx.next_event_id(),
             canonical_syscall("bind"), 0, start_ns, end_ns,
@@ -453,15 +455,12 @@ def _make_bind_action(ctx: ParserContext):
     return action
 
 
-# open 家族：文件实体在退出记录 -> 指纹 (None, FileEntity)。
-_OPEN_FAMILY = (
-    # (事件名, 是否恒为写类)
-    ("openat", False),
-    ("openat2", False),
-    ("creat", True),
-    ("fchmod", True),
-    ("fchmodat", True),
-)
+# openat / openat2 / creat：指纹仍注册（避免 unmatched），但动作只延长
+# p2p，不建边——见 _make_open_link_extension_action。
+_OPEN_NO_EDGE_EVENTS = ("openat", "openat2", "creat")
+
+# chmod 家族：文件实体在退出记录 -> 指纹 (None, FileEntity)，恒为 p2f。
+_CHMOD_FAMILY = ("fchmod", "fchmodat")
 
 # 文件生命周期家族：路径字段在退出记录 -> 指纹 (None, None)。
 # 额外注册 (FileEntity, None) 兜底：个别采集进入记录可能带 fd。
@@ -503,13 +502,13 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
         f = start_entities[1]  # FileEntity (executable)
         file_node = EntityNode(f)
         exe_path = start_rec.get("exepath", "")
-        ts_start = start_rec.get("timestamp", "0.0")
-        ts_end = end_rec.get("timestamp", "0.0")
-        start_ns = parse_timestamp_ns(ts_start)
-        end_ns = parse_timestamp_ns(ts_end)
+        start_ns = record_start_ns(start_rec)
+        end_ns = record_start_ns(end_rec)
         args = end_rec.get("args", "")
 
-        if "res=0" in args:
+        # 精确判断成功：execve 成功当且仅当 res=0；此前用 "res=0" in args
+        # 子串判断，args 字段内容含 "res=0" 字样时会误判
+        if record_size(end_rec) == 0:
             if f.path != "<NA>":
                 edge = EventEdge(
                     file_node, p_end_node, ctx.next_event_id(),
@@ -545,6 +544,10 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
         start_entities: List[Optional[Entity]],
         end_entities: List[Optional[Entity]],
     ) -> None:
+        # 失败的 accept（res<0，退出记录无 fd 注记）不建边，也不计入
+        # 不完整网络审计——那是“成功但解析不出端点”的口径
+        if record_size(end_rec) == -1:
+            return
         p = end_entities[0]  # Process
         p_node = EntityNode(p)
         n = end_entities[1]  # NetworkEntity
@@ -553,8 +556,7 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
             ctx.note_incomplete_network()
             return
         n_node = EntityNode(n)
-        ts_end = end_rec.get("timestamp", "0.0")
-        end_ns = parse_timestamp_ns(ts_end)
+        end_ns = record_start_ns(end_rec)
 
         edge = EventEdge(
             n_node, p_node, ctx.next_event_id(),
@@ -574,10 +576,11 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
         start_entities: List[Optional[Entity]],
         end_entities: List[Optional[Entity]],
     ) -> None:
-        ts_start = start_rec.get("timestamp", "0.0")
-        ts_end = end_rec.get("timestamp", "0.0")
-        start_ns = parse_timestamp_ns(ts_start)
-        end_ns = parse_timestamp_ns(ts_end)
+        # 失败的 fcntl 不建边也不计入不完整网络审计（与 accept 同口径）
+        if record_size(end_rec) == -1:
+            return
+        start_ns = record_start_ns(start_rec)
+        end_ns = record_start_ns(end_rec)
         p = end_entities[0]  # Process
         p_node = EntityNode(p)
         n = end_entities[1]  # NetworkEntity
@@ -604,11 +607,13 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
         start_entities: List[Optional[Entity]],
         end_entities: List[Optional[Entity]],
     ) -> None:
-        ts_start = start_rec.get("timestamp", "0.0")
-        ts_end = end_rec.get("timestamp", "0.0")
-        start_ns = parse_timestamp_ns(ts_start)
-        end_ns = parse_timestamp_ns(ts_end)
+        start_ns = record_start_ns(start_rec)
+        end_ns = record_start_ns(end_rec)
         args = end_rec.get("args", "")
+        # res<0（rename 失败）不建边——与 chmod/lifecycle/connect 家族
+        # 同一口径；失败时 sysdig 照样打印 oldpath/newpath，不挡会产出幽灵边
+        if record_size(end_rec) == -1:
+            return
         rename_match = _RENAME_PATHS.search(args)
         if not rename_match:
             return
@@ -648,11 +653,18 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
         ).add_action(_rename_action)
         handlers[sc.fingerprint] = sc
 
-    # --- open 家族（openat / creat / fchmod*：文件实体在退出记录）---
-    for event, always_write in _OPEN_FAMILY:
+    # --- openat / openat2 / creat（只延长 p2p，不建边）---
+    for event in _OPEN_NO_EDGE_EVENTS:
         sc = SystemCall(
             Fingerprint(event, None, FileEntity),
-        ).add_action(_make_open_family_action(ctx, event, always_write))
+        ).add_action(_make_open_link_extension_action(ctx))
+        handlers[sc.fingerprint] = sc
+
+    # --- chmod 家族（fchmod*：文件实体在退出记录，p2f 边）---
+    for event in _CHMOD_FAMILY:
+        sc = SystemCall(
+            Fingerprint(event, None, FileEntity),
+        ).add_action(_make_chmod_action(ctx, event))
         handlers[sc.fingerprint] = sc
 
     # --- 文件生命周期家族（unlink / mkdir / symlink：路径在退出记录）---

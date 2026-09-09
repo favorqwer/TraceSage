@@ -9,6 +9,39 @@ from typing import Dict, Optional, Tuple
 
 _FILE_DESCRIPTOR_PATTERN = re.compile(r"^fd=\S*\(<f>(?P<path>.*)\)$")
 _PIPE_DESCRIPTOR_PATTERN = re.compile(r"^fd=\S*\(<p>(?P<name>.*)\)$")
+# fd token 起点：字段边界上的 fd=（避免命中 dirfd=/oldfd= 等字段名内部）。
+# 必须用环视而不消费空格：match.start() 要正好落在 "fd=" 的 f 上——
+# _extract_fd_token 从这里 +3 跳过 "fd="。此前写成消费空格的 (?:^| )，
+# 非行首的 fd=（如 mmap 的 "flags=... fd=3(<f>/...)"）切出的 token 带前导
+# 空格，所有 ^fd= 锚定的类型模式全部失配，fd 解析静默失败。
+_FD_TOKEN_START_PATTERN = re.compile(r"(?:^|(?<= ))fd=")
+# fd 编号："fd=16(<p>)" -> "16"。管道身份解析（fd 表查找，见
+# pipeline/fd_table.py）需要裸 fd 号本身，类型括号内的名字对裸管道为空。
+_FD_NUMBER_PATTERN = re.compile(r"^fd=(\d+)")
+# 内核对“已打开但已删除”文件的标准注记后缀（/proc/<pid>/fd readlink 结果）
+_DELETED_SUFFIX = " (deleted)"
+
+
+def _extract_fd_token(s: str, start: int) -> str:
+    """取完整 fd token：fd=<num>(<type>...)。
+
+    括号内可含空格与嵌套括号（如内核对已删除文件的
+    "fd=124(<f>/memfd:mozilla-ipc (deleted))"），以括号配平为准；
+    无括号形态（fd=8 / fd=AT_FDCWD）以空格为界。此前按第一个空格截断，
+    含空格的注记路径会被拦腰切断导致整条 fd 解析失败。"""
+    i = start + 3  # 跳过 "fd="
+    depth = 0
+    for j in range(i, len(s)):
+        c = s[j]
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return s[start : j + 1]
+        elif c == " " and depth == 0:
+            return s[start:j]
+    return s[start:]
 _SOCKET_DESCRIPTOR_PATTERN = re.compile(
     r"^fd=\S*\(<(?P<family>[46u])(?P<transport>[tu])?>(?P<endpoint>.*)\)$"
 )
@@ -63,8 +96,12 @@ def extract_file_and_socket(s: str) -> Dict[str, str]:
     fd_type: Optional[str] = None
     result: Dict[str, str] = {}
 
-    if "fd=" in s:
-        fd = s[s.index("fd=") :].split(" ")[0]
+    fd_token_match = _FD_TOKEN_START_PATTERN.search(s)
+    if fd_token_match:
+        fd = _extract_fd_token(s, fd_token_match.start())
+        num_match = _FD_NUMBER_PATTERN.match(fd)
+        if num_match:
+            result["fd_num"] = num_match.group(1)
         file_match = _FILE_DESCRIPTOR_PATTERN.match(fd)
         if file_match:
             path = _normalize_descriptor_path(file_match.group("path"))
@@ -116,12 +153,14 @@ def extract_file_and_socket(s: str) -> Dict[str, str]:
 
 
 def extract_process_file(s: str) -> Optional[str]:
-    """Extract filename from 'filename=...' in args."""
+    """Extract filename from 'filename=...' in args（execve 进入记录）。
+
+    不做括号剥离：filename= 是字面路径，括号属于文件名本身；内核的
+    " (deleted)" 注记由空格分词自然落在 token 之外。此前无条件剥括号会
+    把 "x (deleted)" 之类路径撕碎。"""
     if "filename=" in s:
         path = s[s.index("filename=") + 9 :].split(" ")[0]
-        if "(" in path:
-            path = path[path.index("(") + 1 : -1]
-        return path
+        return path or None
     return None
 
 
@@ -135,8 +174,13 @@ def _get_ip_and_ports(endpoint_str: str) -> Tuple[str, str, str, str]:
 
 
 def _normalize_descriptor_path(path: str) -> str:
-    if "(" in path:
-        return path[path.index("(") + 1 : -1]
+    """fd 注记路径归一：只剥内核对已删除文件的标准后缀 " (deleted)"
+    （来自 /proc/<pid>/fd 的 readlink 结果），其余括号一律视为路径本身
+    的字符（如 "a (copy).txt"）——此前无条件剥括号会把
+    "/memfd:mozilla-ipc (deleted)" 错误归一成 "deleted"，使所有已删除
+    文件共享一个垃圾顶点。"""
+    if path.endswith(_DELETED_SUFFIX):
+        return path[: -len(_DELETED_SUFFIX)]
     return path
 
 

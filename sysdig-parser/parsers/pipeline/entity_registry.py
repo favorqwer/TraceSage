@@ -8,8 +8,10 @@ full 4-tuple, conflicting protocols).
 
 from typing import Dict, List, Optional
 
-from ..jsonl.fields import extract_file_and_socket, extract_process_file
+from ..jsonl.fields import extract_process_file
+from ..jsonl.record import record_file_socket
 from ..model.entities import Entity, FileEntity, NetworkEntity, Process
+from .fd_table import FdTable
 
 # fd.l4proto 中“非真实协议”的取值：视为解析不出来，不写入 Network.protocol。
 _L4PROTO_NOT_APPLICABLE = frozenset({"", "<NA>"})
@@ -38,6 +40,11 @@ class EntityRegistry:
         # 同一四元组出现不同协议的冲突次数（保留首个，仅计数上报）
         self._network_protocol_conflicts = 0
 
+        # fd 生命周期表：把裸 fd=N(<p>) 管道解析为真实身份 pipe:[<ino>]。
+        # 跨 flush 持久（进程级状态，与写入缓冲无关），由主循环在配对两侧
+        # 分别喂记录（见 parser.parse_entry / _process_event）。
+        self._fdtable = FdTable()
+
     # ==================================================================
     # Record -> entities
     # ==================================================================
@@ -57,7 +64,7 @@ class EntityRegistry:
         )
 
         args = record.get("args", "")
-        file_socket = extract_file_and_socket(args)
+        file_socket = record_file_socket(record)
         process_file = extract_process_file(args)
 
         if "path" in file_socket:
@@ -66,9 +73,32 @@ class EntityRegistry:
         elif process_file is not None:
             entities[1] = self.get_or_create_file(process_file, process_file)
         elif "pipe" in file_socket:
-            # 管道（pipe）：按设计不构造 File 顶点、也不建边 -> NO_OBJECT
-            self._no_object_count += 1
-            entities[1] = None
+            # 管道建模为合成路径 File 顶点。sysdig 两种形态：
+            #   fd=N(<p>pipe:[inode]) -> pipe:[inode]（sysdig 已给出 inode，
+            #     直接用作顶点键，可区分具体管道）
+            #   fd=N(<p>)             -> 裸匿名管道，inode 未解析。优先查 fd
+            #     生命周期表还原真实身份（pipe() 退出记录登记的 ino，经
+            #     fork 继承 / dup 复制传播到使用侧），解析为 pipe:[<ino>]；
+            #     失败（pipe() 早于采集起点、事件丢失）回落按事件秒分桶的
+            #     哨兵 pipe:[anonymous@<sec>]。哨兵桶是有意的过近似/欠近似
+            #     权衡：跨秒慢管道会断链，同秒不同管道会合流。
+            # 写家族 -> p2f（进程->管道），读家族 -> f2p（管道->进程），
+            # 指纹 (write/read, FileEntity, None) 自动命中现有通用方向
+            # handler，引擎无感。
+            name = file_socket["pipe"]
+            if name:
+                entities[1] = self.get_or_create_file(name, name)
+            else:
+                ino = self._fdtable.resolve(
+                    record.get("pid", ""), file_socket.get("fd_num", "")
+                )
+                if ino is not None:
+                    resolved = f"pipe:[{ino}]"
+                    entities[1] = self.get_or_create_file(resolved, resolved)
+                else:
+                    sec = record.get("_ns", 0) // 1_000_000_000
+                    anon = f"pipe:[anonymous@{sec}]"
+                    entities[1] = self.get_or_create_file(anon, anon)
         elif (
             "sip" in file_socket
             and "sport" in file_socket
@@ -84,10 +114,29 @@ class EntityRegistry:
             # socket 但无完整四元组（如 unix socket `ffff->ffff`、内核 fd 地址）
             self._incomplete_network_count += 1
             entities[1] = None
+        elif "fd_num" in file_socket:
+            # 有 fd 编号但无可建模实体：eventfd(<e>)、anon_inode、目录(<d>)、
+            # 未识别类型。管道改建模后这才是 no_object 的真实口径
+            self._no_object_count += 1
+            entities[1] = None
         else:
             entities[1] = None
 
         return entities
+
+    # ==================================================================
+    # fd 生命周期表（裸管道身份解析），由主循环喂记录
+    # ==================================================================
+    def observe_fd_start(self, record: Dict[str, str]) -> None:
+        """进入 (>) 记录钩子：close 失效、dup/fcntl 暂存 oldfd。"""
+        self._fdtable.observe_start(record)
+
+    def observe_fd_end(self, record: Dict[str, str]) -> None:
+        """退出 (<) 记录钩子：pipe 登记、clone 继承、dup/fcntl 完成复制。"""
+        self._fdtable.observe_end(record)
+
+    def fd_table_stats(self) -> Dict[str, int]:
+        return self._fdtable.stats()
 
     # ==================================================================
     # Factories
@@ -224,3 +273,23 @@ class EntityRegistry:
         self._pending_files.clear()
         self._pending_processes.clear()
         self._pending_networks.clear()
+
+    def mark_file_referenced(self, f: FileEntity) -> None:
+        """建边端点标脏：重新放回待写清单。
+
+        不变式：凡参与过边的顶点，写边时必然已在库中。上清单的常规时机
+        只有"第一次创建"，而待写清单每轮 flush 清空——若顶点创建后隔了
+        flush 边界才首次参与建边，它将永远不再入清单，写边时 MATCH 不到
+        端点而静默丢边。queue_edge 对每个端点调用本方法封死该路径。
+        dict 赋值幂等；已入库顶点随下轮 flush 重写一次属可接受的冗余
+        MERGE（热顶点每轮一次，量级远小于边写入）。
+        """
+        self._pending_files[f.path] = f
+
+    def mark_process_referenced(self, p: Process) -> None:
+        """建边端点标脏，见 mark_file_referenced。"""
+        self._pending_processes[p.pid_and_name] = p
+
+    def mark_network_referenced(self, n: NetworkEntity) -> None:
+        """建边端点标脏，见 mark_file_referenced。"""
+        self._pending_networks[n.src_and_dst_ip] = n

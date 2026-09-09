@@ -781,7 +781,11 @@ public class Main {
             if (n.getN() != null) {
                networkLst.add(n);
             } else {
-               String patternExcludeLib = "^(?!(?:/proc|/sys|/lib|/lib64|/usr/lib|/usr/lib64)/).*";
+               // 入口候选排除系统安装位置（/proc、/sys、库目录、系统二进制
+               // 目录）与匿名管道哨兵——它们是环境，不是"来历不明的数据
+               // 出现"。不按"是否有出边 execve"排除：/tmp 等外来空间下被
+               // 执行的文件正是经典攻击入口信号，必须保留（与 BaselineRunner 一致）。
+               String patternExcludeLib = "^(?!(?:/proc|/sys|/lib|/lib64|/usr/lib|/usr/lib64|/usr/bin|/bin|/sbin|/usr/sbin|/usr/libexec)/|pipe:\\[).*";
                if (n.getF() != null
                   && java.util.regex.Pattern.matches(patternExcludeLib, n.getF().getPath())
                   && func.apply(jg.incomingEdgesOf(n).size(), Integer.parseInt(value.toString()))) {

@@ -354,7 +354,11 @@ public class BaselineRunner {
             continue;
          }
 
-         String patternExcludeLib = "^(?!(?:/proc|/sys|/lib|/lib64|/usr/lib|/usr/lib64)/).*";
+         // 入口候选排除系统安装位置（/proc、/sys、库目录、系统二进制目录）
+         // 与匿名管道哨兵——它们是环境，不是"来历不明的数据出现"。
+         // 注意不按"是否有出边 execve"排除：/tmp 等外来空间下被执行的
+         // 文件正是经典攻击入口信号，必须保留。
+         String patternExcludeLib = "^(?!(?:/proc|/sys|/lib|/lib64|/usr/lib|/usr/lib64|/usr/bin|/bin|/sbin|/usr/sbin|/usr/libexec)/|pipe:\\[).*";
          if (usesIn && n.getF() != null
             && java.util.regex.Pattern.matches(patternExcludeLib, n.getF().getPath())
             && func.apply(jg.incomingEdgesOf(n).size(), Integer.parseInt(value.toString()))) {

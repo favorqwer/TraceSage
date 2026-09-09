@@ -6,7 +6,7 @@ they are printed — keeping all stdout formatting in one place.
 """
 
 import time
-from typing import Dict, List
+from typing import Dict, List, Union
 
 _SKIP_SAMPLE_LIMIT_PER_REASON = 3
 _SKIP_SUMMARY_REASON_LIMIT = 10
@@ -41,8 +41,12 @@ class SkipLineLogger:
         self._reason_counts: Dict[str, int] = {}
         self._reason_samples: Dict[str, List[str]] = {}
 
-    def log(self, line_no: int, line: str, reason: object) -> None:
+    def log(self, line_no: int, line: Union[str, bytes], reason: object) -> None:
         self.skipped_count += 1
+        if isinstance(line, bytes):
+            # 二进制读入后行是 bytes：样例仅诊断展示用，懒解码（每理由
+            # 最多 3 条，成本可忽略）。
+            line = line.decode("utf-8", "replace")
         reason_str = str(reason)
         self._reason_counts[reason_str] = (
             self._reason_counts.get(reason_str, 0) + 1

@@ -34,6 +34,12 @@ bash progql-local/baseline/run-baseline.sh
   连接参数取自环境变量或仓库根 `.env` 的 `NEO4J_URI` / `NEO4J_USER` /
   `NEO4J_PASSWORD` / `NEO4J_DATABASE`，不硬编码）。`dbName` 参数仅作为场景名写入
   产物的 `meta.scenario`；图库本身由 `NEO4J_DATABASE` 决定。
+- 场景范围：回归基线固定只针对第 1 个场景 `1_Multi_Stage_Data_Exfiltration`
+  （库 `tracesage-1-multi-stage-data-exfiltration`）。对其他场景（
+  `2_Masquerade_Data_Exfiltration` … `6_SQLite_Pipeline_Pollution`，各自独立库，
+  命名约定见根 README）运行同一调查流程时，用 `NEO4J_DATABASE` 指向对应场景库，
+  并用 `run-baseline.sh` 的第二个参数区分产物目录；流程与对比方法不变，但
+  不同场景的基线产物之间不可比。
 - 顶点 id：Neo4j 图没有数字顶点 id，`Neo4jNodeRegistry` 在启动时按
   （标签, MERGE 键）升序枚举全部顶点分配 1..N，同一份库内容在任何机器上得到相同
   id，保证产物可复现。

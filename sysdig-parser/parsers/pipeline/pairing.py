@@ -12,7 +12,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Deque, Dict, List, Optional, Tuple
 
-from ..jsonl.record import parse_timestamp_ns
+from ..jsonl.record import record_latency_ns, record_start_ns
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,8 +71,7 @@ class PairingBuffer:
     def add_start(self, record: Dict[str, str]) -> None:
         """Buffer an enter (>) record under both pairing indexes."""
         self._pairing_start_records += 1
-        ts = record.get("timestamp", "0.0")
-        start_ns = parse_timestamp_ns(ts)
+        start_ns = record_start_ns(record)
         tid = record.get("pid", "0")
         event = record.get("event", "")
 
@@ -89,10 +88,8 @@ class PairingBuffer:
     def take_start_record(self, record: Dict[str, str]) -> Dict[str, str]:
         """Resolve an exit (<) record to its start record (real or dummy)."""
         self._pairing_end_records += 1
-        ts = record.get("timestamp", "0.0")
-        end_ns = parse_timestamp_ns(ts)
-        latency_str = record.get("latency", "0")
-        latency_ns = int(latency_str) if latency_str.lstrip('-').isdigit() else 0
+        end_ns = record_start_ns(record)
+        latency_ns = record_latency_ns(record)
         expected_start_ns = end_ns - latency_ns
         tid = record.get("pid", "0")
         event = record.get("event", "")
@@ -113,27 +110,20 @@ class PairingBuffer:
         if pending is None:
             # Step 3: dummy start
             # 直接构造一个最小化的合成进入记录(args=!dummy!,无 fd 上下文)。
+            # 以退出记录为模板复制后仅改 4 个键；退出记录上已缓存的 args
+            # 派生值（_fs/_size）对 "!dummy!" 无效，必须清除（_ns/_latency_ns
+            # 与退出记录同值，保留）。
             self._pairing_dummy_starts += 1
             self._pairing_dummy_by_event[event] = (
                 self._pairing_dummy_by_event.get(event, 0) + 1
             )
-            dummy_record = {
-                "raw": record.get("raw", ""),
-                "eventno": "0",
-                "timestamp": record["timestamp"],
-                "cpu": record.get("cpu", "0"),
-                "process": record.get("process", ""),
-                "pid": record.get("pid", "0"),
-                "direction": ">",
-                "event": record.get("event", ""),
-                "cwd": record.get("cwd", ""),
-                "latency": record.get("latency", "0"),
-                "exepath": record.get("exepath", ""),
-                "args": "!dummy!",
-                "proc_args": record.get("proc_args", ""),
-                "l4proto": record.get("l4proto", ""),
-            }
             # event_key 即上方的精确匹配键（expected_start_ns/tid/event）
+            dummy_record = dict(record)
+            dummy_record["eventno"] = "0"
+            dummy_record["direction"] = ">"
+            dummy_record["args"] = "!dummy!"
+            dummy_record.pop("_size", None)
+            dummy_record.pop("_fs", None)
             pending = _PendingStart(event_key, _ThreadEventKey(tid, event), dummy_record)
 
         return pending.entry
@@ -187,20 +177,18 @@ class PairingBuffer:
         pending = dq.popleft()
         if not dq:
             del self._incomplete_events[key]
-        # Also remove from thread index
+        # Also remove from thread index. _PendingStart 为 eq=False 的
+        # dataclass（identity 相等），deque.remove 即按身份移除，等价于
+        # 原先的 Python 级重建循环。
         thread_key = pending.thread_event_key
         thread_dq = self._incomplete_events_by_thread.get(thread_key)
         if thread_dq:
-            # Remove the first matching entry
-            new_dq = deque()
-            removed = False
-            for p in thread_dq:
-                if not removed and p is pending:
-                    removed = True
-                    continue
-                new_dq.append(p)
-            if new_dq:
-                self._incomplete_events_by_thread[thread_key] = new_dq
+            try:
+                thread_dq.remove(pending)
+            except ValueError:
+                pass
+            if thread_dq:
+                self._incomplete_events_by_thread[thread_key] = thread_dq
             else:
                 del self._incomplete_events_by_thread[thread_key]
         return pending
