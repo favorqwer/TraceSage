@@ -8,7 +8,7 @@ full 4-tuple, conflicting protocols).
 
 from typing import Dict, List, Optional
 
-from ..jsonl.fields import extract_process_file
+from ..jsonl.fields import extract_process_file, normalize_file_path
 from ..jsonl.record import record_file_socket
 from ..model.entities import Entity, FileEntity, NetworkEntity, Process
 from .fd_table import FdTable
@@ -36,6 +36,7 @@ class EntityRegistry:
         self._pending_networks: Dict[str, NetworkEntity] = {}
 
         self._incomplete_network_count = 0
+        self._connect_in_progress_count = 0
         self._no_object_count = 0
         # 同一四元组出现不同协议的冲突次数（保留首个，仅计数上报）
         self._network_protocol_conflicts = 0
@@ -178,12 +179,20 @@ class EntityRegistry:
         return created
 
     def get_or_create_file(self, file_key: str, path: str) -> FileEntity:
-        f = self._files.get(file_key)
+        # File 顶点身份归一的唯一 chokepoint（G3 剥括号注记 + G4 词法归一）。
+        # File 的 MERGE 键就是 FileEntity.path（见 storage/neo4j_writer），
+        # 因此键与实体属性必须一起归一，否则图里仍会留下未归一的顶点。
+        # 调用方均传 (path, path)；传不同值时各自归一，不交叉。
+        normalized_key = normalize_file_path(file_key)
+        normalized_path = (
+            normalized_key if path == file_key else normalize_file_path(path)
+        )
+        f = self._files.get(normalized_key)
         if f is not None:
             return f
-        created = FileEntity(path)
-        self._files[file_key] = created
-        self._pending_files[file_key] = created
+        created = FileEntity(normalized_path)
+        self._files[normalized_key] = created
+        self._pending_files[normalized_key] = created
         return created
 
     def get_or_create_network(
@@ -226,6 +235,14 @@ class EntityRegistry:
     @property
     def incomplete_network_count(self) -> int:
         return self._incomplete_network_count
+
+    def note_connect_in_progress(self) -> None:
+        """connect 以 EINPROGRESS(-115) 收尾、按“已发起”建边的次数。"""
+        self._connect_in_progress_count += 1
+
+    @property
+    def connect_in_progress_count(self) -> int:
+        return self._connect_in_progress_count
 
     @property
     def no_object_count(self) -> int:

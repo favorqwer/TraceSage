@@ -4,6 +4,7 @@ Pure string-level helpers over the evt.args text; they raise ValueError on
 malformed socket endpoints, which the pipeline counts as skipped lines.
 """
 
+import posixpath
 import re
 from typing import Dict, Optional, Tuple
 
@@ -20,6 +21,51 @@ _FD_TOKEN_START_PATTERN = re.compile(r"(?:^|(?<= ))fd=")
 _FD_NUMBER_PATTERN = re.compile(r"^fd=(\d+)")
 # 内核对“已打开但已删除”文件的标准注记后缀（/proc/<pid>/fd readlink 结果）
 _DELETED_SUFFIX = " (deleted)"
+
+
+# 内核相对路径注记：'原始参数(解析后的绝对路径)'，如
+#   filename=.(/srv/progql-web/releases/release_20260531-211727)
+#   path=./assets(/srv/.../release_20260531-211727/assets)
+# 判定只看第一对括号：括号内以 / 开头才剥壳，否则括号视为文件名的普通
+# 字符（'/tmp/a (copy).txt'、'/var/log/(deleted)' 保持原样）。此前仅
+# mkdir/unlink/rename 通道做了此归一，filename= 通道未做，导致边挂到带括号
+# 注记的孤立顶点上（docs/graph-defects-20260913.md G3）。
+# 合成顶点键（管道等）不是文件系统路径，不得交给 posixpath.normpath
+# （它会把 'pipe:[123]' 当相对路径改写）。G1 类修复引入 unix/netlink
+# 合成顶点时须同步登记。
+_SYNTHETIC_VERTEX_PREFIXES = ("pipe:[", "socket:[", "unix:[", "netlink:[")
+
+
+def strip_path_annotation(value: Optional[str]) -> Optional[str]:
+    """'rel(/abs/resolved)' -> '/abs/resolved'；其余形态只去首尾空白。
+
+    判据与旧的 _normalize_exit_path / _normalize_rename_path 逐字一致，
+    保证 mkdir/unlink/rmdir/symlink/rename 通道零行为变化；同时允许
+    括号内再带括号（如 '/x (y)(/abs (y))'）。
+    """
+    if not value:
+        return value
+    normalized = value.strip()
+    if normalized.endswith(")") and "(" in normalized:
+        inner = normalized[normalized.index("(") + 1 : -1].strip()
+        if inner.startswith("/"):
+            return inner
+    return normalized
+
+
+def normalize_file_path(value: Optional[str]) -> Optional[str]:
+    """File 顶点键的统一归一：剥内核括号注记 + 词法归一。
+
+    词法归一（posixpath.normpath）折叠 '/./' 段、内部 '//' 与尾斜杠，
+    使同一目录/文件不再裂成两个顶点（docs/graph-defects-20260913.md G4）。
+    POSIX 保留行首恰好两个斜杠（'//usr/share/fonts' 原样不动），因此
+    snap-confine 在 chroot 下的 // 开头顶点不会被误并进真实系统路径。
+    空串/None 原样返回，不交给 normpath（normpath('') 会变成 '.'）。
+    """
+    stripped = strip_path_annotation(value)
+    if not stripped or stripped.startswith(_SYNTHETIC_VERTEX_PREFIXES):
+        return stripped
+    return posixpath.normpath(stripped)
 
 
 def _extract_fd_token(s: str, start: int) -> str:
@@ -54,6 +100,11 @@ def extract_size(s: str) -> int:
 
     部分系统调用（fcntl/dup/clone/eventfd...）的返回值带括号说明
     （res=0(<f>/dev/null)、res=20982(gjs)），只取括号前的数字部分。
+
+    注意：本函数把“字段缺失”与“返回值为负”合并成同一个 -1，因此**不能**用作
+    “调用是否失败”的判据（那会被 extract_res / record_failed 取代）；它适用于
+    “把 res 当字节量”的数据流边（read/write/sendto/recvfrom）——那里拿不到
+    res 就没有可用的 bytes。
     """
     if "res=" in s:
         size_str = s[s.index("res=") + 4 :].split(" ")[0]
@@ -65,6 +116,30 @@ def extract_size(s: str) -> int:
             except ValueError:
                 return -1
     return -1
+
+
+def extract_res(s: str) -> Optional[int]:
+    """'res=...' 的原始返回值；**只有在字段缺失时才返回 None**。
+
+    与 extract_size() 的差别就是这一项：本函数能区分
+      字段缺失（None，导出格式没给 res）与
+      调用失败（负数）与
+      字段存在但不可解析（归为 -1，与 extract_size 口径一致，保守当失败）。
+
+    背景：本采集导出（-p '... %evt.args ...'）下 accept 的退出记录形如
+    `fd=5(<4t>192.168.122.128:43064->192.168.122.129:22) tuple=... queuepct=0 ...`，
+    不带 `res=`（实测场景 3 的 12,208 条 accept 退出记录中带 res= 的为 0 条）。
+    只看 extract_size()==-1 会把“所有 accept”当成失败而无差别丢弃。
+    """
+    if "res=" not in s:
+        return None
+    res_str = s[s.index("res=") + 4 :].split(" ")[0]
+    if "(" in res_str:
+        res_str = res_str[: res_str.index("(")]
+    try:
+        return int(res_str)
+    except ValueError:
+        return -1
 
 
 def extract_file_and_socket(s: str) -> Dict[str, str]:
@@ -155,9 +230,11 @@ def extract_file_and_socket(s: str) -> Dict[str, str]:
 def extract_process_file(s: str) -> Optional[str]:
     """Extract filename from 'filename=...' in args（execve 进入记录）。
 
-    不做括号剥离：filename= 是字面路径，括号属于文件名本身；内核的
-    " (deleted)" 注记由空格分词自然落在 token 之外。此前无条件剥括号会
-    把 "x (deleted)" 之类路径撕碎。"""
+    此处不做归一：括号剥壳与词法归一统一收到 File 顶点键生成处
+    （pipeline/entity_registry.get_or_create_file 调 normalize_file_path），
+    避免多个通道各自实现而漏归一。本函数只按空格切出字面 token：
+    内核的 " (deleted)" 注记由空格分词自然落在 token 之外；而无条件
+    剥括号会把 "x (deleted)" 之类路径撕碎。"""
     if "filename=" in s:
         path = s[s.index("filename=") + 9 :].split(" ")[0]
         return path or None

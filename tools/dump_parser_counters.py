@@ -60,6 +60,7 @@ def collect(log_file: str) -> dict:
         "fd_table": registry.fd_table_stats(),
         "registry_audit": {
             "incomplete_network": registry.incomplete_network_count,
+            "connect_in_progress": registry.connect_in_progress_count,
             "no_object": registry.no_object_count,
             "protocol_conflicts": registry.network_protocol_conflicts,
         },

@@ -70,10 +70,22 @@ import util.llm.LlmConfig;
  * candidate selection, forward expansion from the selected entries, and a final
  * intersection. The ProGQL query text is reconstructed programmatically instead
  * of being parsed.
+ *
+ * POI 属性默认取场景 1（`nc --write--> 192.168.122.129:49580 -> 192.168.122.128:4444`），
+ * 可用 `--poi-srcip/--poi-srcport/--poi-dstip/--poi-dstport/--poi-optype` 覆盖以跑其它场景；
+ * 属性名沿用 PG 侧写法，由 Neo4jServerTraversal 兼容层翻译到 Neo4j schema
+ * （lip/lport/rip/rport/syscall，并剥掉 /32、/128 后缀）。
  */
 public class BaselineRunner {
    private static final double CPR_MERGE_WINDOW = 10.0;
    private static final int ENTRY_LIMIT = 5;
+
+   // POI 匹配参数（默认 = 场景 1：nc write 49580 -> 4444）。
+   private static String poiSrcIp = "192.168.122.129/32";
+   private static String poiSrcPort = "49580";
+   private static String poiDstIp = "192.168.122.128/32";
+   private static String poiDstPort = "4444";
+   private static String poiOptype = "write";
    private static final Map<Long, Double> entryCompositeScores = new HashMap<>();
    private static double entryImpactWeight = 0.7;
    private static double entryTimeWeight = 0.3;
@@ -81,6 +93,25 @@ public class BaselineRunner {
    public static void main(String[] args) throws Exception {
       String dbName = args.length > 0 ? args[0] : "1_Multi_Stage_Data_Exfiltration";
       String outDirArg = args.length > 1 ? args[1] : "output/baseline/" + dbName;
+
+      // 可选 POI 覆盖参数（见类注释；缺省 = 场景 1）。
+      for (int i = 2; i < args.length; i++) {
+         String key = args[i];
+         if (!key.startsWith("--poi-") || i + 1 >= args.length) {
+            throw new IllegalArgumentException("Unknown argument: " + key
+               + " (usage: <dbName> <outDir> [--poi-srcip v --poi-srcport v --poi-dstip v --poi-dstport v --poi-optype v])");
+         }
+         String value = args[++i];
+         switch (key) {
+            case "--poi-srcip": poiSrcIp = value; break;
+            case "--poi-srcport": poiSrcPort = value; break;
+            case "--poi-dstip": poiDstIp = value; break;
+            case "--poi-dstport": poiDstPort = value; break;
+            case "--poi-optype": poiOptype = value; break;
+            default:
+               throw new IllegalArgumentException("Unknown POI option: " + key);
+         }
+      }
 
       Path outDir = Paths.get(outDirArg);
       Files.createDirectories(outDir);
@@ -278,13 +309,13 @@ public class BaselineRunner {
          new Variable("net"),
          new NodeLabel("Network"),
          Arrays.asList(
-            new Property("srcip", "\"192.168.122.129/32\""),
-            new Property("srcport", "\"49580\""),
-            new Property("dstip", "\"192.168.122.128/32\""),
-            new Property("dstport", "\"4444\"")
+            new Property("srcip", "\"" + poiSrcIp + "\""),
+            new Property("srcport", "\"" + poiSrcPort + "\""),
+            new Property("dstip", "\"" + poiDstIp + "\""),
+            new Property("dstport", "\"" + poiDstPort + "\"")
          )
       );
-      RelationshipDetail detail = new RelationshipDetail(new Variable("st"), new Type(":NetworkEvent"), new MapLiteral("optype", "\"write\""));
+      RelationshipDetail detail = new RelationshipDetail(new Variable("st"), new Type(":NetworkEvent"), new MapLiteral("optype", "\"" + poiOptype + "\""));
       PatternElementChain chain = new PatternElementChain(new RelationshipPattern(detail, ">"), dst);
       return new Match(new Pattern(new PatternPart(src, chain)));
    }

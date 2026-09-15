@@ -5,7 +5,7 @@
     python tools/evaluate_gt.py output/baseline/<dir>/baseline.json [--window SECONDS]
 
 输入:
-    - 仓库根目录 1_Multi_Stage_Data_Exfiltration.groundtruth.json（--gt 可指定其他）
+    - groundtruth/1_Multi_Stage_Data_Exfiltration.groundtruth.json（--gt 可指定其他）
     - BaselineRunner 产出的 baseline.json
 
 匹配口径（与 GT 文件 matching_convention 一致）:
@@ -31,7 +31,8 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-GT_DEFAULT = ROOT / "1_Multi_Stage_Data_Exfiltration.groundtruth.json"
+# GT JSON 与场景 .md 说明同放 groundtruth/（input/sysdig/ 只有 jsonl 与 query）。
+GT_DEFAULT = ROOT / "groundtruth" / "1_Multi_Stage_Data_Exfiltration.groundtruth.json"
 
 
 def load_env(path=ROOT / ".env"):

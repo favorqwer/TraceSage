@@ -4,7 +4,7 @@ parsing — the entry layer between raw log lines and the pipeline."""
 import json as _json_stdlib
 from typing import Dict, Optional, Union
 
-from .fields import extract_file_and_socket, extract_size
+from .fields import extract_file_and_socket, extract_res, extract_size
 
 try:
     import orjson as _orjson  # type: ignore
@@ -186,6 +186,59 @@ def record_size(record: Dict[str, str]) -> int:
         value = extract_size(record.get("args", ""))
         record["_size"] = value
     return value
+
+
+# record_res 的可能值包含 None（= 字段缺失），所以不能用“get 到 None 就重算”
+# 的缓存写法，需要一个独立哨兵。
+_RES_UNSET = object()
+
+
+def record_res(record: Dict[str, str]) -> Optional[int]:
+    """Cached extract_res(record['args'])；None 表示退出记录里没有 `res=` 字段。"""
+    value = record.get("_res", _RES_UNSET)
+    if value is _RES_UNSET:
+        value = extract_res(record.get("args", ""))
+        record["_res"] = value
+    return value
+
+
+def record_failed(record: Dict[str, str]) -> bool:
+    """“调用明确失败”（`res=` 存在且为负，或不可解析）。
+
+    只用于“失败则不建边”的 handler（accept/fcntl/connect/bind/rename/
+    文件生命周期族/chmod 族）。不能用 record_size(...) == -1 代替：后者把
+    “导出格式没给 res”也算失败，会无差别丢弃整类退出记录（accept 就是这个
+    问题丢光的）。数据流边（read/write）仍用 record_size，因为那里 res 就是
+    bytes 属性，拿不到 res 就不能写边。
+    """
+    res = record_res(record)
+    return res is not None and res < 0
+
+
+# EINPROGRESS(115)：非阻塞 connect 的正常中间态 —— 连接已发起、四元组已由内核
+# 分配，稍后由 poll/getsockopt 完成，语义上不是失败。实测六个场景该返回码只出现
+# 在 connect 的退出记录里（45/306/95/248/732/305 条，无一落在其他事件类型），
+# 所以例外只给 connect 家族，record_failed 本体与其余 6 处调用不受影响；
+# -101 ENETUNREACH / -111 ECONNREFUSED / -2 ENOENT / -13 EACCES 仍是真失败。
+_ERRNO_EINPROGRESS = -115
+
+
+def record_in_progress(record: Dict[str, str]) -> bool:
+    """connect 语义下的 EINPROGRESS（已发起、未完成）；复用 record_res 的缓存。"""
+    return record_res(record) == _ERRNO_EINPROGRESS
+
+
+def record_connect_failed(record: Dict[str, str]) -> bool:
+    """connect 专用“明确失败”判据 = record_failed 且不是 EINPROGRESS。
+
+    给 connect 单独开一条判据而不是给 record_failed 加例外参数：这样只有
+    connect 一家被放宽，chmod/rename 生命周期/accept/bind 等家族保持原语义，
+    也便于改前改后做“只有 p2n 计数变化”的等价性归因。
+    """
+    res = record_res(record)
+    if res is None or res >= 0:
+        return False
+    return res != _ERRNO_EINPROGRESS
 
 
 def record_file_socket(record: Dict[str, str]) -> Dict[str, str]:

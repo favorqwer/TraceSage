@@ -37,13 +37,24 @@ generic-directions comment below), so keep the sequence unchanged.
 """
 
 import re
-from typing import Dict, List, Optional, Protocol
+from typing import Dict, List, Optional, Protocol, Tuple
 
-from ..jsonl.record import record_size, record_start_ns
+from ..jsonl.fields import strip_path_annotation
+from ..jsonl.record import (
+    record_connect_failed,
+    record_failed,
+    record_in_progress,
+    record_size,
+    record_start_ns,
+)
 from ..model.entities import Entity, FileEntity, NetworkEntity
 from ..model.entity_node import EntityNode
 from ..model.event_edge import EventEdge
-from .meta_config import MetaConfig, canonical_syscall
+from .meta_config import (
+    CANONICAL_SYSCALL_MAP,
+    MetaConfig,
+    canonical_syscall,
+)
 from .system_call import Fingerprint, SystemCall, SystemCallFactory
 
 # oldpath 用与 _extract_named_field 相同的 key= 前瞻收口：renameat2 在
@@ -128,20 +139,15 @@ class ParserContext(Protocol):
 
     def note_incomplete_network(self) -> None: ...
 
+    def note_connect_in_progress(self) -> None: ...
+
 
 def _normalize_rename_path(path: Optional[str]) -> str:
-    """*at 变体的括号注记归一：仅当括号内是以 / 开头的解析路径时剥壳
-    （如 "rel(/abs/resolved)" -> "/abs/resolved"），其余括号视为路径
-    本身的字符——与 _normalize_exit_path 同一防护，避免把
-    "/tmp/a (copy)" 之类真实路径撕成 "copy"。"""
+    """rename 家族路径归一（旧的独立实现已收敛到 fields.strip_path_annotation，
+    规则同一：仅括号内以 / 开头才剥壳）；词法归一由 File 键生成处统一做。"""
     if path is None:
         return ""
-    normalized = path.strip()
-    if normalized.endswith(")") and "(" in normalized:
-        inner = normalized[normalized.index("(") + 1:-1].strip()
-        if inner.startswith("/"):
-            return inner
-    return normalized
+    return strip_path_annotation(path) or ""
 
 
 # MetaConfig 驱动的四类通用方向：
@@ -227,8 +233,7 @@ def _make_chmod_action(ctx: ParserContext, event: str):
         end_entities: List[Optional[Entity]],
     ) -> None:
         _update_p2p_links(ctx, start_rec, end_rec, start_entities, end_entities)
-        args = end_rec.get("args", "")
-        if "res=" in args and record_size(end_rec) == -1:
+        if record_failed(end_rec):
             return
         f = end_entities[1]  # FileEntity（退出记录 fd=<f>）
         if f is None:
@@ -268,20 +273,13 @@ def _make_open_link_extension_action(ctx: ParserContext):
 
 
 def _normalize_exit_path(value: Optional[str]) -> str:
-    """*at 变体 name= 值的两种形态归一：普通绝对路径原样返回；
-    相对名(解析后的绝对路径)取括号内的绝对路径。
-
-    仅当括号内以 / 开头才剥离，避免误伤本身以括号结尾的真实路径
-    （如 /tmp/foo (bar)）。
+    """生命周期家族（unlink/mkdir/rmdir/symlink 及 *at 变体）退出记录里的
+    路径归一。实现已收敛到 fields.strip_path_annotation（与 rename 共用一套
+    规则，避免再出现“某条通道忘了归一”）；词法归一由 File 键生成处统一做。
     """
     if value is None:
         return ""
-    normalized = value.strip()
-    if normalized.endswith(")") and "(" in normalized:
-        inner = normalized[normalized.index("(") + 1 : -1].strip()
-        if inner.startswith("/"):
-            return inner
-    return normalized
+    return strip_path_annotation(value) or ""
 
 
 def _make_exit_path_action(ctx: ParserContext, event: str, fields):
@@ -302,7 +300,7 @@ def _make_exit_path_action(ctx: ParserContext, event: str, fields):
         end_entities: List[Optional[Entity]],
     ) -> None:
         args = end_rec.get("args", "")
-        if record_size(end_rec) == -1:
+        if record_failed(end_rec):
             return
         path = None
         for field in fields:
@@ -330,8 +328,9 @@ def _make_exit_path_action(ctx: ParserContext, event: str, fields):
 def _make_connect_action(ctx: ParserContext):
     """connect：四元组在退出记录 tuple= 字段（进入记录 fd 不带端点）。
 
-    建 p2n 边（进程 -> 目标连接）；res<0（连接失败）或 tuple 解析不出
-    （unix/内核地址）时不建边。
+    建 p2n 边（进程 -> 目标连接）；tuple 解析不出（unix/内核地址）时不建边。
+    失败判据用 record_connect_failed：res<0 视为失败，但 EINPROGRESS(-115)
+    （非阻塞 connect 已发起、四元组已由内核分配）不算失败，照常建边并计数。
     """
 
     def action(
@@ -341,11 +340,15 @@ def _make_connect_action(ctx: ParserContext):
         end_entities: List[Optional[Entity]],
     ) -> None:
         args = end_rec.get("args", "")
-        if record_size(end_rec) == -1:
+        if record_connect_failed(end_rec):
             return
         endpoints = _parse_connect_tuple(args)
         if endpoints is None:
             return
+        if record_in_progress(end_rec):
+            # 计数放在端点解析之后：该计数严格等于“EINPROGRESS 且实际建了边”的次数，
+            # 于是 Δ(p2n 边数) == connect_in_progress 可直接当作改写正确性的断言。
+            ctx.note_connect_in_progress()
         sip, sport, dip, dport = endpoints
         p = end_entities[0]  # Process
         n = ctx.get_or_create_network(
@@ -429,7 +432,7 @@ def _make_bind_action(ctx: ParserContext):
         end_entities: List[Optional[Entity]],
     ) -> None:
         args = end_rec.get("args", "")
-        if record_size(end_rec) == -1:
+        if record_failed(end_rec):
             return
         match = _BIND_ADDR_PATTERN.search(args)
         if match is None:
@@ -459,22 +462,59 @@ def _make_bind_action(ctx: ParserContext):
 # p2p，不建边——见 _make_open_link_extension_action。
 _OPEN_NO_EDGE_EVENTS = ("openat", "openat2", "creat")
 
-# chmod 家族：文件实体在退出记录 -> 指纹 (None, FileEntity)，恒为 p2f。
-_CHMOD_FAMILY = ("fchmod", "fchmodat")
+
+def _family(*canonical_names: str) -> Tuple[str, ...]:
+    """按 canonical 名反查同一语义家族的**全部**事件名（含 canonical 名本身）。
+
+    手写事件名名单曾导致整族丢边：`CANONICAL_SYSCALL_MAP` 已把裸 `chmod`、
+    `symlinkat` 归到 `chmod`/`symlink`，但注册表没跟上，于是这些记录落入
+    `Unmatched fingerprint`、边整类丢失（实测场景 3/4/5/6 共 5,138 条 p2f）。
+    改为从归一表反查后，家族变体只要进 map 就自动注册（例如内核 6.5+ /
+    glibc 2.39 起 `fchmodat()` 改走 `fchmodat2`，只靠 map 一项即可覆盖）。
+    """
+    wanted = set(canonical_names)
+    variants = {n for n, c in CANONICAL_SYSCALL_MAP.items() if c in wanted}
+    return tuple(sorted(wanted | variants))
+
+
+# chmod 家族：文件实体在退出/进入记录的 filename= 或 fd 注记 -> 指纹
+# (None, FileEntity)，恒为 p2f。
+_CHMOD_FAMILY = _family("chmod")
+
+# rename 家族（f2p + p2f 双边）：rename / renameat / renameat2
+_RENAME_FAMILY = _family("rename")
+
+# 进程创建家族：父 -> 子 p2p 边
+_SPAWN_FAMILY = _family("clone")
 
 # 文件生命周期家族：路径字段在退出记录 -> 指纹 (None, None)。
 # 额外注册 (FileEntity, None) 兜底：个别采集进入记录可能带 fd。
-_EXIT_PATH_FAMILY = (
-    # (事件名, 候选路径字段，按序尝试)。本采集实测：unlink/mkdir 用
-    # path=，unlinkat 用 name=（sysdig 对 *at 变体的参数名），symlink 用
-    # linkpath=；候选列表同时兼容其他采集形态。
-    ("unlink", ("path", "name")),
-    ("unlinkat", ("name", "path")),
-    ("rmdir", ("path", "name")),
-    ("mkdir", ("path", "name")),
-    ("mkdirat", ("name", "path")),
-    ("symlink", ("linkpath",)),
-)
+# 字段名随变体不同（mkdir 用 path=、mkdirat 用 name=），所以按 canonical
+# 家族给基准字段、*at 变体单独覆盖，再由 _family() 补齐该家族的全部变体。
+_LIFECYCLE_BASE_FIELDS = {
+    # (canonical 家族名, 候选路径字段，按序尝试)。本采集实测：unlink/mkdir
+    # 用 path=，*at 变体用 name=，symlink 用 linkpath=；候选列表同时兼容
+    # 其他采集形态。
+    "unlink": ("path", "name"),
+    "mkdir": ("path", "name"),
+    "rmdir": ("path", "name"),
+    "symlink": ("linkpath",),
+}
+_LIFECYCLE_FIELD_OVERRIDES = {
+    "unlinkat": ("name", "path"),
+    "mkdirat": ("name", "path"),
+}
+
+
+def _lifecycle_family() -> Tuple[Tuple[str, Tuple[str, ...]], ...]:
+    out = []
+    for canonical, fields in _LIFECYCLE_BASE_FIELDS.items():
+        for event in _family(canonical):
+            out.append((event, _LIFECYCLE_FIELD_OVERRIDES.get(event, fields)))
+    return tuple(sorted(out))
+
+
+_EXIT_PATH_FAMILY = _lifecycle_family()
 
 
 def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
@@ -544,9 +584,12 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
         start_entities: List[Optional[Entity]],
         end_entities: List[Optional[Entity]],
     ) -> None:
-        # 失败的 accept（res<0，退出记录无 fd 注记）不建边，也不计入
-        # 不完整网络审计——那是“成功但解析不出端点”的口径
-        if record_size(end_rec) == -1:
+        # 失败的 accept（res<0）不建边，也不计入不完整网络审计——那是
+        # “成功但解析不出端点”的口径。判失败必须用 record_failed 而不是
+        # record_size == -1：本导出格式下 accept 的退出记录只给 fd+tuple 注记、
+        # 不带 res=（场景 3 的 12,208 条退出记录全无 res=），按后者会把
+        # 成功的 accept 一并当成失败，整类 n2p accept 边丢光。
+        if record_failed(end_rec):
             return
         p = end_entities[0]  # Process
         p_node = EntityNode(p)
@@ -576,8 +619,9 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
         start_entities: List[Optional[Entity]],
         end_entities: List[Optional[Entity]],
     ) -> None:
-        # 失败的 fcntl 不建边也不计入不完整网络审计（与 accept 同口径）
-        if record_size(end_rec) == -1:
+        # 失败的 fcntl 不建边也不计入不完整网络审计（与 accept 同口径：
+        # 只用 record_failed 判失败，不把“无 res= 字段”当失败）
+        if record_failed(end_rec):
             return
         start_ns = record_start_ns(start_rec)
         end_ns = record_start_ns(end_rec)
@@ -611,8 +655,9 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
         end_ns = record_start_ns(end_rec)
         args = end_rec.get("args", "")
         # res<0（rename 失败）不建边——与 chmod/lifecycle/connect 家族
-        # 同一口径；失败时 sysdig 照样打印 oldpath/newpath，不挡会产出幽灵边
-        if record_size(end_rec) == -1:
+        # 同一口径；失败时 sysdig 照样打印 oldpath/newpath，不挡会产出幽灵边。
+        # 只用 record_failed：无 res= 字段不等于失败。
+        if record_failed(end_rec):
             return
         rename_match = _RENAME_PATHS.search(args)
         if not rename_match:
@@ -647,7 +692,7 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
 
     # renameat/renameat2 与 rename 同语义（*at 变体，退出记录同样带
     # oldpath/newpath），共用 _rename_action；边属性固定为 "rename"。
-    for rename_variant in ("renameat", "renameat2"):
+    for rename_variant in (e for e in _RENAME_FAMILY if e != "rename"):
         sc = SystemCall(
             Fingerprint(rename_variant, None, None),
         ).add_action(_rename_action)
@@ -660,7 +705,7 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
         ).add_action(_make_open_link_extension_action(ctx))
         handlers[sc.fingerprint] = sc
 
-    # --- chmod 家族（fchmod*：文件实体在退出记录，p2f 边）---
+    # --- chmod 家族（chmod/fchmod/fchmodat/fchmodat2：文件实体在记录里，p2f 边）---
     for event in _CHMOD_FAMILY:
         sc = SystemCall(
             Fingerprint(event, None, FileEntity),
@@ -693,7 +738,7 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
 
     # --- 进程创建家族（clone / vfork / fork：父 -> 子 p2p）---
     # 进入记录 args 为空、退出记录无 fd -> 指纹 (None, None)。
-    for spawn_event in ("clone", "vfork", "fork"):
+    for spawn_event in _SPAWN_FAMILY:
         sc = SystemCall(
             Fingerprint(spawn_event, None, None),
         ).add_action(_make_spawn_action(ctx, spawn_event))

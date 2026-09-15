@@ -111,8 +111,8 @@ class PairingBuffer:
             # Step 3: dummy start
             # 直接构造一个最小化的合成进入记录(args=!dummy!,无 fd 上下文)。
             # 以退出记录为模板复制后仅改 4 个键；退出记录上已缓存的 args
-            # 派生值（_fs/_size）对 "!dummy!" 无效，必须清除（_ns/_latency_ns
-            # 与退出记录同值，保留）。
+            # 派生值（_fs/_size/_res）对 "!dummy!" 无效，必须全部清除
+            # （_ns/_latency_ns 与退出记录同值，保留）。
             self._pairing_dummy_starts += 1
             self._pairing_dummy_by_event[event] = (
                 self._pairing_dummy_by_event.get(event, 0) + 1
@@ -124,6 +124,7 @@ class PairingBuffer:
             dummy_record["args"] = "!dummy!"
             dummy_record.pop("_size", None)
             dummy_record.pop("_fs", None)
+            dummy_record.pop("_res", None)
             pending = _PendingStart(event_key, _ThreadEventKey(tid, event), dummy_record)
 
         return pending.entry

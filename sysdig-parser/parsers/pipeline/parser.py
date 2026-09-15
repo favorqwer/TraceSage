@@ -138,6 +138,9 @@ class SysdigLogParser:
     def note_incomplete_network(self) -> None:
         self._registry.note_incomplete_network()
 
+    def note_connect_in_progress(self) -> None:
+        self._registry.note_connect_in_progress()
+
     # ==================================================================
     # Main parsing loop
     # ==================================================================
@@ -255,6 +258,10 @@ class SysdigLogParser:
             print(
                 f"incomplete network (no full 4-tuple): "
                 f"{self._registry.incomplete_network_count}"
+            )
+            print(
+                f"connect EINPROGRESS edges built (non-blocking connect): "
+                f"{self._registry.connect_in_progress_count}"
             )
             print(
                 f"no object (unmodeled fd: eventfd/anon_inode/dir/...): "

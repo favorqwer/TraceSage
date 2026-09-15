@@ -42,6 +42,9 @@ CANONICAL_SYSCALL_MAP = {
     "symlinkat": "symlink",
     "fchmod": "chmod",
     "fchmodat": "chmod",
+    # 内核 6.5 新增 fchmodat2；glibc 2.39 起 fchmodat() 在可用时改走它。
+    # 不进本表的话，那类主机上 chmod 整族会静默丢失。
+    "fchmodat2": "chmod",
     # 进程创建家族（现代内核 fork/vfork 经由 clone(2) 实现）
     "vfork": "clone",
     "fork": "clone",

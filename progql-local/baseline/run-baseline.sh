@@ -2,9 +2,12 @@
 # Builds and runs the deterministic investigation baseline.
 #
 # Usage:
-#   bash progql-local/baseline/run-baseline.sh [dbName] [outDir]
+#   bash progql-local/baseline/run-baseline.sh [dbName] [outDir] [poi options...]
 #   dbName defaults to 1_Multi_Stage_Data_Exfiltration
 #   outDir defaults to output/baseline/<dbName>   (relative to the repo root)
+#   poi options (optional, default = scenario 1's POI) are forwarded to
+#   baseline.BaselineRunner: --poi-srcip v --poi-srcport v --poi-dstip v
+#   --poi-dstport v --poi-optype v
 #
 # The engine sources are compiled WITHOUT src/main/java/main/Main.java, which
 # still references the removed ProGQL parser. A stub main.Main (baseline/stub)
@@ -17,6 +20,8 @@ ROOT_DIR="$(cd "$PROGQL_DIR/.." && pwd)"
 
 DB_NAME="${1:-1_Multi_Stage_Data_Exfiltration}"
 OUT_DIR_ARG="${2:-output/baseline/${DB_NAME}}"
+shift 2 2>/dev/null || shift $#
+POI_ARGS=("$@")
 if [[ "$OUT_DIR_ARG" != /* && "$OUT_DIR_ARG" != [A-Za-z]:* ]]; then
    OUT_DIR_ARG="$ROOT_DIR/$OUT_DIR_ARG"
 fi
@@ -84,4 +89,4 @@ CP="$CP;$M2_REPO/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar"
 
 cd "$PROGQL_DIR"
 MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' java -Dprogql.llm.config="$CFG_PATH" \
-   -cp "$BUILD_DIR/classes;$CP" baseline.BaselineRunner "$DB_NAME" "$OUT_DIR_ARG"
+   -cp "$BUILD_DIR/classes;$CP" baseline.BaselineRunner "$DB_NAME" "$OUT_DIR_ARG" ${POI_ARGS[@]+"${POI_ARGS[@]}"}
