@@ -26,6 +26,12 @@ CANONICAL_SYSCALL_MAP = {
     "pwritev": "write",
     "pwritev2": "write",
     # 发送/接收家族
+    # send/recv 是 send(2)/recv(2) 的事件名（glibc 通常把 send()/recv() 转成
+    # sendto/recvfrom 系统调用，所以日志里常见带后缀的变体；但静态链接/直接走
+    # 系统调用的程序会出现裸名）。归一成家族基本名是必须的：边模型与 Java 侧
+    # 消费方（LlmEdgePrefilter / LlmRepairCandidateScorer 等）都按 sendto/recvfrom 匹配。
+    "send": "sendto",
+    "recv": "recvfrom",
     "sendmsg": "sendto",
     "sendmmsg": "sendto",
     "recvmsg": "recvfrom",
@@ -48,6 +54,9 @@ CANONICAL_SYSCALL_MAP = {
     # 进程创建家族（现代内核 fork/vfork 经由 clone(2) 实现）
     "vfork": "clone",
     "fork": "clone",
+    # 零拷贝发送（G2）。本导出里没有 sendfile64，但多个架构的 glibc 会用它，
+    # 成本为零，防将来在其他主机上重现"整族未归一"的缺口。
+    "sendfile64": "sendfile",
 }
 
 
@@ -61,8 +70,13 @@ class MetaConfig:
     # 由进入记录 fd 的实体类型决定落点）。
     _READ_FAMILY = ("read", "readv", "pread", "preadv", "preadv2")
     _WRITE_FAMILY = ("write", "writev", "pwrite", "pwritev", "pwritev2")
-    _SEND_FAMILY = ("sendto", "sendmsg", "sendmmsg")
-    _RECV_FAMILY = ("recvfrom", "recvmsg", "recvmmsg")
+    _SEND_FAMILY = ("send", "sendto", "sendmsg", "sendmmsg")
+    _RECV_FAMILY = ("recv", "recvfrom", "recvmsg", "recvmmsg")
+
+    # 公开别名：handlers 需要把 send/recv 家族也注册到 FileEntity 方向，
+    # 以覆盖 unix socket（合成 File 顶点）上的收发（G1）。
+    send_system_calls = _SEND_FAMILY
+    recv_system_calls = _RECV_FAMILY
 
     ptof_system_calls = _WRITE_FAMILY + ("rename",)
     ftop_system_calls = _READ_FAMILY + ("rename",)

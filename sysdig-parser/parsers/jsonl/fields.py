@@ -19,6 +19,52 @@ _FD_TOKEN_START_PATTERN = re.compile(r"(?:^|(?<= ))fd=")
 # fd 编号："fd=16(<p>)" -> "16"。管道身份解析（fd 表查找，见
 # pipeline/fd_table.py）需要裸 fd 号本身，类型括号内的名字对裸管道为空。
 _FD_NUMBER_PATTERN = re.compile(r"^fd=(\d+)")
+# 尖括号内的原始类型符（不限于 f/p/4/6/u）：`fd=3(<n>)` -> 'n'、`fd=1(<d>/x)` -> 'd'。
+# 与 fd_type 的区别：fd_type 只在识别为 f/p/4/6/u 时才存在，本键只要带
+# `<X>` 标记就有，供审计分类（netlink/eventfd/目录等）使用。
+_FD_TYPE_RAW_PATTERN = re.compile(r"^fd=\S*?<(?P<t>[^>]*)>")
+# 按字段名取 fd token 的起点（fd= / in_fd= / out_fd= …）。
+# 必须用环视而不消费空格：match.start() 要正好落在 "<key>=" 的首字符上。
+_FD_TOKEN_PATTERNS: Dict[str, "re.Pattern[str]"] = {}
+
+
+def _fd_token_pattern(key: str) -> "re.Pattern[str]":
+    pattern = _FD_TOKEN_PATTERNS.get(key)
+    if pattern is None:
+        pattern = re.compile(r"(?:^|(?<= ))" + re.escape(key) + "=")
+        _FD_TOKEN_PATTERNS[key] = pattern
+    return pattern
+
+
+# ---------------------------------------------------------------------------
+# unix socket 文件系统路径提取（**唯一实现**，供 fields / pipeline.fd_table /
+# dispatch.handlers 共用；历史上同一语义在三处各写了一份，容易漂移）。
+#
+# 路径形态统一为：可选的内核地址前缀（以空格分隔，如 'ffff890c..->ffff890c..' 或
+# '0->ffff8b..'）+ 以 '/' 开头、到空格或右括号为止的路径。
+#   抽象命名空间 '@/tmp/.X11-unix/X0' 与裸注记 '' 均不匹配。
+#   内核地址对无路径（'ffff..->ffff..' 后无空格+路径）也不匹配。
+_UNIX_PATH_TAIL = r"(?:[^)]*? )?(?P<path>/[^\s)]+)"
+# 1) fd 注记括号内的端点内容（整串匹配）：'ffff..->ffff.. /dev/log'、'/run/user/1000/bus'
+UNIX_PATH_IN_ENDPOINT_RE = re.compile(r"^" + _UNIX_PATH_TAIL + r"$")
+# 2) args 里的 fd 注记：'fd=7(<u>ffff..->ffff.. /dev/log)'。
+#    字段名含裸 fd= 以及双 fd 系统调用的 in_fd= / out_fd=（sendfile）。
+UNIX_PATH_IN_FD_NOTE_RE = re.compile(
+    r"(?<![a-zA-Z0-9_])(?:fd|in_fd|out_fd)=(\d+)\(<u>" + _UNIX_PATH_TAIL + r"\)"
+)
+# 3) connect 退出记录：'tuple=<addr>-><addr> /path'（fd 编号在进入记录里）
+UNIX_PATH_IN_CONNECT_TUPLE_RE = re.compile(r"(?:^| )tuple=\S+ " + _UNIX_PATH_TAIL)
+# 4) bind 退出记录：'addr=/path'（netlink 为 addr=NULL，不匹配）
+UNIX_PATH_IN_BIND_ADDR_RE = re.compile(r"(?:^| )addr=" + _UNIX_PATH_TAIL)
+
+
+def unix_path_from_endpoint(endpoint: str) -> Optional[str]:
+    """fd 注记括号内的端点内容 -> 文件系统路径（无路径/抽象命名空间返回 None）。"""
+    ep = endpoint.strip()
+    if not ep or ep.startswith("@"):
+        return None
+    m = UNIX_PATH_IN_ENDPOINT_RE.match(ep)
+    return m.group("path") if m else None
 # 内核对“已打开但已删除”文件的标准注记后缀（/proc/<pid>/fd readlink 结果）
 _DELETED_SUFFIX = " (deleted)"
 
@@ -30,10 +76,16 @@ _DELETED_SUFFIX = " (deleted)"
 # 字符（'/tmp/a (copy).txt'、'/var/log/(deleted)' 保持原样）。此前仅
 # mkdir/unlink/rename 通道做了此归一，filename= 通道未做，导致边挂到带括号
 # 注记的孤立顶点上（docs/graph-defects-20260913.md G3）。
-# 合成顶点键（管道等）不是文件系统路径，不得交给 posixpath.normpath
-# （它会把 'pipe:[123]' 当相对路径改写）。G1 类修复引入 unix/netlink
-# 合成顶点时须同步登记。
-_SYNTHETIC_VERTEX_PREFIXES = ("pipe:[", "socket:[", "unix:[", "netlink:[")
+# 合成顶点键（管道/socket/netlink 等）不是文件系统路径，不得交给
+# posixpath.normpath（它会把 'pipe:[123]' 当相对路径改写）。
+# 例外：unix:[<绝对路径>] 的括号内是**真文件系统路径**，必须词法归一——
+# 否则同一 socket 会因 '..'/'./'/'//' 写法不同裂成多个顶点
+# （实测 unix:[/run/user/1000/snap.firefox/../pulse/native] 与
+#  unix:[/run/user/1000/pulse/native] 分裂）。只归一内部路径，合成前缀本身
+# 不进 normpath（见 normalize_file_path）。
+_SYNTHETIC_VERTEX_PREFIXES = ("pipe:[", "socket:[", "netlink:[")
+_UNIX_VERTEX_PREFIX = "unix:["
+_UNIX_VERTEX_SUFFIX = "]"
 
 
 def strip_path_annotation(value: Optional[str]) -> Optional[str]:
@@ -61,21 +113,32 @@ def normalize_file_path(value: Optional[str]) -> Optional[str]:
     POSIX 保留行首恰好两个斜杠（'//usr/share/fonts' 原样不动），因此
     snap-confine 在 chroot 下的 // 开头顶点不会被误并进真实系统路径。
     空串/None 原样返回，不交给 normpath（normpath('') 会变成 '.'）。
+
+    unix 合成顶点（unix:[<绝对路径>]）只把**括号内的路径**交给 normpath：
+    前缀本身是合成命名空间、路径是真实文件系统身份，两者都保真才既不误并
+    pipe:[...] 也不漏并同一 socket 的其他写法。
     """
     stripped = strip_path_annotation(value)
-    if not stripped or stripped.startswith(_SYNTHETIC_VERTEX_PREFIXES):
+    if not stripped:
+        return stripped
+    if stripped.startswith(_UNIX_VERTEX_PREFIX) and stripped.endswith(_UNIX_VERTEX_SUFFIX):
+        inner = stripped[len(_UNIX_VERTEX_PREFIX) : -len(_UNIX_VERTEX_SUFFIX)]
+        if inner.startswith("/"):
+            inner = posixpath.normpath(inner)
+        return _UNIX_VERTEX_PREFIX + inner + _UNIX_VERTEX_SUFFIX
+    if stripped.startswith(_SYNTHETIC_VERTEX_PREFIXES):
         return stripped
     return posixpath.normpath(stripped)
 
 
-def _extract_fd_token(s: str, start: int) -> str:
-    """取完整 fd token：fd=<num>(<type>...)。
+def _extract_fd_token(s: str, start: int, key: str = "fd") -> str:
+    """取完整 fd token：<key>=<num>(<type>...)。
 
     括号内可含空格与嵌套括号（如内核对已删除文件的
     "fd=124(<f>/memfd:mozilla-ipc (deleted))"），以括号配平为准；
     无括号形态（fd=8 / fd=AT_FDCWD）以空格为界。此前按第一个空格截断，
     含空格的注记路径会被拦腰切断导致整条 fd 解析失败。"""
-    i = start + 3  # 跳过 "fd="
+    i = start + len(key) + 1  # 跳过 "<key>="
     depth = 0
     for j in range(i, len(s)):
         c = s[j]
@@ -142,19 +205,27 @@ def extract_res(s: str) -> Optional[int]:
         return -1
 
 
-def extract_file_and_socket(s: str) -> Dict[str, str]:
-    """Extract file path or socket endpoint info from the 'fd=...' field.
+def extract_file_and_socket(s: str, key: str = "fd") -> Dict[str, str]:
+    """Extract file path or socket endpoint info from the '<key>=...' field.
+
+    key 默认为裸 `fd=`；sendfile 这类双 fd 系统调用用 key="in_fd"/"out_fd"
+    分别取两个端点（`in_fd=` 里的 `fd=` 前面是下划线，裸 `fd=` 的环视
+    模式匹配不到它，所以必须显式指定字段名）。
 
     Returns a dict with keys among: path / sip,sport,dip,dport / pipe / socket
-    / fd_type。
+    / fd_type / fd_type_raw / unix_path / unix_abstract。
     - `<f>path`          -> {'path': path, 'fd_type': 'f'}
     - `<p>pipe:[N]`      -> {'pipe': 'pipe:[N]', 'fd_type': 'p'}  (非文件，但可表示)
     - `<u>...` / `<4t>...`
       - 若含 `lip:lport->rip:rport` -> {'sip',...,'dport'} + 'socket'
       - 否则（内核 fd 地址如 ffff...->ffff...，或空）-> {'socket': '<u>...'}
+      - unix（`<u>`）注记里带文件系统路径时额外给 'unix_path'
+        （'<u>ffff..->ffff.. /dev/log' 与 '<u>/run/user/1000/bus' 两种形态）；
+        抽象命名空间给 'unix_abstract'
       - 均附带 'fd_type'（尖括号内原始类型符，如 'u' / '4t' / '6u'）
     - `fd=N` 无 `(<...>)` 标记（如 `fd=8`）或标记不在
-      f/p/4/6/u 之列（如目录 `<d>`）-> 结果不含 'fd_type'
+      f/p/4/6/u 之列（如目录 `<d>`）-> 结果不含 'fd_type'；
+      'fd_type_raw' 不受此限（只要带 `<X>` 就有，如 '<d>' -> 'd'、'<n>' -> 'n'）
 
     'fd_type' 是尖括号内的原始类型符（fd.typechar），仅当 fd 带括号标记且能
     识别时才存在。当前解析器未把它写入顶点属性（File.type 已移除：值域仅
@@ -171,9 +242,14 @@ def extract_file_and_socket(s: str) -> Dict[str, str]:
     fd_type: Optional[str] = None
     result: Dict[str, str] = {}
 
-    fd_token_match = _FD_TOKEN_START_PATTERN.search(s)
+    fd_token_match = _fd_token_pattern(key).search(s)
     if fd_token_match:
-        fd = _extract_fd_token(s, fd_token_match.start())
+        raw_token = _extract_fd_token(s, fd_token_match.start(), key)
+        body = raw_token[len(key) + 1:] if raw_token.startswith(key + "=") else raw_token
+        fd = "fd=" + body          # 复用下面 ^fd= 锚定的各类型模式
+        raw_type_match = _FD_TYPE_RAW_PATTERN.match(fd)
+        if raw_type_match:
+            result["fd_type_raw"] = raw_type_match.group("t")
         num_match = _FD_NUMBER_PATTERN.match(fd)
         if num_match:
             result["fd_num"] = num_match.group(1)
@@ -194,6 +270,12 @@ def extract_file_and_socket(s: str) -> Dict[str, str]:
                     )
                     socket_ep = socket_match.group("endpoint")
                     socket = fd[socket_match.start() :]
+                    if fd_type is not None and fd_type[0] == "u":
+                        unix_path = unix_path_from_endpoint(socket_ep)
+                        if unix_path:
+                            result["unix_path"] = unix_path
+                        elif socket_ep.strip().startswith("@"):
+                            result["unix_abstract"] = "1"
                     if socket_ep and "->" in socket_ep and "ffff" not in socket_ep:
                         try:
                             ports_and_ip = _get_ip_and_ports(socket_ep)

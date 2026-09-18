@@ -39,11 +39,16 @@ generic-directions comment below), so keep the sequence unchanged.
 import re
 from typing import Dict, List, Optional, Protocol, Tuple
 
-from ..jsonl.fields import strip_path_annotation
+from ..jsonl.fields import (
+    UNIX_PATH_IN_CONNECT_TUPLE_RE,
+    extract_file_and_socket,
+    strip_path_annotation,
+)
 from ..jsonl.record import (
     record_connect_failed,
     record_failed,
     record_in_progress,
+    record_res,
     record_size,
     record_start_ns,
 )
@@ -92,6 +97,10 @@ def _extract_named_field(args: str, field: str) -> Optional[str]:
 # unix/内核地址 tuple（如 tuple=0->ffff890c...）无端口，解析失败返回 None。
 _CONNECT_TUPLE_PATTERN = re.compile(r"tuple=(?P<src>\S+)->(?P<dst>\S+)")
 _ENDPOINT_VALUE_PATTERN = re.compile(r"^(?P<host>.+):(?P<port>\d+)$")
+# unix socket 的 tuple：无端口，但有文件系统路径尾巴
+#   tuple=ffff8939144a3c00->ffff893810fa2c00 /dev/log
+# 抽象命名空间（tuple=... @/tmp/.X11-unix/X0）不匹配。
+# 正则本体在 jsonl/fields.py（与 fd_table / fields 共用，避免三份实现漂移）。
 
 
 def _flag_names(args: str) -> set:
@@ -129,6 +138,8 @@ class ParserContext(Protocol):
 
     def get_or_create_file(self, file_key: str, path: str) -> object: ...
 
+    def entity_from_descriptor(self, record, file_socket) -> object: ...
+
     def get_or_create_network(
         self, sip: str, sport: str, dip: str, dport: str, protocol: str = ""
     ) -> object: ...
@@ -161,6 +172,13 @@ _GENERIC_SYSCALL_DIRECTIONS = (
     ("p2f", FileEntity, MetaConfig.ptof_system_calls, 0, 1),
     ("n2p", NetworkEntity, MetaConfig.ntop_system_calls, 1, 0),
     ("p2n", NetworkEntity, MetaConfig.pton_system_calls, 0, 1),
+    # send/recv 家族在 unix socket（合成 File 顶点，G1 类①）上的方向：
+    # 端点是 File 而非 Network，必须落到 f2p/p2f（关系名决定端点标签），
+    # 不能沿用 n2p/p2n。指纹 (recvmsg, FileEntity, None) / (sendmsg, FileEntity, None)
+    # 此前未注册（send/recv 家族原先只在 NetworkEntity 方向注册），不覆盖
+    # 任何既有条目，所以追加到末尾是安全的。
+    ("f2p", FileEntity, MetaConfig.recv_system_calls, 1, 0),
+    ("p2f", FileEntity, MetaConfig.send_system_calls, 0, 1),
 )
 
 
@@ -344,6 +362,22 @@ def _make_connect_action(ctx: ParserContext):
             return
         endpoints = _parse_connect_tuple(args)
         if endpoints is None:
+            # unix socket 的 tuple 没有端口：类①（文件系统路径）建
+            #   Process --connect--> unix:[/run/user/1000/systemd/private]
+            # （G1 §2.3 期望形态）。抽象命名空间与内核地址对不成顶点，不建边。
+            m = UNIX_PATH_IN_CONNECT_TUPLE_RE.search(args)
+            if m is None:
+                return
+            unix_path = m.group("path")
+            p = end_entities[0]  # Process
+            if p is None:
+                return
+            unix = f"unix:[{unix_path}]"
+            file_entity = ctx.get_or_create_file(unix, unix)
+            ctx.queue_edge("p2f", EventEdge(
+                EntityNode(p), EntityNode(file_entity), ctx.next_event_id(),
+                "connect", 0, record_start_ns(start_rec), record_start_ns(end_rec),
+            ))
             return
         if record_in_progress(end_rec):
             # 计数放在端点解析之后：该计数严格等于“EINPROGRESS 且实际建了边”的次数，
@@ -458,9 +492,12 @@ def _make_bind_action(ctx: ParserContext):
     return action
 
 
-# openat / openat2 / creat：指纹仍注册（避免 unmatched），但动作只延长
+# openat / openat2 / creat / open：指纹仍注册（避免 unmatched），但动作只延长
 # p2p，不建边——见 _make_open_link_extension_action。
-_OPEN_NO_EDGE_EVENTS = ("openat", "openat2", "creat")
+# open 是 open(2) 的事件名（同 send/recv 一样，glibc 会转成 openat，所以六场景
+# 日志里只有 openat/creat）；登记它使这类主机上不再计入 unmatched、且 p2p 活跃期
+# 语义与 openat 一致。
+_OPEN_NO_EDGE_EVENTS = ("open", "openat", "openat2", "creat")
 
 
 def _family(*canonical_names: str) -> Tuple[str, ...]:
@@ -515,6 +552,65 @@ def _lifecycle_family() -> Tuple[Tuple[str, Tuple[str, ...]], ...]:
 
 
 _EXIT_PATH_FAMILY = _lifecycle_family()
+
+
+def _make_sendfile_action(ctx: ParserContext):
+    """sendfile(in_fd, out_fd, offset, size)：零拷贝，两端点都在**进入**记录里。
+
+    每次调用建 2 条边（G2）：
+        File(in_fd)  --f2p--> Process
+        Process      --p2n--> Network(out_fd)      # out_fd 为普通文件时落 p2f
+    bytes 取退出记录的 res=（= 实际传输字节）；res 缺失或 <0 不建边。
+    失败/字节判据必须用 record_res / record_failed，不能用 record_size——
+    后者把“字段缺失”与“res<0”合并成 -1（AGENTS §4 的教训）。
+
+    指纹是 (sendfile, None, None)：`in_fd=`/`out_fd=` 里的 `fd=` 前面是下划线，
+    通用抽取（裸 `fd=` 环视模式）取不到端点，因此 start_entities[1] 恒为 None；
+    端点由本 action 按字段名抽取后交给 entity_from_descriptor（与 extract_entities
+    共用同一个“描述符->实体”映射点，不复制第二份实现）。
+    """
+
+    def action(
+        start_rec: Dict[str, str],
+        end_rec: Dict[str, str],
+        start_entities: List[Optional[Entity]],
+        end_entities: List[Optional[Entity]],
+    ) -> None:
+        if record_failed(end_rec):
+            return
+        res = record_res(end_rec)
+        if res is None or res < 0:
+            return
+        p = start_entities[0]  # Process
+        if p is None:
+            return
+        start_args = start_rec.get("args", "")
+        start_ns = record_start_ns(start_rec)
+        end_ns = record_start_ns(end_rec)
+        p_node = EntityNode(p)
+
+        in_fs = extract_file_and_socket(start_args, "in_fd")
+        src = ctx.entity_from_descriptor(start_rec, in_fs) if in_fs else None
+        if type(src) is FileEntity:
+            ctx.queue_edge("f2p", EventEdge(
+                EntityNode(src), p_node, ctx.next_event_id(),
+                "sendfile", res, start_ns, end_ns,
+            ))
+
+        out_fs = extract_file_and_socket(start_args, "out_fd")
+        dst = ctx.entity_from_descriptor(start_rec, out_fs) if out_fs else None
+        if type(dst) is NetworkEntity:
+            ctx.queue_edge("p2n", EventEdge(
+                p_node, EntityNode(dst), ctx.next_event_id(),
+                "sendfile", res, start_ns, end_ns,
+            ))
+        elif type(dst) is FileEntity:
+            ctx.queue_edge("p2f", EventEdge(
+                p_node, EntityNode(dst), ctx.next_event_id(),
+                "sendfile", res, start_ns, end_ns,
+            ))
+
+    return action
 
 
 def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
@@ -612,32 +708,31 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
     ).add_action(_accept_action)
     handlers[accept_sc.fingerprint] = accept_sc
 
-    # --- fcntl (special: NtoP) ---
+    # --- fcntl（注册但不建边：已决策不进图）---
     def _fcntl_action(
         start_rec: Dict[str, str],
         end_rec: Dict[str, str],
         start_entities: List[Optional[Entity]],
         end_entities: List[Optional[Entity]],
     ) -> None:
-        # 失败的 fcntl 不建边也不计入不完整网络审计（与 accept 同口径：
-        # 只用 record_failed 判失败，不把“无 res= 字段”当失败）
+        """fcntl 不进图（口径见 tools/coverage_spec.json 的 declared_no_edge_events）。
+
+        fcntl 是 fd 记账调用（查状态 / 加锁 / 复制 fd），不搬数据、无 bytes，
+        边模型分不出 F_GETFL 与 F_SETLK，画出来全是噪声；实测六场景建边上限
+        ≈1.5 万条且新增加通性为 0，故已决策不建边。
+
+        handler 仍保留注册：① 事件不落入 `Unmatched fingerprint` 统计；
+        ② fd 表记账（dup/clone 传播、close 失效）走 pipeline/fd_table.py 的
+        observe_start/observe_end 钩子，与本 handler 无关，不受影响；
+        ③ 保留“socket 注记但无完整四元组”的审计计数（与 accept 同一口径：
+        只用 record_failed 判失败，不把“无 res= 字段”当失败）。
+        此前这里留着一条 n2p 建边分支，与口径声明不一致（本采集里该分支
+        从未命中，六库 0 条 fcntl 边），已删除。
+        """
         if record_failed(end_rec):
             return
-        start_ns = record_start_ns(start_rec)
-        end_ns = record_start_ns(end_rec)
-        p = end_entities[0]  # Process
-        p_node = EntityNode(p)
-        n = end_entities[1]  # NetworkEntity
-        if n is None:
+        if end_entities[1] is None:
             ctx.note_incomplete_network()
-            return
-        n_node = EntityNode(n)
-
-        edge = EventEdge(
-            n_node, p_node, ctx.next_event_id(),
-            "fcntl", 0, start_ns, end_ns,
-        )
-        ctx.queue_edge("n2p", edge)
 
     fcntl_sc = SystemCall(
         Fingerprint("fcntl", None, NetworkEntity),
@@ -752,6 +847,14 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
             Fingerprint("bind", c1, None),
         ).add_action(bind_action)
         handlers[bind_sc.fingerprint] = bind_sc
+
+    # --- sendfile（G2：零拷贝，in_fd + out_fd 双端点）---
+    # 指纹 (None, None)：端点由 action 自己按 in_fd=/out_fd= 抽取（见
+    # _make_sendfile_action 注释）。
+    sendfile_sc = SystemCall(
+        Fingerprint("sendfile", None, None),
+    ).add_action(_make_sendfile_action(ctx))
+    handlers[sendfile_sc.fingerprint] = sendfile_sc
 
     return handlers
 

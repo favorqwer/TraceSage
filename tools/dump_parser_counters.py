@@ -63,6 +63,7 @@ def collect(log_file: str) -> dict:
             "connect_in_progress": registry.connect_in_progress_count,
             "no_object": registry.no_object_count,
             "protocol_conflicts": registry.network_protocol_conflicts,
+            **registry.unix_audit,
         },
     }
 

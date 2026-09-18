@@ -25,6 +25,11 @@ class Fingerprint:
     ) -> None:
         s1 = c1.__name__ if c1 is not None else "null"
         s2 = c2.__name__ if c2 is not None else "null"
+        # 事件名单独存一份：指纹字符串的事件名与实体类名后缀**没有分隔符**
+        # （`sendtoFileEntitynull`），从字符串反推事件名会歧义——
+        # 用宽松后缀正则会误把 `send`/`recv` 这类已注册名的真前缀当成已建模
+        # （tools/coverage_gap.py 曾据此错报）。消费者一律读 fp.event。
+        self.event = event
         self._fingerprint_string = f"{event}{s1}{s2}"
 
     @classmethod

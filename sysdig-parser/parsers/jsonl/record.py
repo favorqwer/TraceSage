@@ -59,7 +59,6 @@ def parse_jsonl_entry(entry: Union[str, bytes]) -> Optional[Dict[str, str]]:
         evt.rawtime  -> _ns (int ns；旧版同时构造的 "sec.nsec" timestamp 字符串
                         已移除：唯一消费者管道哨兵改用 _ns//1e9，配对/建边
                         早在用 _ns 缓存)
-        (absent)     -> cpu = "0" (JSONL 导出无此列，占位)
         proc.name    -> process
         proc.pid     -> pid
         evt.dir      -> direction ("<" / ">")
@@ -125,7 +124,6 @@ def parse_jsonl_entry(entry: Union[str, bytes]) -> Optional[Dict[str, str]]:
     return {
         "raw": entry,
         "eventno": str(obj["evt.num"]),
-        "cpu": "0",
         "_ns": rawtime,
         "_latency_ns": latency_ns,
         "process": name_v if isinstance(name_v, str) else _json_str(name_v),
@@ -254,7 +252,7 @@ def validate_parsed_entry(record: Dict[str, str]) -> None:
     """Validate a canonical record; raise ValueError with the exact skip
     reason if it cannot produce graph elements.
 
-    parse_jsonl_entry 构造时已保证：14 个规范键齐全、eventno/latency 可 int、
+    parse_jsonl_entry 构造时已保证：13 个规范键（不含 `raw`）齐全、eventno/latency 可 int、
     direction ∈ {>, <}——这些在旧版这里的重复检查是不可达死代码，已删除
     （计数等价已验证）。仍需在此检查的：
     无进程上下文（pid/name 是否为 null 只有 parse 的结果能回答），以及

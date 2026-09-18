@@ -38,6 +38,12 @@ class EntityRegistry:
         self._incomplete_network_count = 0
         self._connect_in_progress_count = 0
         self._no_object_count = 0
+        # unix socket 文件系统路径（G1 类①）的细分审计
+        self._unix_path_count = 0          # 注记里直接带路径
+        self._unix_resolved_count = 0      # 裸/地址对注记经 fd 表回填出路径
+        self._unix_unresolved_count = 0    # 回填失败（无名字）
+        self._unix_abstract_count = 0      # 抽象命名空间（@name），当前不建模
+        self._netlink_skipped_count = 0    # <n> netlink，当前不建模
         # 同一四元组出现不同协议的冲突次数（保留首个，仅计数上报）
         self._network_protocol_conflicts = 0
 
@@ -68,12 +74,32 @@ class EntityRegistry:
         file_socket = record_file_socket(record)
         process_file = extract_process_file(args)
 
+        if "path" not in file_socket and process_file is not None:
+            # execve 的 filename= 通道（与 fd 注记互斥：有 fd 注记时以注记为准）
+            entities[1] = self.get_or_create_file(process_file, process_file)
+        else:
+            entities[1] = self.entity_from_descriptor(record, file_socket)
+
+        return entities
+
+    def entity_from_descriptor(
+        self, record: Dict[str, str], file_socket: Dict[str, str]
+    ) -> Optional[Entity]:
+        """fd 描述符 dict -> 顶点实体（File / Network / None），含未建模计数。
+
+        这是"描述符 -> 实体"的唯一映射点：extract_entities 走它；sendfile
+        这类双 fd 系统调用（handlers 里按 in_fd=/out_fd= 分别抽取）也走它。
+        集中的理由是历史教训：映射逻辑分散会出现"某条通道忘了归一/忘了
+        审计"（G3 的 filename= 通道、chmod 家族注册表各丢过一类边）。
+        """
+        pid = record.get("pid", "")
+        fd_num = file_socket.get("fd_num", "")
+
         if "path" in file_socket:
             path = file_socket["path"]
-            entities[1] = self.get_or_create_file(path, path)
-        elif process_file is not None:
-            entities[1] = self.get_or_create_file(process_file, process_file)
-        elif "pipe" in file_socket:
+            return self.get_or_create_file(path, path)
+
+        if "pipe" in file_socket:
             # 管道建模为合成路径 File 顶点。sysdig 两种形态：
             #   fd=N(<p>pipe:[inode]) -> pipe:[inode]（sysdig 已给出 inode，
             #     直接用作顶点键，可区分具体管道）
@@ -88,42 +114,65 @@ class EntityRegistry:
             # handler，引擎无感。
             name = file_socket["pipe"]
             if name:
-                entities[1] = self.get_or_create_file(name, name)
-            else:
-                ino = self._fdtable.resolve(
-                    record.get("pid", ""), file_socket.get("fd_num", "")
-                )
-                if ino is not None:
-                    resolved = f"pipe:[{ino}]"
-                    entities[1] = self.get_or_create_file(resolved, resolved)
-                else:
-                    sec = record.get("_ns", 0) // 1_000_000_000
-                    anon = f"pipe:[anonymous@{sec}]"
-                    entities[1] = self.get_or_create_file(anon, anon)
-        elif (
+                return self.get_or_create_file(name, name)
+            ino = self._fdtable.resolve(pid, fd_num)
+            if ino is not None:
+                resolved = f"pipe:[{ino}]"
+                return self.get_or_create_file(resolved, resolved)
+            sec = record.get("_ns", 0) // 1_000_000_000
+            anon = f"pipe:[anonymous@{sec}]"
+            return self.get_or_create_file(anon, anon)
+
+        if "unix_path" in file_socket:
+            # unix socket 类①（文件系统路径）：合成 File 顶点 `unix:[<path>]`，
+            # 与管道同构——沿用 File 标签、不新增标签、不塞 Network 四元组
+            # （get_or_create_network 的键是 ip:port->ip:port，塞入会污染
+            # Network 顶点集）。前缀命名与 pipe:[...] 同族，且
+            # normalize_file_path 已把 unix:[ 列为合成顶点前缀、不会被改写。
+            unix = f"unix:[{file_socket['unix_path']}]"
+            self._unix_path_count += 1
+            return self.get_or_create_file(unix, unix)
+
+        if (
             "sip" in file_socket
             and "sport" in file_socket
             and "dip" in file_socket
             and "dport" in file_socket
         ):
-            entities[1] = self.get_or_create_network(
+            return self.get_or_create_network(
                 file_socket["sip"], file_socket["sport"],
                 file_socket["dip"], file_socket["dport"],
                 protocol=record.get("l4proto", ""),
             )
-        elif "socket" in file_socket:
-            # socket 但无完整四元组（如 unix socket `ffff->ffff`、内核 fd 地址）
-            self._incomplete_network_count += 1
-            entities[1] = None
-        elif "fd_num" in file_socket:
-            # 有 fd 编号但无可建模实体：eventfd(<e>)、anon_inode、目录(<d>)、
-            # 未识别类型。管道改建模后这才是 no_object 的真实口径
-            self._no_object_count += 1
-            entities[1] = None
-        else:
-            entities[1] = None
 
-        return entities
+        if "socket" in file_socket:
+            # socket 但无完整四元组：unix（`<u>` 注记）/ 内核 fd 地址 / 半绑定 IP。
+            # unix 先试 fd 表回填（同一 (pid,fd) 在 connect/bind/sendmsg/recvmsg
+            # 等记录上学到的路径）——这是把裸 `<u>`（实测占 <u> 的 68%）接上
+            # 具名顶点的唯一途径。回填不到就不建顶点（绝不归到全局单点，否则
+            # 所有无关 unix socket 会合流成一个 hub）。
+            if file_socket.get("fd_type", "").startswith("u"):
+                resolved_path = self._fdtable.resolve_unix_path(pid, fd_num)
+                if resolved_path is not None:
+                    self._unix_resolved_count += 1
+                    unix = f"unix:[{resolved_path}]"
+                    return self.get_or_create_file(unix, unix)
+                if file_socket.get("unix_abstract"):
+                    self._unix_abstract_count += 1
+                else:
+                    self._unix_unresolved_count += 1
+            self._incomplete_network_count += 1
+            return None
+
+        if "fd_num" in file_socket:
+            # 有 fd 编号但无可建模实体：eventfd(<e>)、anon_inode、目录(<d>)、
+            # netlink(<n>)、未识别类型。管道改建模后这才是 no_object 的真实口径。
+            if file_socket.get("fd_type_raw") == "n":
+                self._netlink_skipped_count += 1
+            self._no_object_count += 1
+            return None
+
+        return None
 
     # ==================================================================
     # fd 生命周期表（裸管道身份解析），由主循环喂记录
@@ -247,6 +296,16 @@ class EntityRegistry:
     @property
     def no_object_count(self) -> int:
         return self._no_object_count
+
+    @property
+    def unix_audit(self) -> Dict[str, int]:
+        return {
+            "unix_path": self._unix_path_count,
+            "unix_resolved_via_fdtable": self._unix_resolved_count,
+            "unix_unresolved": self._unix_unresolved_count,
+            "unix_abstract_skipped": self._unix_abstract_count,
+            "netlink_skipped": self._netlink_skipped_count,
+        }
 
     @property
     def network_protocol_conflicts(self) -> int:

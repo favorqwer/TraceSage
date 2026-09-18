@@ -75,10 +75,16 @@ import util.llm.LlmConfig;
  * 可用 `--poi-srcip/--poi-srcport/--poi-dstip/--poi-dstport/--poi-optype` 覆盖以跑其它场景；
  * 属性名沿用 PG 侧写法，由 Neo4jServerTraversal 兼容层翻译到 Neo4j schema
  * （lip/lport/rip/rport/syscall，并剥掉 /32、/128 后缀）。
+ *
+ * File POI（场景 3-6 的 `(p:Process)-[st:FileEvent{optype:"write"}]->(f:File{name:"..."})`）
+ * 用 `--poi-file <绝对路径>` 切换 dst 标签为 File（`name` 经兼容层映射到 `path`）。
+ * 入口数默认 5，可用 `--entry-limit N` 覆盖（场景 5 的 query 用 LIMIT 10）。
+ * final_edges 内嵌 `syscall/starttime/endtime`（秒，浮点），使产物自足、
+ * 评分（tools/evaluate_gt.py）无需回库。
  */
 public class BaselineRunner {
    private static final double CPR_MERGE_WINDOW = 10.0;
-   private static final int ENTRY_LIMIT = 5;
+   private static int entryLimit = 5;
 
    // POI 匹配参数（默认 = 场景 1：nc write 49580 -> 4444）。
    private static String poiSrcIp = "192.168.122.129/32";
@@ -86,6 +92,7 @@ public class BaselineRunner {
    private static String poiDstIp = "192.168.122.128/32";
    private static String poiDstPort = "4444";
    private static String poiOptype = "write";
+   private static String poiFile = null;
    private static final Map<Long, Double> entryCompositeScores = new HashMap<>();
    private static double entryImpactWeight = 0.7;
    private static double entryTimeWeight = 0.3;
@@ -97,9 +104,10 @@ public class BaselineRunner {
       // 可选 POI 覆盖参数（见类注释；缺省 = 场景 1）。
       for (int i = 2; i < args.length; i++) {
          String key = args[i];
-         if (!key.startsWith("--poi-") || i + 1 >= args.length) {
+         if (!(key.startsWith("--poi-") || key.equals("--entry-limit")) || i + 1 >= args.length) {
             throw new IllegalArgumentException("Unknown argument: " + key
-               + " (usage: <dbName> <outDir> [--poi-srcip v --poi-srcport v --poi-dstip v --poi-dstport v --poi-optype v])");
+               + " (usage: <dbName> <outDir> [--poi-srcip v --poi-srcport v --poi-dstip v --poi-dstport v --poi-optype v]"
+               + " [--poi-file path] [--entry-limit N])");
          }
          String value = args[++i];
          switch (key) {
@@ -108,6 +116,8 @@ public class BaselineRunner {
             case "--poi-dstip": poiDstIp = value; break;
             case "--poi-dstport": poiDstPort = value; break;
             case "--poi-optype": poiOptype = value; break;
+            case "--poi-file": poiFile = value; break;
+            case "--entry-limit": entryLimit = Integer.parseInt(value); break;
             default:
                throw new IllegalArgumentException("Unknown POI option: " + key);
          }
@@ -162,7 +172,7 @@ public class BaselineRunner {
       sortEntryCandidates(candidates.networkLst, entryTimes, "desc");
       sortEntryCandidates(candidates.fileLst, entryTimes, "desc");
       sortEntryCandidates(candidates.processLst, entryTimes, "desc");
-      List<EntityNode> topEntries = selectEntryCandidatesByQuota(candidates.networkLst, candidates.fileLst, candidates.processLst, ENTRY_LIMIT);
+      List<EntityNode> topEntries = selectEntryCandidatesByQuota(candidates.networkLst, candidates.fileLst, candidates.processLst, entryLimit);
       System.out.println("entry candidates: network=" + candidates.networkLst.size() + " file=" + candidates.fileLst.size() + " process=" + candidates.processLst.size() + ", selected top " + topEntries.size());
 
       // Step 5: forward expansion from the selected entries, unioned
@@ -205,7 +215,7 @@ public class BaselineRunner {
          .put("database", traversal.connectionDescription())
          .put("query_file", "input/sysdig/" + dbName + ".query")
          .put("poi_pattern", poiPattern)
-         .put("entry_limit", ENTRY_LIMIT)
+         .put("entry_limit", entryLimit)
          .put("entry_order", "desc")
          .put("cpr_merge_window", CPR_MERGE_WINDOW)
          .put("entry_ranking_weights", new JSONArray(Arrays.asList(entryImpactWeight, entryTimeWeight))));
@@ -279,9 +289,8 @@ public class BaselineRunner {
       List<EventEdge> sortedEdges = new ArrayList<>(finalGraph.edgeSet());
       sortedEdges.sort(Comparator.comparing(CanonicalKey::of));
       for (EventEdge e : sortedEdges) {
-         edges.put(new JSONObject()
-            .put("key", CanonicalKey.of(e))
-            .put("weight", round(e.weight, 6)));
+         // syscall/starttime/endtime 内嵌（时间=秒，浮点），使产物自足、评分无需回库。
+         edges.put(edgeFact(e).put("weight", round(e.weight, 6)));
       }
       root.put("final_edges", edges);
 
@@ -305,17 +314,29 @@ public class BaselineRunner {
 
    private static Match buildPoiMatch() {
       NodePattern src = new NodePattern(new Variable("p"), new NodeLabel("Process"));
-      NodePattern dst = new NodePattern(
-         new Variable("net"),
-         new NodeLabel("Network"),
-         Arrays.asList(
-            new Property("srcip", "\"" + poiSrcIp + "\""),
-            new Property("srcport", "\"" + poiSrcPort + "\""),
-            new Property("dstip", "\"" + poiDstIp + "\""),
-            new Property("dstport", "\"" + poiDstPort + "\"")
-         )
-      );
-      RelationshipDetail detail = new RelationshipDetail(new Variable("st"), new Type(":NetworkEvent"), new MapLiteral("optype", "\"" + poiOptype + "\""));
+      NodePattern dst;
+      String relationshipType;
+      if (poiFile != null) {
+         dst = new NodePattern(
+            new Variable("f"),
+            new NodeLabel("File"),
+            Arrays.asList(new Property("name", JSONObject.quote(poiFile)))
+         );
+         relationshipType = ":FileEvent";
+      } else {
+         dst = new NodePattern(
+            new Variable("net"),
+            new NodeLabel("Network"),
+            Arrays.asList(
+               new Property("srcip", "\"" + poiSrcIp + "\""),
+               new Property("srcport", "\"" + poiSrcPort + "\""),
+               new Property("dstip", "\"" + poiDstIp + "\""),
+               new Property("dstport", "\"" + poiDstPort + "\"")
+            )
+         );
+         relationshipType = ":NetworkEvent";
+      }
+      RelationshipDetail detail = new RelationshipDetail(new Variable("st"), new Type(relationshipType), new MapLiteral("optype", "\"" + poiOptype + "\""));
       PatternElementChain chain = new PatternElementChain(new RelationshipPattern(detail, ">"), dst);
       return new Match(new Pattern(new PatternPart(src, chain)));
    }
@@ -603,6 +624,15 @@ public class BaselineRunner {
       private static String of(EventEdge edge) {
          return util.CanonicalEdgeIdentity.key(edge);
       }
+   }
+
+   /** 边的规范键 + 内容事实（syscall 与起止时间秒），供产物内嵌与外部评分使用。 */
+   private static JSONObject edgeFact(EventEdge edge) {
+      JSONObject fact = new JSONObject().put("key", CanonicalKey.of(edge));
+      fact.put("syscall", edge.getEvent() == null ? JSONObject.NULL : edge.getEvent());
+      fact.put("starttime", edge.getStartTime() == null ? JSONObject.NULL : edge.getStartTime().doubleValue());
+      fact.put("endtime", edge.getEndTime() == null ? JSONObject.NULL : edge.getEndTime().doubleValue());
+      return fact;
    }
 
    private static JSONObject stageCounts(DirectedPseudograph<EntityNode, EventEdge> graph) {

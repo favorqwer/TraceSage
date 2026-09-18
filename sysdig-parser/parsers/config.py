@@ -5,7 +5,7 @@ share one source of truth.  Includes the stdlib-only .env loader (moved out of
 the Neo4j writer: configuration is a cross-cutting concern, not a storage
 concern) and the PROGQL_* tunables of the parsing pipeline.
 
-Credentials (NEO4J_* / PG_*) are read by the layers that own them, but are
+Credentials (NEO4J_*) are read by the layers that own them, but are
 always loaded from the environment / .env — never hardcoded.
 """
 

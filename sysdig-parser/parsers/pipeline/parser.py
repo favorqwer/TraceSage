@@ -124,6 +124,10 @@ class SysdigLogParser:
     def get_or_create_file(self, file_key, path):
         return self._registry.get_or_create_file(file_key, path)
 
+    def entity_from_descriptor(self, record, file_socket):
+        """fd 描述符 dict -> 实体（供 sendfile 这类双 fd 系统调用复用）。"""
+        return self._registry.entity_from_descriptor(record, file_socket)
+
     def get_or_create_network(self, sip, sport, dip, dport, protocol=""):
         return self._registry.get_or_create_network(
             sip, sport, dip, dport, protocol=protocol
@@ -266,6 +270,15 @@ class SysdigLogParser:
             print(
                 f"no object (unmodeled fd: eventfd/anon_inode/dir/...): "
                 f"{self._registry.no_object_count}"
+            )
+            ua = self._registry.unix_audit
+            print(
+                f"unix socket (filesystem-path model): "
+                f"path={ua['unix_path']} "
+                f"fdtableResolved={ua['unix_resolved_via_fdtable']} "
+                f"unresolved={ua['unix_unresolved']} "
+                f"abstractSkipped={ua['unix_abstract_skipped']} "
+                f"netlinkSkipped={ua['netlink_skipped']}"
             )
             print(
                 f"network protocol conflicts (kept first): "
