@@ -30,6 +30,19 @@ TraceSage/
 │       ├── config.py         # 环境变量/.env 配置（横切）
 │       └── reporting.py      # 进度与跳过行上报（横切）
 │
+├── provenance-agent/         # 溯源调查 agent（Python + LangGraph）
+│   ├── main.py               # 入口：单场景 / --all / --dry-run
+│   ├── config/scenarios.json # POI 唯一来源（库名 + POI 签名 + 采集窗口）
+│   └── pagent/               # 包
+│       ├── settings.py       # 路径/模型/预算/.env（横切）
+│       ├── scenarios.py      # 场景与 POI 配置加载
+│       ├── db.py             # 只读 Neo4j：写守卫 + 有界返回 + 查询审计日志
+│       ├── steps.py          # 行为步骤层：摘要 / 机械枚举 / 四类前驱
+│       ├── collapse.py       # 折叠成内容三元组 + R1/R2 结构性伪边剔除
+│       ├── state_store.py    # 调查状态图（SQLite：三类节点四类边）
+│       ├── llm.py            # 模型工厂 + JSON 调用自校正 + token 记账
+│       └── graph/            # LangGraph 装配（state / nodes / build）
+│
 ├── progql-local/             # 调查引擎（Java）
 │   ├── src/main/java/        # gql（GQL 求值）/ main（入口）/ model / neo4j / util，
 │   │                         # 以及 traversal/（neo4jserver：Bolt 数据源 + 查询别名兼容层）
@@ -46,7 +59,9 @@ TraceSage/
   - `output/inventory/`：日志侧/图侧清单（覆盖度对账的输入，见「覆盖度缺口」命令）；
   - `output/coverage/`：缺口报告（6 份单场景报告 + `SUMMARY.md` + `FULL-REPORT.md`）；
   - `output/baseline/<场景>/baseline.json`：调查流程的回归基线/引擎产物（同目录可放 `<场景>/groundtruth-eval.txt` GT 评分明细）；六场景汇总为 `output/baseline/SUMMARY-six-scenarios.md` 与 `metrics-six-scenarios.json`（见 `progql-local/baseline/README.md`）；
-  - `output/agent-vs-engine/`：引擎与 LLM agent 的对比报告。
+  - `output/agent-vs-engine/`：引擎与 LLM agent 的对比报告；
+  - `output/agent/<场景>.json`：`provenance-agent` 的溯源报告（schema 见该目录 README），
+    可直接被 `tools/eval_agent_attack_path.py` 评分；`SUMMARY.json` 为多场景汇总。
 
 ## 3. 运行环境与依赖
 
@@ -294,3 +309,19 @@ CLONE_THREAD 过滤    <- clone 的 flags=N(A|B|…)
 - **幂等**：顶点 MERGE 在 id 键上；边用 `MERGE (a)-[r:rel {event_id}]->(b)`（即端点 + 关系类型 + `event_id`），配合上述约束，重复导入同一日志不产生重复数据。
 - **批量与 flush**：Neo4j 批量事务批大小 `PROGQL_NEO4J_BATCH_SIZE`（默认 5000）；解析侧边的 flush 阈值 `PROGQL_SYSDIG_FLUSH_EDGE_LIMIT`（默认 50000，只统计 p2f/f2p/p2n/n2p）；`p2p` 只在导入结束的最终 flush 写入。
 - **导入可观察计数**（`parser.py` / `reporting.py`）：处理行数、逐理由跳过数、进入/退出配对各档、五类边计数、三类顶点数、`incomplete network`、`no object`、`connect EINPROGRESS`、`network protocol conflicts`、管道 fd 表统计、`Edge-less vertices not written`。
+
+---
+
+## 9. 溯源调查 agent（`provenance-agent/`）
+
+在 `sysdig-parser` 导入的图上做**反向追踪**的 LangGraph agent。设计决策与架构见 `provenance-agent/README.md`；本节只记录不可变口径。
+
+- **任务范围**：只从 POI 往回走（反向追踪）；不引入"往前看"查询、不做多主机、不引入 `host_id`。
+- **POI 唯一来源**：`provenance-agent/config/scenarios.json`（库名 + POI 签名 + 采集窗口）。
+  `input/sysdig/*.query`（含引擎方法描述）**不得进入 agent 的任何可见上下文**。
+- **表示层**：一个步骤 = 一个进程实例（`PAGENT_STEP_GAP_MS` 默认 0）。边归属规则与 `docs/溯源图agent调查-创新点与效果.md` 的"进程子图"一致（p2f/p2n→源进程，f2p/n2p→目标进程，p2p→子进程）；每条边恰好归属一个进程。
+- **只读**：`pagent/db.py:ReadOnlyGraph` 是访问 Neo4j 的唯一入口（`execute_read` + 写关键字黑名单 + 禁多语句 + 有界返回 + 查询审计日志）。
+- **有界且不静默**：通用查询 `PAGENT_MAX_ROWS`（默认 1000）；步骤层单进程 `PAGENT_MAX_PROCESS_EDGES`（默认 200000），超限必须显式暴露 `edges_truncated`。
+- **报告口径**：`output/agent/<场景>.json` 的 `edges[]` 为 `(src, syscall, dst)` + `confidence` + `event_id`；实体内容口径与 GT 一致（`Process=coalesce(exepath,name)`、`File=path`、`Network=lip:lport->rip:rport`）。
+- **运行态产物**：`tmp/provenance-agent/`（查询日志、轨迹、状态图、checkpoint、步骤缓存），不进 `output/`。
+- **评分**：`tools/eval_agent_attack_path.py`，与 `tools/evaluate_gt.py` 同口径。
