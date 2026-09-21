@@ -58,6 +58,31 @@ python tools/eval_agent_attack_path.py --all --results-dir output/agent-vs-engin
 
 ## 记录
 
+### `provenance-agent` 删除 GAP（步骤时间聚类）相关代码
+
+**背景**：D2 口径是「一个步骤 = 一个进程实例」，`PAGENT_STEP_GAP_MS` 默认 0（不切分），
+`gap_ms>0` 只为复现历史 GAP=2s 实验保留；当前无任何实验或脚本依赖该旋钮，属死代码。
+
+**改动**
+
+- `pagent/settings.py`：删 `DEFAULT_STEP_GAP_MS` 与 `step_gap_ms()`。
+- `pagent/steps.py`：删 `cluster_steps()` 与全部 `gap_ms` 形参；`list_steps()` 直接构造唯一一个 `Step`；
+  边缓存文件名去掉 `-<gap>` 后缀（`v2-edges-<db>-<pid>.json`）。
+- `main.py`：删 `--gap-ms` 参数、对应环境变量写入、报告里的 `gap_ms` 字段。
+- `README.md`（D2 行 + 预算参数行）、`AGENTS.md` §9 同步删除该旋钮表述。
+
+**验证**
+
+- 全模块 import 自检：新签名生效（`list_steps(graph, process_id, *, use_cache)`），`cluster_steps` 已不存在。
+- **等价性回归**：取 4 个进程（最大 5843 条边）的旧缓存 `v2-edges-<db>-<pid>-0.json` 作对照，
+  新 `list_steps` 的 `step_key` / `rows` / `t1` / `truncated` **逐项一致（4/4）**。
+- `tests/dry_supervisor.py`（重负载 `DRY_HEAVY=1`）12 项不变式**全部通过**。
+
+**遗留**：`tmp/provenance-agent/cache/` 下 152 个旧 `...-0.json` 缓存已失效（新文件名不再带后缀），未删除；
+下次运行按新名重建，旧文件可随时手工清理。
+
+---
+
 ### `provenance-agent` 改用 Supervisor 套路（4+3+6），并新增干跑测试
 
 **背景**：用户指出上一轮拿"pi 框架 + 自由探索"与"LangGraph FSM"对比是**控制变量不对齐**的

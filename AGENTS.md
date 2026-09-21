@@ -319,7 +319,7 @@ CLONE_THREAD 过滤    <- clone 的 flags=N(A|B|…)
 - **任务范围**：只从 POI 往回走（反向追踪）；不引入"往前看"查询、不做多主机、不引入 `host_id`。
 - **POI 唯一来源**：`provenance-agent/config/scenarios.json`（库名 + POI 签名 + 采集窗口）。
   `input/sysdig/*.query`（含引擎方法描述）**不得进入 agent 的任何可见上下文**。
-- **表示层**：一个步骤 = 一个进程实例（`PAGENT_STEP_GAP_MS` 默认 0）。边归属规则与 `docs/溯源图agent调查-创新点与效果.md` 的"进程子图"一致（p2f/p2n→源进程，f2p/n2p→目标进程，p2p→子进程）；每条边恰好归属一个进程。
+- **表示层**：一个步骤 = 一个进程实例。边归属规则与 `docs/溯源图agent调查-创新点与效果.md` 的"进程子图"一致（p2f/p2n→源进程，f2p/n2p→目标进程，p2p→子进程）；每条边恰好归属一个进程。
 - **只读**：`pagent/db.py:ReadOnlyGraph` 是访问 Neo4j 的唯一入口（`execute_read` + 写关键字黑名单 + 禁多语句 + 有界返回 + 查询审计日志）。
 - **有界且不静默**：通用查询 `PAGENT_MAX_ROWS`（默认 1000）；步骤层单进程 `PAGENT_MAX_PROCESS_EDGES`（默认 200000），超限必须显式暴露 `edges_truncated`。
 - **报告口径**：`output/agent/<场景>.json` 的 `edges[]` 为 `(src, syscall, dst)` + `confidence` + `event_id`；实体内容口径与 GT 一致（`Process=coalesce(exepath,name)`、`File=path`、`Network=lip:lport->rip:rport`）。
