@@ -1,14 +1,21 @@
-"""结构性伪边与系统例行文件的判定（横切）：第 1 层遍历期与第 2 层折叠/粗筛共用同一份判定。
+"""结构性伪边、系统例行文件、共享通道的判定（横切）：第 1 层遍历期与第 2 层折叠/粗筛共用同一份判定。
 
-三张规则表在 `pagent/rules/` 下：
+四张规则表在 `pagent/rules/` 下：
 
 - 动态库读取（`pseudo_edges.json` 的 `r1_regex`）：装载共享代码，不携带攻击者内容；
 - 系统自带程序的自我执行（同文件的 `r2_prefixes`）：`src == dst` 的 execve；
-- 系统例行文件读取（`prefilter.json`）：本地化/字符集、名字解析/服务配置。
+- 系统例行文件读取（`prefilter.json`）：本地化/字符集、名字解析/服务配置；
+- 共享 / 虚拟通道（`shared_channels.json`）：内容不是由图上某条写入边交付的那种文件顶点。
 
-判定只看内容三元组（源内容、操作名、目标内容）与源标签，**与"这条边在第几层被看到"无关**，
-所以两层必须调用同一个函数：第 1 层在遍历期把边挡在闭包之外（连带它的另一端顶点也不扩展），
-第 2 层作为兜底逐条记理由。同一批边在两层得到不同结论，就是缺陷。
+前三张是**边的判定**（只看内容三元组与源标签，与“这条边在第几层被看到”无关，所以两层必须调用同一个
+函数：第 1 层在遍历期把边挡在闭包之外，第 2 层作为兜底逐条记理由）。最后一张是**顶点的判定**：
+命中的文件顶点在第 1 层只收边、不再往回找写入者（见 `closure.py` 的规则说明与
+`sources.py` 的两条来源），它不进第 2 层。
+
+另有一份**只在第 2 层用**的表（`candidate_drops.json`，判据 `candidate_drop_reason`）：它在候选集
+（交给模型逐条判断的那一堆内容三元组）里再去掉两类边——内核按进程现生成的伪文件（`/proc/<进程号>/`
+下，被 `ps`、`ss`、`systemd` 这类工具成批例行读取），与写进共享 / 虚拟通道的边（内容流进一个永不
+追溯的通道）。**这两类边在第 1 层照收**（它们是链上的真实操作，也可能把进程带进来），只是不进候选集。
 """
 
 from __future__ import annotations
@@ -22,9 +29,23 @@ _PSEUDO = rules.load("pseudo_edges.json")
 _R1_LIB = re.compile(_PSEUDO["r1_regex"])
 _R2_PREFIXES = tuple(_PSEUDO["r2_prefixes"])
 _PREFILTER = rules.load("prefilter.json")
+_SHARED = rules.load("shared_channels.json")
+_CANDIDATE = rules.load("candidate_drops.json")
 
-# 建索引时要看的规则文件（内容一改，第 1 层索引快照就得重建）
-_RULE_FILES = ("pseudo_edges.json", "prefilter.json")
+# 候选集层面的两类剔除（只在第 2 层用）：内核按进程现生成的伪文件、写进共享 / 虚拟通道的边
+_CANDIDATE_LABELS = {str(item["code"]): str(item["label"]) for item in _CANDIDATE["drops"]}
+_CANDIDATE_REGEXES = {
+    str(item["code"]): tuple(re.compile(pattern) for pattern in item.get("regexes") or ())
+    for item in _CANDIDATE["drops"]}
+
+# 共享 / 虚拟通道：先看终端（终端按普通文件处理），再看四类前缀
+_SHARED_TERMINAL_PREFIXES = tuple(_SHARED["terminal_prefixes"])
+_SHARED_CLASSES = tuple((str(item["label"]), tuple(item["prefixes"]))
+                        for item in _SHARED["classes"])
+
+# 建索引时要看的规则文件（内容一改，第 1 层索引快照就得重建）。
+# `candidate_drops.json` 不在里面：它只在第 2 层用，索引里不存与它有关的任何标记。
+_RULE_FILES = ("pseudo_edges.json", "prefilter.json", "shared_channels.json")
 
 # 规则编号 -> 给人读的理由（报告与统计里都用这一份，避免两处措辞不一致）
 RULE_LABELS = {
@@ -84,3 +105,49 @@ def rule_of(src: str, syscall: str, dst: str, src_label: str = "") -> tuple[str,
     if reason:
         return "prefilter", reason
     return "", ""
+
+
+def candidate_drop_reason(edge: dict[str, Any]) -> str:
+    """这条边要不要从**候选集**里去掉；要去掉则返回理由（中文），否则空串。
+
+    **只在第 2 层折叠时调用**：第 1 层照收这些边（它们是链上的真实操作，也可能把进程带进来），
+    只是没必要把每一条都交给模型判断。两类：
+
+    1. 一端是内核按进程现生成的伪文件（`/proc/<进程号>/`、`/proc/self/` 下）：内容由内核当场生成，
+       不是图上某条写入边交付的，而且被 `ps`、`ss`、`systemd` 这类工具成批例行读取；
+    2. 进程**写进**共享 / 虚拟通道的边：内容流进一个永不追溯的通道（见 `shared_channel_label`），
+       写出去就没有下文了。
+
+    **读取共享通道的边不去掉**：它是链条上进程的输入（例如 `dd` 读 `/dev/urandom`）。
+    """
+    src = str(edge.get("src") or "")
+    dst = str(edge.get("dst") or "")
+    for key, label in ((src, edge.get("src_label")), (dst, edge.get("dst_label"))):
+        if label != "File":
+            continue
+        for pattern in _CANDIDATE_REGEXES.get("kernel_pid_file", ()):
+            if pattern.match(key):
+                return _CANDIDATE_LABELS["kernel_pid_file"]
+    if (edge.get("dst_label") == "File" and str(edge.get("rel") or "") in ("p2f", "p2n")
+            and shared_channel_label(dst)):
+        return _CANDIDATE_LABELS["shared_channel_write"]
+    return ""
+
+
+def shared_channel_label(path: str) -> str:
+    """这个文件顶点属不属于共享 / 虚拟通道；属于则返回它属于哪一类（计数与报告用），否则空串。
+
+    这是**顶点的判定**，不是边的判定：命中的顶点在第 1 层只收边、不再往回找写入者。
+    判据只有路径前缀（终端列在 `terminal_prefixes` 里，按普通文件处理）。
+    """
+    if not path or path.startswith(_SHARED_TERMINAL_PREFIXES):
+        return ""
+    for label, prefixes in _SHARED_CLASSES:
+        if path.startswith(prefixes):
+            return label
+    return ""
+
+
+def is_shared_channel(path: str) -> bool:
+    """是不是共享 / 虚拟通道（`shared_channel_label` 的布尔形式）。"""
+    return bool(shared_channel_label(path))

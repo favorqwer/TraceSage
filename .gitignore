@@ -8,4 +8,4 @@ paper/
 groundtruth/
 tmp/
 tmp.md
-provenance-agent\tests
+provenance-agent/tests/

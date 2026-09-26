@@ -1,9 +1,16 @@
-"""取边来源（第 1 层内部）。
+"""取边来源（第 1 层内部）：两条必须等价的实现。
 
-正式流程只有一种取数方式：读顶点-时间索引快照（`SnapshotReader`，零数据库查询）。
-`DbSource`（把同类型顶点的展开合并成一次批量查询）不再被正式流程使用，留作**参考实现**：
-单测（`tests/unit/test_snapshot.py`）拿它对同一批顶点、同一批门限逐条比对，
-需要整库级的一次性对照时也用它（两个类必须给出**完全相同**的事件）。
+- `SnapshotReader`：读顶点-时间索引快照（`snapshot.py`），**正式流程唯一**的取数方式，零数据库查询。
+- `DbSource`：数据库直查，把同类型顶点的展开合并成一次批量查询（每轮 3~4 次查询）。
+  **只在单测与一次性对照里用**，作为参考实现保留：两条来源对同一批顶点、同一批门限
+  必须给出完全相同的事件（`tests/unit/test_snapshot.py` 逐条比对）。
+
+两条来源共用的取边口径（除广度与方向外）：
+
+- 对象顶点只取**写入侧**（读不会把内容送回顶点），且 `connect` / `bind` 不算交付；
+- **共享 / 虚拟通道不展开**：命中 `edge_rules.shared_channel_label` 的文件顶点（内核现生成的
+  伪文件、设备节点、系统运行目录及其中的套接字），只把"读取它"的那条边收进闭包，不再往回找
+  写入者；这类跳过逐类计数，进 `stats()` 里的 `shared_not_expanded`。
 """
 
 from __future__ import annotations
@@ -12,15 +19,25 @@ import json
 import struct
 from typing import Any, Optional
 
+from ...core import edge_rules
 from . import snapshot as snap
 from .closure import Event, rule_code_of
-from .steps import cache_process_info, has_process_info
+from .steps import cache_process_info, prefetch_process_info
+
+# 连接建立类操作（connect / bind）不传递内容：只把两端接起来，不往顶点里写数据，
+# 因此不算"往这个顶点交付了内容"。子进程把关（`siblings.py`）问"有没有写-读配对"时用同一份表。
+SETUP_SYSCALLS = ["connect", "bind"]
 
 # --------------------------------------------------------------------------- #
-# 数据库直查
+# 数据库直查（参考实现）
 # --------------------------------------------------------------------------- #
 
-_EXPAND_PROCESS_HEADS = """
+# 进程展开的四段，合并成一次查询（"父进程那一侧也收"是机制，不是开关）：
+#   1. 进程在源侧：它写出的边（p2f / p2n）
+#   2. 进程在目标侧：它读入的边（f2p / n2p）
+#   3. 进程是子进程：派生它的那条边（"我被谁启动"）
+#   4. 进程是父进程：它派生出去的全部派生边（"我启动过谁"——同主体派生的其它子进程也算上游）
+_EXPAND_PROCESS_OWN_EDGES = """
 UNWIND $items AS it
 MATCH (p:Process {process_id: it.key})
 WITH it, p, coalesce(p.exepath, p.name) AS owner
@@ -38,6 +55,8 @@ WHERE e.starttime > it.lo AND e.starttime <= it.hi
 RETURN p.process_id AS pid, owner, e.event_id AS event_id, e.starttime AS starttime,
        e.endtime AS endtime, e.syscall AS syscall, e.bytes AS bytes, type(e) AS rel,
        coalesce(x.path, x.network_id) AS other, labels(x)[0] AS other_label, '' AS other_process_id
+"""
+_EXPAND_PROCESS_AS_CHILD = """
 UNION ALL
 UNWIND $items AS it
 MATCH (p:Process {process_id: it.key})
@@ -48,10 +67,7 @@ RETURN p.process_id AS pid, owner, e.event_id AS event_id, e.starttime AS startt
        e.endtime AS endtime, e.syscall AS syscall, e.bytes AS bytes, type(e) AS rel,
        coalesce(q.exepath, q.name) AS other, 'Process' AS other_label, q.process_id AS other_process_id
 """
-
-# 旧实现的"同一脚本的其它子进程"：把本进程派生出去的每个子进程也按本进程的门限收进来。
-# 这是**超集**口径（子进程的活动只要在父进程门限之前就全收），默认关闭，只用于消融对照。
-_EXPAND_CHILDREN = """
+_EXPAND_PROCESS_AS_PARENT = """
 UNION ALL
 UNWIND $items AS it
 MATCH (p:Process {process_id: it.key})
@@ -62,10 +78,8 @@ RETURN c.process_id AS pid, coalesce(c.exepath, c.name) AS owner, e.event_id AS 
        type(e) AS rel, coalesce(p.exepath, p.name) AS other, 'Process' AS other_label,
        p.process_id AS other_process_id
 """
-
-# 连接建立类操作（connect / bind）不传递内容：只把两端接起来，不往顶点里写数据，
-# 因此不算“往这个顶点交付了内容”。实测与改动记录见 CHANGELOG。
-_SETUP_SYSCALLS = ["connect", "bind"]
+_EXPAND_PROCESS = (_EXPAND_PROCESS_OWN_EDGES + _EXPAND_PROCESS_AS_CHILD
+                   + _EXPAND_PROCESS_AS_PARENT)
 
 _EXPAND_OBJECT = {
     "File": """
@@ -86,11 +100,16 @@ RETURN p.process_id AS pid, coalesce(p.exepath, p.name) AS owner, e.event_id AS 
 """,
 }
 
-_PROCESS_INFO_MANY = """
-UNWIND $pids AS pid
-MATCH (p:Process {process_id: pid})
-RETURN p.process_id AS process_id, p.pid AS pid, p.name AS name, p.exepath AS exepath,
-       p.args AS args, p.cwd AS cwd
+# 进程读写过的对象端点（仅用于子进程把关的"有没有来往"判定）。
+# 两条分支与 `snapshot._SIDES` 的拥有者口径一致：p2f / p2n 里进程在源侧，f2p / n2p 里进程在目标侧。
+_OBJECT_EDGES = """
+MATCH (p:Process {process_id: $pid})-[e:p2f|p2n]->(x)
+RETURN type(e) AS rel, e.syscall AS syscall, coalesce(x.path, x.network_id) AS key,
+       labels(x)[0] AS label
+UNION ALL
+MATCH (x)-[e:f2p|n2p]->(p:Process {process_id: $pid})
+RETURN type(e) AS rel, e.syscall AS syscall, coalesce(x.path, x.network_id) AS key,
+       labels(x)[0] AS label
 """
 
 
@@ -106,21 +125,19 @@ def _event(row: dict[str, Any]) -> Event:
                  end=int(row.get("endtime") or start), pid=str(row.get("pid") or ""),
                  owner=owner, other=other, other_label=other_label,
                  other_process_id=str(row.get("other_process_id") or ""),
-                 # 直查来源自己算规则编码（参考实现不舍预先算好的索引）：与索引快照逐条可比
+                 # 直查来源自己算规则编码（参考实现不读索引里预先算好的值）：与索引来源逐条可比
                  rule_code=rule_code_of(rel, syscall, owner, other, other_label))
 
 
 class DbSource:
-    """数据库直查来源：**只用于单测与一次性对照**，正式流程不走这条路。
-
-    把同类型顶点的展开合并成一次批量查询（每轮 3~4 次查询），而不是"每个顶点一次查询"。
-    """
+    """数据库直查来源：**只用于单测与一次性对照**，正式流程不走这条路。"""
 
     def __init__(self, graph: Any) -> None:
         self.graph = graph
         self.database = graph.database
         self.queries = 0
         self.rows = 0
+        self.shared_not_expanded: dict[str, int] = {}
 
     def _run(self, cypher: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         out = self.graph.run(cypher, params)
@@ -132,9 +149,8 @@ class DbSource:
                        seen: Optional[Any] = None) -> list[Event]:
         if not items:
             return []
-        cypher = _EXPAND_PROCESS_HEADS + _EXPAND_CHILDREN
         params = {"items": [{"key": k, "lo": lo, "hi": hi} for k, lo, hi in items]}
-        rows = self._run(cypher, params)
+        rows = self._run(_EXPAND_PROCESS, params)
         if seen is None:
             return [_event(row) for row in rows]
         return [_event(row) for row in rows if int(row["event_id"]) not in seen]
@@ -143,31 +159,43 @@ class DbSource:
                       seen: Optional[Any] = None) -> list[Event]:
         if not items:
             return []
-        cypher = _EXPAND_OBJECT[kind]
+        if kind == "File":
+            kept: list[tuple[str, int, int]] = []
+            for key, lo, hi in items:
+                label = edge_rules.shared_channel_label(key)
+                if label:
+                    # 共享 / 虚拟通道：只收边、不展开（与索引来源同一判据）
+                    self.shared_not_expanded[label] = self.shared_not_expanded.get(label, 0) + 1
+                    continue
+                kept.append((key, lo, hi))
+            items = kept
+            if not items:
+                return []
         params = {"items": [{"key": k, "lo": lo, "hi": hi} for k, lo, hi in items],
-                  "setup": _SETUP_SYSCALLS}
-        rows = self._run(cypher, params)
+                  "setup": SETUP_SYSCALLS}
+        rows = self._run(_EXPAND_OBJECT[kind], params)
         if seen is None:
             return [_event(row) for row in rows]
         return [_event(row) for row in rows if int(row["event_id"]) not in seen]
 
     def process_info_many(self, pids: list[str]) -> None:
-        missing = [pid for pid in pids if not has_process_info(self.database, pid)]
-        for chunk in (missing[i:i + 5000] for i in range(0, len(missing), 5000)):
-            if not chunk:
-                continue
-            for row in self._run(_PROCESS_INFO_MANY, {"pids": chunk}):
-                cache_process_info(self.database, str(row["process_id"]), row)
+        prefetch_process_info(self.graph, pids)
+
+    def iter_object_edges(self, pid: str) -> list[tuple[str, str, str, str]]:
+        """这个进程读写过的对象端点（索引来源同口径；直查只用于对照与单测）。"""
+        return [(str(row["rel"]), str(row["syscall"] or ""), str(row["key"] or ""),
+                 str(row["label"] or "")) for row in self._run(_OBJECT_EDGES, {"pid": pid})]
 
     def close(self) -> None:
         return None
 
     def stats(self) -> dict[str, Any]:
-        return {"source": "db", "queries": self.queries, "rows": self.rows}
+        return {"source": "db", "queries": self.queries, "rows": self.rows,
+                "shared_not_expanded": dict(sorted(self.shared_not_expanded.items()))}
 
 
 # --------------------------------------------------------------------------- #
-# 索引快照来源
+# 顶点-时间索引快照来源（正式流程唯一取数方式）
 # --------------------------------------------------------------------------- #
 
 _CHUNK_RECORDS = 4096
@@ -183,7 +211,6 @@ class SnapshotReader:
         self.database = database
         self.meta = meta
         self.dir = snap.snapshot_dir(database)
-        self._adj: Optional[Any] = None
         self.vertices: list[dict[str, Any]] = json.loads(
             (self.dir / "vertices.json").read_text(encoding="utf-8"))
         self._id_of: dict[tuple[str, str], int] = {}
@@ -196,6 +223,7 @@ class SnapshotReader:
         self.queries = 0
         self.rows = 0
         self.skipped = 0            # 因已收进闭包而跳过的记录数（含在 rows 里，只影响快慢）
+        self.shared_not_expanded: dict[str, int] = {}   # 共享 / 虚拟通道：只收边、不展开的次数
         self._adj = (self.dir / "adj.bin").open("rb")
 
     # --- 内部 ---
@@ -275,11 +303,16 @@ class SnapshotReader:
             vid = self._id_of.get((kind, key))
             if vid is None:
                 continue
+            shared = self.vertices[vid].get("shared") if kind == "File" else None
+            if shared:
+                # 共享 / 虚拟通道：只收边、不展开（标记在建索引时算好，见 snapshot.py）
+                self.shared_not_expanded[shared] = self.shared_not_expanded.get(shared, 0) + 1
+                continue
             for rec in self._iter_block(vid, lo, hi):
                 rel_code = rec[2]
                 if rel_code not in (0, 2):  # p2f / p2n
                     continue                # 只回溯写入侧：读不会把内容送回顶点
-                if self._syscall_of(rec) in _SETUP_SYSCALLS:
+                if self._syscall_of(rec) in SETUP_SYSCALLS:
                     continue
                 self.rows += 1
                 if seen is not None and rec[6] in seen:
@@ -290,13 +323,27 @@ class SnapshotReader:
 
     def process_info_many(self, pids: list[str]) -> None:
         for pid in pids:
-            vertex = self.vertices[self._id_of[("Process", pid)]] if ("Process", pid) in self._id_of else None
-            if vertex is None:
+            vid = self._id_of.get(("Process", pid))
+            if vid is None:
                 continue
+            vertex = self.vertices[vid]
             cache_process_info(self.database, pid, {
                 "process_id": pid, "pid": vertex.get("pid"), "name": vertex.get("name"),
                 "exepath": vertex.get("exepath"), "args": vertex.get("args"), "cwd": vertex.get("cwd"),
             })
+
+    def iter_object_edges(self, pid: str):
+        """生成器：跑到第一个命中就停，不会把整个顶点的边建成列表。"""
+        vid = self._id_of.get(("Process", pid))
+        if vid is None:
+            return
+        for rec in self._iter_block(vid, -1, 1 << 62):
+            rel_code = rec[2]
+            if rel_code not in (0, 1, 2, 3):        # p2f / f2p / p2n / n2p
+                continue
+            other_vertex = self.vertices[rec[1]]
+            yield (snap._REL_BY_CODE[rel_code], self._syscall_of(rec), other_vertex["key"],
+                   other_vertex["kind"])
 
     def close(self) -> None:
         if self._adj is not None:
@@ -306,6 +353,7 @@ class SnapshotReader:
     def stats(self) -> dict[str, Any]:
         return {"source": "snapshot", "queries": 0, "rows": self.rows,
                 "skipped_already_included": self.skipped,
+                "shared_not_expanded": dict(sorted(self.shared_not_expanded.items())),
                 "index_dir": str(self.dir), "index_edges": self.meta.get("edges")}
 
 

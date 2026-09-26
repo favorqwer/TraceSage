@@ -70,10 +70,10 @@ TraceSage/
 │       ├── contracts.py      # 层间数据结构与共享小助手
 │       ├── core/             # 横切：settings / scenarios / db / llm / record / prompts / rules / trace
 │       ├── prompts/          # 提示词文本（第一轮、复核）
-│       ├── rules/            # 规则表（粗筛 / 伪边 / 相位关键词）
+│       ├── rules/            # 规则表（粗筛 / 伪边 / 共享通道 / 相位关键词）
 │       ├── orchestration/    # 编排：intake / expand / judging（含二分拆批重试）/ register
 │       └── layers/           # 五层各占一个包（只允许下游读上游；包内按用途分文件）
-│           ├── l1_reach/       # 第 1 层 结构可达：steps / pipes / upstream / queries
+│           ├── l1_reach/       # 第 1 层 结构可达：closure / siblings / sources / snapshot / steps
 │           ├── l2_prepare/     # 第 2 层 压缩与准备：fold / summary / prefilter / batching
 │           ├── l3_semantic/    # 第 3 层 语义判别：first_pass（模型调用）
 │           ├── l4_verify/      # 第 4 层 全局校验：select / merge（模型调用）
@@ -358,9 +358,9 @@ CLONE_THREAD 过滤    <- clone 的 flags=N(A|B|…)
   `input/sysdig/*.query`（含引擎方法描述）**不得进入 agent 的任何可见上下文**。
 - **表示层**：一个步骤 = 一个进程实例（**只用于判定时的上下文渲染与分组，不参与可达性计算**）。边归属规则：进程写文件/网络归源进程，文件/网络被进程读写归目标进程，进程派生归子进程；每条边恰好归属一个进程。
 - **只读**：`pagent/core/db.py:ReadOnlyGraph` 是访问 Neo4j 的唯一入口（`execute_read` + 写关键字黑名单 + 禁多语句 + 不截断返回 + 查询审计日志）。
-- **反向闭包（第 1 层，唯一引擎）**：事件级、时间门限、单调推进（`pagent/layers/l1_reach/closure.py`）。三条因果规则：同进程（先发生的可能影响后发生的）、同顶点交付（写入侧 → 读取侧）、派生（父进程 → 子进程）。门限只减不增：每个顶点只完整展开一次，门限变高时只补取新增区间（实测六场补取占展开总数 0~7.5%；扫到的记录数是闭包的 1.2~1.3 倍，其中已收进闭包的边在来源侧直接跳过、真正进判定的行数约等于闭包大小）。
+- **反向闭包（第 1 层，唯一引擎）**：事件级、时间门限、单调推进（`pagent/layers/l1_reach/closure.py`）。三条因果规则：同进程（先发生的可能影响后发生的）、同顶点交付（写入侧 → 读取侧；**只对能承载内容的通道生效**：终端以外的设备节点、内核现生成的伪文件、系统运行目录及其中的套接字只收边、不展开，判据表 `pagent/rules/shared_channels.json`）、派生（父进程 → 子进程）。**派生那条带子进程把关**（`pagent/layers/l1_reach/siblings.py`）：先用“不带子进程”跑一遍定出主干（被展开过的进程 + 它们的直接子进程），主干里的进程无条件带走子进程，第二层起要“和主干有过一次写-读配对”（读的东西主干写过，或写的东西主干读过；共享/虚拟通道与 connect/bind 不算），因此正式流程是两遍。门限只减不增：每个顶点只完整展开一次，门限变高时只补取新增区间（实测六场补取占展开总数 0~7.5%；扫到的记录数是闭包的 1.2~1.3 倍，其中已收进闭包的边在来源侧直接跳过、真正进判定的行数约等于闭包大小）。
 - **展开侧不设任何条数上限**：待考察顶点数、收进闭包的边数、查询返回行数全部不设限；闭包的终止条件是“待考察清单耗尽”。任何条数上限都是按数据分布随机丢边——实测子进程上限 8 让场景 4 的标注覆盖从 100% 掉到 74.6%；判定漏抄 id / 调用失败 → 进 `unjudged`（**不得当成排除**）并记缺口。
-- **报告口径**：`output/agent/<场景>.json` 的 `edges[]` 为 `(src, syscall, dst)` + `confidence` + `event_id`（**没有 `mitre_technique`**）；实体内容口径与 GT 一致（`Process=coalesce(exepath,name)`、`File=path`、`Network=lip:lport->rip:rport`）。
+- **报告口径**：`output/agent/<场景>.json` 的 `edges[]` 为 `(src, syscall, dst)` + `confidence` + `event_id`（**没有 `mitre_technique`**）；实体内容口径与 GT 一致（`Process=coalesce(exepath,name)`、`File=path`、`Network=lip:lport->rip:rport`）。候选集（交给模型逐条判断的那一堆）在第 2 层折叠时还会去掉两类边：内核按进程现生成的伪文件（`/proc/<进程号>/`、`/proc/self/` 下）、写进共享 / 虚拟通道的边（判据表 `pagent/rules/candidate_drops.json`；第 1 层照收这些边，只是不进候选集；读取共享通道的边不去掉）。
 - **运行态产物**：`tmp/provenance-agent/`（查询日志 `queries-*.jsonl`、逐条判定 `verdicts-*.jsonl`、原始输出度量 `llm-*.jsonl`、轨迹 `trace-*.jsonl`、调查记录 `state/record-*.json`、第 1 层测量结果 `l1-ablation/`、顶点-时间索引 `l1-index/`），不进 `output/`。
 - **评分**：`tools/eval_agent_attack_path.py`，与 `tools/evaluate_gt.py` 同口径。
 ## 10. 场景测试标准流程（provenance-agent）

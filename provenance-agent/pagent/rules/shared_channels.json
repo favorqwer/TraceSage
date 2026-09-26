@@ -1,0 +1,22 @@
+{
+  "note": "共享 / 虚拟通道：第 1 层回退时只收边、不再沿该顶点往回找写入者。判据只看路径前缀（结构性，不做任何分布统计）：这些通道上的内容不是由图上某条写入边交付的（内核现生成的伪文件、随机数/空设备），或者是多对多广播（系统级会话与服务的运行时目录及其中的套接字）。系统运行目录按“目录本身”认定：/var/run、/var/lock 是 /run、/run/lock 的软链接（同一目录的另一种写法），一并列入——否则同一个目录会因为内核用的是哪种写法而得到两种结论。终端仍按普通文件处理（更保守的一档；实测六场景与把终端一并排除的结果完全相同）。口径与实测见 CHANGELOG 与 closure.py 的规则说明。",
+  "classes": [
+    {
+      "label": "内核现生成的伪文件",
+      "prefixes": ["/proc/", "/sys/"]
+    },
+    {
+      "label": "设备节点（终端除外）",
+      "prefixes": ["/dev/"]
+    },
+    {
+      "label": "系统运行目录（会话与服务的文件、套接字；含 /run 的别名写法）",
+      "prefixes": ["/run/", "/var/run/", "/var/lock/"]
+    },
+    {
+      "label": "系统级套接字路径",
+      "prefixes": ["unix:[/run/", "unix:[/var/run/", "unix:[/tmp/.X11-unix/", "unix:[/tmp/.ICE-unix/"]
+    }
+  ],
+  "terminal_prefixes": ["/dev/pts/", "/dev/ptmx", "/dev/tty", "/dev/console"]
+}

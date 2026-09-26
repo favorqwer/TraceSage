@@ -115,17 +115,21 @@ def _union_groups(channels: dict[str, set[str]]) -> list[set[str]]:
 
 
 def expand_closure(deps: "Deps") -> dict[str, Any]:
-    """跑一次闭包展开，把结果写进 `record`。"""
+    """跑一次闭包展开，把结果写进 `record`。
+
+    展开分两遍（见 `l1_reach/siblings.py`）：第一遍定主干名单，第二遍带子进程把关。
+    两遍都读同一个本地索引，中间没有任何东西会改它，所以两遍看到的是同一份数据；
+    `source.stats()` 里的计数是两遍合计。
+    """
     inv = deps.record
-    opts = l1.Options()
     source = l1.open_source(deps.graph, log=deps.log)
     try:
-        result = l1.run_closure(source, seed_events(deps), options=opts,
-                                poi_t0=int(inv.poi_t0 or 0), log=deps.log)
+        result = l1.run_gated_closure(source, seed_events(deps),
+                                      poi_t0=int(inv.poi_t0 or 0), log=deps.log)
         rows = result["rows"]
         stats = dict(result["stats"])
         stats["source"] = source.stats()
-        stats["options"] = opts.as_dict()
+        stats["gate"] = result.get("gate")
     finally:
         source.close()
 
@@ -148,13 +152,15 @@ def expand_closure(deps: "Deps") -> dict[str, Any]:
 
     deps.log(f"[expand] 闭包完成：{stats['rounds']} 轮 / 展开顶点 {stats['process_expands']} 个进程 + "
              f"{stats['object_expands']} 个文件或端点 / 收边 {stats['events_included']} 条 → "
-             f"步骤 {len(inv.steps)} 个 / 折叠边 {len(inv.edges)} 条；"
-             f"规则剔除 {stats['dropped']}；来源 {stats['source']}")
+             f"步骤 {len(inv.steps)} 个 / 折叠边 {len(inv.edges)} 条"
+             f"（另剔除候选集层面 {sum(folded.dropped_candidate.values())} 条）；"
+             f"规则剔除 {stats['dropped']}；来源（两遍合计）{stats['source']}")
     trace_event(deps.trace, "expand_closure", rounds=stats["rounds"], steps=len(inv.steps),
                 edges=len(inv.edges), events=stats["events_included"],
-                rows_fetched=stats["rows_fetched"], dropped=stats["dropped"],
+                rows_fetched=stats["rows_fetched"], dropped=stats["dropped"], gate=stats.get("gate"),
                 queries=stats["source"].get("queries"), source=stats["source"].get("source"))
     return {"rounds": stats["rounds"], "stop_reason": "frontier_exhausted",
             "fold": {"raw_instances": folded.raw_instances, "collapsed_triples": len(inv.edges),
-                     "dropped_r1": folded.dropped_r1, "dropped_r2": folded.dropped_r2},
+                     "dropped_r1": folded.dropped_r1, "dropped_r2": folded.dropped_r2,
+                     "dropped_candidate": dict(sorted(folded.dropped_candidate.items()))},
             "failed": {}, "closure": stats}

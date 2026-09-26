@@ -1,4 +1,4 @@
-"""折叠与两类结构性伪边剔除（第 2 层内部）。
+"""折叠与结构性剔除（第 2 层内部）。
 
 **折叠是有损压缩**：把同一内容三元组的多个事件实例压成一条记录。压缩的是判定与报告的单位，
 不压缩存储（图上每条边都还在），也不改变边集。
@@ -6,6 +6,13 @@
 丢弃（**这就是有损之处，直接决定判定质量的上限**）：实例之间的相对时序；每次实例各自的字节量与
 时间（只剩首末与总和）；单个实例的独立判决资格（一条三元组只能有一个判决，所以"同一次操作既有
 正常实例、又有恶意实例"时无法拆开，恶意实例会被实例数与累计字节稀释）。
+
+**剔除分两类**（两类都逐条计数，不静默丢）：
+
+- 遍历期已剔除的（R1 动态库、R2 自我执行、系统例行文件）在这里做兜底复核，理论上应该一条都碰不到；
+- **候选集层面**的剔除（`core/edge_rules.py` 的 `candidate_drop_reason`，只在第 2 层用）：内核按进程
+  现生成的伪文件（`/proc/<进程号>/` 下，被 `ps`、`ss`、`systemd` 这类工具成批例行读取）、写进共享 /
+  虚拟通道的边。这些边在第 1 层照收（它们是链上的真实操作），只是不进候选集。
 """
 
 from __future__ import annotations
@@ -15,7 +22,8 @@ from typing import Any, Iterable
 
 # R1（动态链接器读共享库）、R2（系统自带程序的自身执行）的判定在 `core/edge_rules.py`：
 # 第 1 层遍历期与这里必须用同一个函数（见该模块说明）。过滤恒开，不可关闭。
-from ...core.edge_rules import is_r1, is_r2  # noqa: F401 - 兼容旧引用（`l2.is_r1`）
+# 候选集层面的剔除（`candidate_drop_reason`）只在第 2 层用：第 1 层照收那些边。
+from ...core.edge_rules import candidate_drop_reason, is_r1, is_r2  # noqa: F401 - 兼容旧引用（`l2.is_r1`）
 
 
 def _project(row: dict[str, Any]) -> tuple[str, str, str]:
@@ -83,14 +91,17 @@ class FoldResult:
     raw_instances: int
     dropped_r1: int
     dropped_r2: int
+    dropped_candidate: dict[str, int] = field(default_factory=dict)   # 理由 -> 条数（不静默丢）
 
 
 def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
-    """把事件实例折成内容三元组，并按两类结构性伪边剔除（过滤恒开，不可关闭）。"""
+    """把事件实例折成内容三元组，并逐条剔除结构性无关的边（过滤恒开，不可关闭）。"""
     table: dict[tuple[str, str, str], CollapsedEdge] = {}
     raw = 0
     dropped_r1 = 0
     dropped_r2 = 0
+    dropped_candidate: dict[str, int] = {}
+    reason_cache: dict[tuple[str, str, str], str] = {}   # 三元组 -> 剔除理由（重复实例不重算）
     for row in rows:
         raw += 1
         src, syscall, dst = _project(row)
@@ -101,8 +112,17 @@ def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
             dropped_r2 += 1
             continue
         key = (src, syscall, dst)
+        reason = reason_cache.get(key)
+        if reason is None:
+            src_label, dst_label = _labels(row)
+            reason = candidate_drop_reason({"src": src, "syscall": syscall, "dst": dst,
+                                            "src_label": src_label, "dst_label": dst_label,
+                                            "rel": row["rel"]})
+            reason_cache[key] = reason
+        if reason:
+            dropped_candidate[reason] = dropped_candidate.get(reason, 0) + 1
+            continue
         edge = table.get(key)
-        src_label, dst_label = _labels(row)
         if edge is None:
             edge = CollapsedEdge(
                 src=src,
@@ -123,4 +143,5 @@ def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
         if row.get("step_key"):
             edge.members.add(str(row["step_key"]))
     edges = sorted(table.values(), key=lambda e: (e.t0, e.src, e.syscall, e.dst))
-    return FoldResult(edges=edges, raw_instances=raw, dropped_r1=dropped_r1, dropped_r2=dropped_r2)
+    return FoldResult(edges=edges, raw_instances=raw, dropped_r1=dropped_r1, dropped_r2=dropped_r2,
+                      dropped_candidate=dropped_candidate)
