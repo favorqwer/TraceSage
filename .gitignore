@@ -7,3 +7,5 @@ sysdig.wiki/
 paper/
 groundtruth/
 tmp/
+tmp.md
+provenance-agent\tests

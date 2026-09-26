@@ -1,5 +1,36 @@
 # TraceSage 项目说明
 
+## 讲解与沟通约定
+
+### 一、默认前提
+
+1. **默认用户没看过项目代码。** 任何提到某个文件、某个函数、某个变量名的地方，先用一句话说明它是干什么的；如果只是讲原理，就不提名字，直接说「程序里负责某某的那一部分」。
+2. **默认用户看不懂任何代码、公式、符号。** 不写 Python、不写数据库查询语句、不写类似「p2f」「E001」「S:进程编号:时间」这种拼装格式、不写带大于小于号和绝对值的表达式。
+3. **默认用户不知道任何内部术语。** 凡是术语，第一次出现时当场定义。
+
+### 二、语言规则
+
+**不写的东西：**
+
+- 代码块（不管是 Python 还是数据库查询语句）。
+- 数学公式和符号。要用中文说，比如不写「差距不超过 W 秒」，而写「相差不超过设定的秒数（默认 300 秒）」。
+- 自己造的比喻式说法。比如「骨架」「心脏」「漂移」「饿死」「光环」「天花板」这类，一律不用。
+- 英文缩写当术语用。比如不写「off」，写「关闭」；不写「auto」，写「自动读取」。
+
+**要写的东西：**
+
+- 每个机制用「第一步做什么、第二步做什么」的方式按顺序讲完。
+- 每个数字都要带单位，并且说清它的口径。比如不写「436,000 条」，而写「从数据库取回 436,000 条数据」；不写「0.73」，而写「标准答案里 73% 的记录进了候选集」。
+- 讲一个改动时，按这个顺序：现在是怎么做的 → 这样做出了什么问题（带实测数字）→ 改成什么 → 改完怎么验证。
+
+### 三、术语规则
+
+1. 术语第一次出现时，按三件事定义：它是什么 → 它的取值是什么 → 它用来干什么。
+   - 例子：参照时刻——是一个时间值，取「当初把这一步拉进来的那个动作发生的时刻」，用来决定「往过去找多远」。
+2. 同一个东西，全文只用一个名字，不能前面叫「参照时刻」、后面叫「锚点」。
+3. 如果一个概念必须要一个名字，优先用描述性的名字，不要用比喻性的名字。
+4. 行业里本来就在用的词（召回、查准、候选集、判定）可以直接用。
+
 ## 1. 项目目标
 
 TraceSage 使用 Sysdig 导出的 JSONL 日志构建主机级溯源图，并将溯源图写入 Neo4j。图由三类顶点（Process / File / Network）、五种方向化事件边，以及顶点和事件边属性组成。当前范围是**单主机日志**；除非用户明确提出，不要引入多主机、`host_id` 或跨主机关联模型。字段与数据模型的详细设计（真实实现口径）见「字段与数据模型详细设计」。
@@ -30,18 +61,23 @@ TraceSage/
 │       ├── config.py         # 环境变量/.env 配置（横切）
 │       └── reporting.py      # 进度与跳过行上报（横切）
 │
-├── provenance-agent/         # 溯源调查 agent（Python + LangGraph）
-│   ├── main.py               # 入口：单场景 / --all / --dry-run
-│   ├── config/scenarios.json # POI 唯一来源（库名 + POI 签名 + 采集窗口）
+├── provenance-agent/         # 溯源调查 agent（Python；五层架构）
+│   ├── main.py               # 入口：命令行 + 文件落盘
+│   ├── config/scenarios.json # POI 唯一来源（库名 + POI 签名）
+│   ├── tests/                # dry_run.py（整链路干跑）+ unit/（每层单测）+ fixtures/
 │   └── pagent/               # 包
-│       ├── settings.py       # 路径/模型/预算/.env（横切）
-│       ├── scenarios.py      # 场景与 POI 配置加载
-│       ├── db.py             # 只读 Neo4j：写守卫 + 有界返回 + 查询审计日志
-│       ├── steps.py          # 行为步骤层：摘要 / 机械枚举 / 四类前驱
-│       ├── collapse.py       # 折叠成内容三元组 + R1/R2 结构性伪边剔除
-│       ├── state_store.py    # 调查状态图（SQLite：三类节点四类边）
-│       ├── llm.py            # 模型工厂 + JSON 调用自校正 + token 记账
-│       └── graph/            # LangGraph 装配（state / nodes / build）
+│       ├── app.py            # 装配：依赖容器 + 流程顺序
+│       ├── contracts.py      # 层间数据结构与共享小助手
+│       ├── core/             # 横切：settings / scenarios / db / llm / record / prompts / rules / trace
+│       ├── prompts/          # 提示词文本（第一轮、复核）
+│       ├── rules/            # 规则表（粗筛 / 伪边 / 相位关键词）
+│       ├── orchestration/    # 编排：intake / expand / judging（含二分拆批重试）/ register
+│       └── layers/           # 五层各占一个包（只允许下游读上游；包内按用途分文件）
+│           ├── l1_reach/       # 第 1 层 结构可达：steps / pipes / upstream / queries
+│           ├── l2_prepare/     # 第 2 层 压缩与准备：fold / summary / prefilter / batching
+│           ├── l3_semantic/    # 第 3 层 语义判别：first_pass（模型调用）
+│           ├── l4_verify/      # 第 4 层 全局校验：select / merge（模型调用）
+│           └── l5_express/     # 第 5 层 表达：report / phases / narrative / evidence
 │
 ├── progql-local/             # 调查引擎（Java）
 │   ├── src/main/java/        # gql（GQL 求值）/ main（入口）/ model / neo4j / util，
@@ -166,7 +202,7 @@ python tools/coverage_gap.py --log output/inventory/3_SSH_Spray.log-inventory.js
 - 口径与结论见 `docs/log-db-coverage-gap.md`；六场景汇总 `output/coverage/SUMMARY.md`。
 - 事件类型是否"已建模"由运行时调 `handlers.build_handlers()` 反查，不手写清单。
 - 已知边界：`data=` 载荷按不透明值统计（默认 snaplen 80，日志里本就 ≤80 字节）；`evt.num` 有少量缺口（场景 1 缺 0.51%）。
-- `fcntl` **不建边是设计决策**（不是缺陷）：口径写在 `tools/coverage_spec.json` 的 `declared_no_edge_events`，报告归入 A1c、不计哨兵；理由与实测证据见 `docs/log-db-coverage-gap.md` §5.1。
+- `fcntl` **不建边是设计决策**（不是缺陷）：口径与实测证据写在 `tools/coverage_spec.json` 的 `declared_no_edge_events`，报告归入 A1c、不计哨兵；代码侧见 `sysdig-parser/parsers/dispatch/handlers.py` 的 `_fcntl_action`。**六库实测 fcntl 边 0 条**。
 
 ### tools/ 脚本
 
@@ -257,7 +293,7 @@ CLONE_THREAD 过滤    <- clone 的 flags=N(A|B|…)
 ```
 
 - **路径身份归一**只在 `pipeline/entity_registry.get_or_create_file()` 这一个 chokepoint 做：先剥内核 `原始名(/绝对路径)` 注记（`strip_path_annotation`），再 `posixpath.normpath`（`normalize_file_path`）；`pipe:[…]`/`socket:[…]`/`netlink:[…]`/空串不喂 `normpath`，POSIX 行首 `//` 原样保留。**`unix:[…]` 例外地只归一括号内的路径**（合成前缀保真、内部真路径折叠），使 `unix:[/a/b/../c]` 与 `unix:[/a/c]` 是同一顶点。
-- **失败判据**：`record_failed()`（`res` 存在且 `res < 0`）用于 accept / fcntl / connect / bind / rename / 生命周期 / chmod 族的「失败则不建边」；数据流族（read/write/send/recv）用 `record_size()`（拿不到 `res` 就没有 `bytes`，不建边）；`execve` 仅在 `record_size(end_rec) == 0` 时算成功；非阻塞 `connect` 的 `EINPROGRESS(-115)` 经 `record_connect_failed()` 视为已发起、照常建边。
+- **失败判据**：`record_failed()`（`res` 存在且 `res < 0`）用于 accept / connect / bind / rename / 生命周期 / chmod 族的「失败则不建边」（`fcntl` 也会调用它，但只用于「socket 注记无四元组」审计，它本身不建边，见 §8.4）；数据流族（read/write/send/recv）用 `record_size()`（拿不到 `res` 就没有 `bytes`，不建边）；`execve` 仅在 `record_size(end_rec) == 0` 时算成功；非阻塞 `connect` 的 `EINPROGRESS(-115)` 经 `record_connect_failed()` 视为已发起、照常建边。
 
 ### 8.3 顶点（Node）
 
@@ -314,14 +350,112 @@ CLONE_THREAD 过滤    <- clone 的 flags=N(A|B|…)
 
 ## 9. 溯源调查 agent（`provenance-agent/`）
 
-在 `sysdig-parser` 导入的图上做**反向追踪**的 LangGraph agent。设计决策与架构见 `provenance-agent/README.md`；本节只记录不可变口径。
+在 `sysdig-parser` 导入的图上做**反向追踪**的 agent。设计决策与架构见 `provenance-agent/README.md`；本节只记录不可变口径。
 
+- **架构**：确定性展开（纯代码，不调模型）→ **一次性并行判定**（第一轮 + 复核，模型调用只在这里）→ 代码报告。五层各占 `pagent/layers/` 下一个包，编排在 `pagent/orchestration/`。没有调度用的 LLM，没有状态机框架。
 - **任务范围**：只从 POI 往回走（反向追踪）；不引入"往前看"查询、不做多主机、不引入 `host_id`。
-- **POI 唯一来源**：`provenance-agent/config/scenarios.json`（库名 + POI 签名 + 采集窗口）。
+- **POI 唯一来源**：`provenance-agent/config/scenarios.json`（库名 + POI 签名；实例数/时间范围由 intake 现算，不写进配置）。
   `input/sysdig/*.query`（含引擎方法描述）**不得进入 agent 的任何可见上下文**。
-- **表示层**：一个步骤 = 一个进程实例。边归属规则与 `docs/溯源图agent调查-创新点与效果.md` 的"进程子图"一致（p2f/p2n→源进程，f2p/n2p→目标进程，p2p→子进程）；每条边恰好归属一个进程。
-- **只读**：`pagent/db.py:ReadOnlyGraph` 是访问 Neo4j 的唯一入口（`execute_read` + 写关键字黑名单 + 禁多语句 + 有界返回 + 查询审计日志）。
-- **有界且不静默**：通用查询 `PAGENT_MAX_ROWS`（默认 1000）；步骤层单进程 `PAGENT_MAX_PROCESS_EDGES`（默认 200000），超限必须显式暴露 `edges_truncated`。
-- **报告口径**：`output/agent/<场景>.json` 的 `edges[]` 为 `(src, syscall, dst)` + `confidence` + `event_id`；实体内容口径与 GT 一致（`Process=coalesce(exepath,name)`、`File=path`、`Network=lip:lport->rip:rport`）。
-- **运行态产物**：`tmp/provenance-agent/`（查询日志、轨迹、状态图、checkpoint、步骤缓存），不进 `output/`。
+- **表示层**：一个步骤 = 一个进程实例（**只用于判定时的上下文渲染与分组，不参与可达性计算**）。边归属规则：进程写文件/网络归源进程，文件/网络被进程读写归目标进程，进程派生归子进程；每条边恰好归属一个进程。
+- **只读**：`pagent/core/db.py:ReadOnlyGraph` 是访问 Neo4j 的唯一入口（`execute_read` + 写关键字黑名单 + 禁多语句 + 不截断返回 + 查询审计日志）。
+- **反向闭包（第 1 层，唯一引擎）**：事件级、时间门限、单调推进（`pagent/layers/l1_reach/closure.py`）。三条因果规则：同进程（先发生的可能影响后发生的）、同顶点交付（写入侧 → 读取侧）、派生（父进程 → 子进程）。门限只减不增：每个顶点只完整展开一次，门限变高时只补取新增区间（实测六场补取占展开总数 0~7.5%；扫到的记录数是闭包的 1.2~1.3 倍，其中已收进闭包的边在来源侧直接跳过、真正进判定的行数约等于闭包大小）。
+- **展开侧不设任何条数上限**：待考察顶点数、收进闭包的边数、查询返回行数全部不设限；闭包的终止条件是“待考察清单耗尽”。任何条数上限都是按数据分布随机丢边——实测子进程上限 8 让场景 4 的标注覆盖从 100% 掉到 74.6%；判定漏抄 id / 调用失败 → 进 `unjudged`（**不得当成排除**）并记缺口。
+- **报告口径**：`output/agent/<场景>.json` 的 `edges[]` 为 `(src, syscall, dst)` + `confidence` + `event_id`（**没有 `mitre_technique`**）；实体内容口径与 GT 一致（`Process=coalesce(exepath,name)`、`File=path`、`Network=lip:lport->rip:rport`）。
+- **运行态产物**：`tmp/provenance-agent/`（查询日志 `queries-*.jsonl`、逐条判定 `verdicts-*.jsonl`、原始输出度量 `llm-*.jsonl`、轨迹 `trace-*.jsonl`、调查记录 `state/record-*.json`、第 1 层测量结果 `l1-ablation/`、顶点-时间索引 `l1-index/`），不进 `output/`。
 - **评分**：`tools/eval_agent_attack_path.py`，与 `tools/evaluate_gt.py` 同口径。
+## 10. 场景测试标准流程（provenance-agent）
+
+用户说"测试 / 跑一下某个场景"时，**跳过一切预检，直接按下面顺序执行**；不要先探测环境、不要先跑 `tests/dry_run.py`、不要先做只读连通性验证（除非用户明确要求，或第 1 步本身报错）。
+
+```bash
+# 1. 直接跑（单场景实测 20~60 秒，墙钟受网关单次延迟影响；模型调用 2~30 次）
+.venv/Scripts/python.exe provenance-agent/main.py --scenario <场景全名>
+
+# 2. 跑完立刻打分（与引擎同口径）
+.venv/Scripts/python.exe tools/eval_agent_attack_path.py \
+  --report output/agent/<场景全名>.json \
+  --gt groundtruth/<场景全名>.groundtruth.json
+```
+
+3. **先报数字，再谈深挖**：第一轮回复只给——召回 / 查准 / F1、引擎基线对照（`output/baseline/<场景>/groundtruth-eval.txt`）、报告路径、停止原因、确认边数、LLM 调用数；漏报与多出边只列清单。**数字没报完不许做根因分析。**
+4. 深挖（`tmp/provenance-agent/logs/` 的 trace / 查询日志 / 判定明细 / `llm-*.jsonl` 的原始输出度量、`state/record-*.json`）只在对完数字之后做，且仅当用户要求或数字异常时才做。
+
+硬约束：
+- 场景名必须用 `provenance-agent/config/scenarios.json` 的**全名**（`2_Masquerade_Data_Exfiltration` 等），不接受简称。
+- 自写读库脚本必须先 `pagent.settings.load_dotenv()`（`.env` 只在 `main.py:main()` 加载）；凭据一律不硬编码。
+- 诊断产物写 `tmp/`；只有报告写 `output/agent/<场景>.json`。
+- 报错时先判断是否属于「库不存在 / POI 不存在 / 网关不可达」三类，只有这三类才允许回退到环境排查。
+
+## 11. 验证新方案 / 新机制 / 新功能的流程
+
+> 仅在用户明确要求「测试 / 验证某个新方案（新机制、新功能）」时启用；不要主动触发（与全局规则「只做当前指令」一致）。
+>
+> **核心要求：测的必须是新方案本身。** 用现有代码加参数改出来的数，不能叫「测新方案」。
+
+### 11.1 动手前（四项，缺一不可）
+
+**（1）把待测对象拆成组件清单，逐项标注来源。**
+
+| 标注 | 含义 |
+|---|---|
+| 新写 | 本次新实现的代码路径 |
+| 复用 | 直接调用现有代码 |
+| 只改参数 | 复用现有代码，只改常量 / 环境变量 / 配置 |
+| 未实现 | 还没写 |
+
+清单必须先给用户看。
+
+**（2）关键组件处于「未实现」时，先实现，不许用别的东西顶替。**
+
+替代品（规则、人工标注、现有代码的输出、上限推算）不能代表未实现的组件。若工作量超出本次范围，直接说明「需先实现 X」并给出工作量估计，由用户决定是否继续。
+
+**（3）写清方法里禁止出现的东西。**
+
+至少包括：人工标注、标准答案、目标结果，以及在本次测试场景上调出来的规则 / 阈值 / 名单。
+
+**（4）写清本次测量要回答的问题，一句话。** 写不出来说明还没想清楚，先想清楚再动手。
+
+### 11.2 动手时（三项）
+
+**（5）先跑 1 个场景，检查中间产物。** 逐阶段列出输入条数 / 输出条数 / 砍掉条数及原因；抽 3~5 个具体例子人工核对。核对无误再跑其余场景。
+
+**（6）分阶段留证据。** 中间产物落盘 `tmp/`（见「修改边界」）；每个阶段都要能回答「进来多少、出去多少、为什么砍」。
+
+**（7）中途发现测错，立即停下并报告**，不要一边发现不对一边继续跑完。
+
+### 11.3 汇报时（三项）
+
+**（8）三类数字分表呈现，不许混在一张表里。**
+
+| 类别 | 定义 |
+|---|---|
+| 实测 | 方法真实跑出来的结果 |
+| 上限 | 用标准答案推算、方法本身达不到的数 |
+| 对照 | 旧方法 / 基线 |
+
+**（9）每个数字必须能回答「它是怎么算出来的」**（来自哪一步、用了什么、排除了什么）。写不清的数字不许进表。
+
+**（10）主动交代本次测量的局限**（例如：进程判断用规则代替模型；某条规则在本次测试场景上调过，分数偏高）。
+
+### 11.4 禁止清单
+
+1. 用人工标注（或任何形式的答案）作为方法的输入。
+2. 用「改参数跑现有代码」冒充「测新方案」。
+3. 在测试场景上调规则 / 阈值 / 名单，然后在同一批场景上报告分数。
+4. 把「上限推算」写成「方案性能」。
+5. 只给表格、不给数字来源。
+6. 关键组件未实现时，用替代品顶替着测。
+
+### 11.5 报告前自查（五问）
+
+1. 把输入里的某样东西换成「正确答案」，结果会不会变好？会 → 方法里漏了东西。
+2. 这个数字里有没有用到人工标注？用了 → 只能叫上限。
+3. 跑的是新写的代码路径，还是现有代码路径？现有 → 不能叫「测新方案」。
+4. 表里每个数字都能说清是哪一步算出来的吗？
+5. 本次漏掉的东西，用户不发现的话我会不会主动说？
+
+### 11.6 已测错时的处置
+
+立即停止，主动说明：测错了什么、错在哪一步、哪些数字作废。**不得等用户发现。**
+
+验证结论（含改动前后数值）写入 `CHANGELOG.md`，不写进本文件（见「修改边界」）。

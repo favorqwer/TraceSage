@@ -1,0 +1,59 @@
+{
+  "_comment": "POI 由本文件指定（D5），唯一必填内容就是 database + poi.{kind, rel, syscall, key}。key 是图上实体内容（file_id 或 network_id），必须与图内容完全一致；实例数、时间范围等派生量一律由 intake 现算，不写进配置。",
+  "scenarios": {
+    "1_Multi_Stage_Data_Exfiltration": {
+      "database": "tracesage-1-multi-stage-data-exfiltration",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "write",
+        "network_id": "192.168.122.129:49580->192.168.122.128:4444"
+      }
+    },
+    "2_Masquerade_Data_Exfiltration": {
+      "database": "tracesage-2-masquerade-data-exfiltration",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "sendto",
+        "network_id": "192.168.122.129:47160->192.168.122.128:4444"
+      }
+    },
+    "3_SSH_Spray": {
+      "database": "tracesage-3-ssh-spray",
+      "poi": {
+        "kind": "file",
+        "rel": "p2f",
+        "syscall": "write",
+        "file_id": "/home/labssh/progql_lab_notes/session_30/enumeration.txt"
+      }
+    },
+    "4_Site_Defacement": {
+      "database": "tracesage-4-site-defacement",
+      "poi": {
+        "kind": "file",
+        "rel": "p2f",
+        "syscall": "write",
+        "file_id": "/srv/progql-web/current/COMPROMISED_MARKER.txt"
+      }
+    },
+    "5_User_Timer_Resource_Hijack": {
+      "database": "tracesage-5-user-timer-resource-hijack",
+      "poi": {
+        "kind": "file",
+        "rel": "p2f",
+        "syscall": "write",
+        "file_id": "/home/ubuntu/.local/share/progql-helper/archive/run_20260602-160401.tar.gz"
+      }
+    },
+    "6_SQLite_Pipeline_Pollution": {
+      "database": "tracesage-6-sqlite-pipeline-pollution",
+      "poi": {
+        "kind": "file",
+        "rel": "p2f",
+        "syscall": "write",
+        "file_id": "/root/.local/share/progql-sync/archive/sqlite_pipeline_final_20260602-162411.tar.gz"
+      }
+    }
+  }
+}

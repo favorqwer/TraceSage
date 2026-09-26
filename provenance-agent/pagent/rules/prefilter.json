@@ -1,0 +1,10 @@
+[
+  {
+    "label": "系统本地化/字符集初始化",
+    "patterns": ["/usr/share/locale", "/usr/lib/locale", "/gconv/", "/usr/share/zoneinfo"]
+  },
+  {
+    "label": "系统名字解析/服务配置",
+    "patterns": ["/etc/nsswitch.conf", "/etc/host.conf", "/etc/resolv.conf", "/etc/services", "/etc/ld.so.cache", "/etc/localtime", "/proc/filesystems"]
+  }
+]
