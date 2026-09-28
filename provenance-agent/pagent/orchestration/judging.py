@@ -1,21 +1,26 @@
-"""判定驱动（编排）：第 2 层装批 → 第 3 层第一轮 → 第 4 层复核与合并；含二分拆批重试。
+"""判定驱动（编排）：逐波推进 → 按阈值定结论。
 
-拆批重试是**跨层的错误处理**，所以放在编排层：整批第一轮调用失败时把批一分为二，各自重新走
-第 3、4 层；拆到单条仍失败才记未判定（不静默丢，也不误当排除）。
+1. 按「离终点几跳」把候选边分波（一跳一波）；
+2. 逐波调用模型：每次请求带任务说明、**调查状态摘要**（第 2 层滚动上下文）、本波全部边，
+   每条边下面挂**上游交接明细**（第 1 层：上层顶点上已判过的边及其结论）；波内按批大小切批、
+   同一波的所有批共用同一份冻结上下文并发投递；
+3. 每波结束后由纯代码更新状态（顶点状态、已确认链、工作面、计数）；
+4. 全部波跑完后由纯代码定结论：相关且达到阈值 → 确认，否则排除；没给结论 → 未判定。
+
+失败处理：一批调用失败就整批重试（`PAGENT_WAVE_ATTEMPTS` 次）；仍失败则该批全部边记为缺失，
+未判定（不静默丢、不误当排除）。**没有第二轮复核**。
 """
 
 from __future__ import annotations
 
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 from ..contracts import short, triple
 from ..core import settings
 from ..core.trace import trace_event
-from ..layers import l2_prepare as l2
-from ..layers import l3_semantic as l3
-from ..layers import l4_verify as l4
+from ..layers import l2_judge as l2
 from .register import register_conclusions
 
 if TYPE_CHECKING:
@@ -23,145 +28,207 @@ if TYPE_CHECKING:
 
 
 def judge_all(deps: "Deps") -> dict[str, Any]:
-    """把所有候选边打包成大批，丢进一个并发池判定；返回合并后的结论与统计。"""
+    """把所有候选边逐波判完，按阈值定结论，返回统计。
+
+    候选表就是交给模型的清单：五条结构式规则在**第 1 层遍历期取边时**已经生效，这里不再复核；
+    **终点事件不受规则约束**，永远交给模型判定。已经进过排除表的边不重复判定。
+    """
     inv = deps.record
-    to_judge: list[dict[str, Any]] = []
-    for edge in inv.edges.values():
-        reason = l2.prefilter_reason(edge)
-        if reason:
-            inv.excluded[triple(edge)] = {
-                **edge, "is_relevant": False, "confidence": 0.0, "judged": True, "prefiltered": True,
-                "reason": f"确定性粗筛（{reason}；该模式在六个场景的 GT 里零命中）",
-            }
-        else:
-            to_judge.append(edge)
-
-    batches = l2.make_batches(to_judge, settings.judge_batch())
-    if inv.excluded:
-        deps.log(f"[judge] {len(inv.edges)} 条候选里 {len(inv.excluded)} 条命中系统例行规则，直接判无关（不进 LLM）")
-    deps.log(f"[judge] {len(to_judge)} 条待判定 → {len(batches)} 批（每批 ≤{settings.judge_batch()} 条），"
-             f"并发 {settings.max_concurrency()}")
-
-    metas = inv.steps
+    to_judge = [edge for key, edge in inv.edges.items() if key not in inv.excluded]
+    view = l2.build_view_index(to_judge)
+    header = l2.build_task_header(inv.poi_rows) if settings.task_header_enabled() else ""
     max_calls = settings.max_llm_calls()
     verdict_path = settings.LOG_DIR / f"verdicts-{deps.record.run_id}.jsonl"
-    stats = {"batches": len(batches), "calls": 0, "unjudged_batches": 0}
+
+    v1: dict[str, dict[str, Any]] = {}
+    failures: dict[tuple[str, str, str], str] = {}
+    stats: dict[str, Any] = {
+        "edges": len(to_judge), "calls": 0, "seconds": 0.0,
+        "waves": 0, "wave_details": [], "unjudged_waves": 0,
+    }
+    if header:
+        deps.log(f"[judge] 任务说明 {len(header)} 字符（目标事件 + 时间原点 + 清单口径，所有波共用）")
+    else:
+        deps.log("[judge] 任务说明已关闭（PAGENT_TASK_HEADER=0）：对照实验模式")
+
     t0 = time.time()
+    items_all, group_of = _run_waves(deps, to_judge, header=header, view=view, stats=stats,
+                                     v1=v1, failures=failures, max_calls=max_calls)
 
-    def work(index: int, batch: list[Any]) -> dict[str, Any]:
-        if deps.budget.calls >= max_calls:
-            # 预算熔断：整批显式记成未判定（不静默丢，也不误当排除）
-            return {"confirmed": [], "excluded": [],
-                    "unjudged": [{**edge, "reason": "模型调用上限耗尽，未判定"}
-                                 for _, edges in batch for edge in edges],
-                    "calls": 0, "trace": {"skipped": True}}
-        return judge_batch(deps.model, batch, metas=metas, poi_t0=inv.poi_t0,
-                           min_confidence=deps.min_confidence, budget=deps.budget, log=deps.log)
+    confirmed, excluded, unjudged = l2.decide_verdicts(items_all, v1, deps.min_confidence)
+    for item in unjudged:
+        reason = failures.get(triple(item))
+        if reason:
+            item["reason"] = reason
 
-    with ThreadPoolExecutor(max_workers=settings.max_concurrency()) as pool:
-        futures = {pool.submit(work, i, batch): i for i, batch in enumerate(batches)}
-        for future in as_completed(futures):
-            index = futures[future]
-            try:
-                result = future.result()
-            except Exception as exc:  # noqa: BLE001 - 单批异常不能让整轮崩
-                deps.log(f"[judge] 批 {index + 1} 异常：{type(exc).__name__}: {exc}")
-                stats["unjudged_batches"] += 1
-                continue
-            stats["calls"] += int(result.get("calls") or 0)
-            if result.get("trace", {}).get("skipped"):
-                stats["unjudged_batches"] += 1
-            for edge in result["confirmed"]:
-                inv.confirmed[triple(edge)] = edge
-            for edge in result["excluded"]:
-                inv.excluded[triple(edge)] = edge
-            for edge in result["unjudged"]:
-                inv.unjudged[triple(edge)] = edge
-            l4.log_verdicts(verdict_path, [
-                l4.verdict_log_record(e, batch=index)
-                for e in (result["confirmed"] + result["excluded"] + result["unjudged"])
-            ])
-            if result["unjudged"]:
-                sample = "；".join(f"{e['src']} --{e['syscall']}--> {e['dst']}"
-                                   for e in result["unjudged"][:3])
-                inv.add_gap(f"第 {index + 1} 批有 {len(result['unjudged'])} 条候选边未完成判定（网关失败/输出不可解析）",
-                            f"重跑该批并重新判定：{sample}")
-            trace = result.get("trace") or {}
-            if trace:
-                deps.log(f"[judge] 批 {index + 1}/{len(batches)}（{len(trace.get('step_keys') or [])} 个步骤）："
-                         f"判 {trace.get('judged')} → 确认 {trace.get('confirmed')} / 排除 {trace.get('excluded')} / "
-                         f"未判定 {trace.get('unjudged')}；复核 {trace.get('pass2_targets')}"
-                         f"（救回 {trace.get('recovered')}，争议 {trace.get('contested')}）")
-                trace_event(deps.trace, "judge_batch", batch=index, **trace)
-
+    # ---- 公共尾部：写结论、审计日志、缺口、统计 ----
+    for edge in confirmed:
+        inv.confirmed[triple(edge)] = edge
+    for edge in excluded:
+        inv.excluded[triple(edge)] = edge
+    for edge in unjudged:
+        inv.unjudged[triple(edge)] = edge
+    records = confirmed + excluded + unjudged
+    l2.log_verdicts(verdict_path, [
+        l2.verdict_log_record(edge, wave=int(group_of.get(l2.verdict_id(edge), -1)))
+        for edge in records
+    ])
     stats["seconds"] = round(time.time() - t0, 1)
     deps.log(f"[judge] 判定完成：确认 {len(inv.confirmed)} / 排除 {len(inv.excluded)} / "
              f"未判定 {len(inv.unjudged)}；{stats['calls']} 次调用，{stats['seconds']}s")
-    trace_event(deps.trace, "judge", batches=len(batches), edges=len(to_judge), calls=stats["calls"],
-                seconds=stats["seconds"], confirmed=len(inv.confirmed), excluded=len(inv.excluded),
-                unjudged=len(inv.unjudged))
 
-    # 登记进记录表（内存）：实体 + in-step / supports / refutes
+    if unjudged:
+        sample = "；".join(f"{e['src']} --{e['syscall']}--> {e['dst']}" for e in unjudged[:3])
+        inv.add_gap(f"{len(unjudged)} 条候选边没有完成判定（网关失败/输出不可解析）",
+                    f"重跑并重新判定：{sample}")
+    if stats["unjudged_waves"]:
+        inv.add_gap(f"有 {stats['unjudged_waves']} 波调用失败（已整波重试）",
+                    "看判定日志里失败波次的明细（trace / 判定记录）")
+
+    trace_event(deps.trace, "judge", calls=stats["calls"],
+                seconds=stats["seconds"], confirmed=len(inv.confirmed),
+                excluded=len(inv.excluded), unjudged=len(inv.unjudged), waves=stats["waves"])
     register_conclusions(inv)
     return stats
 
 
-def judge_batch(model: Any, batch: list[tuple[str, list[dict[str, Any]]]], *,
-                metas: dict[str, dict[str, Any]], poi_t0: Any, min_confidence: float,
-                budget: Any, log: Any = print) -> dict[str, Any]:
-    """判一批（可含多个步骤）：第 3 层第一轮 → 第 4 层复核与合并。
+# --------------------------------------------------------------------------- #
+# 逐波路径
+# --------------------------------------------------------------------------- #
 
-    整批第一轮调用失败时二分拆批重试；拆到单条仍失败才记 `unjudged`。
+def _render_wave(l2: Any, items: list[dict[str, Any]], inv: Any, header: str, view: Any,
+                 summary: str, upstream: dict[str, list[dict[str, Any]]], state: Any,
+                 level: int) -> str:
+    """用指定的局部上下文级别渲染一批的文本（级别只压上下文，不抄边）。"""
+    return l2.render(items, inv.process_context, inv.poi_t0, header=header, view=view,
+                     state_summary=summary, upstream=upstream, verdicts=state.by_triple,
+                     context_level=level)
+
+
+def _run_waves(deps: "Deps", to_judge: list[dict[str, Any]], *, header: str, view: Any,
+               stats: dict[str, Any], v1: dict[str, dict[str, Any]],
+               failures: dict[tuple[str, str, str], str], max_calls: int,
+               ) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """逐波判定：波内按条数上限切批、共用同一份冻结上下文并发投递，波间更新调查状态。
+
+    返回（扁平条目表, 编号到波号）。同一波的多个批只共享上下文，不互相等待；整波判完才更新状态，
+    所以第 1 层明细与状态摘要对同一波的所有批是同一份。
     """
-    items = l2.index_items(batch)
-    if not items:
-        return {"confirmed": [], "excluded": [], "unjudged": [], "calls": 0, "trace": {}}
-    listing = l2.render(items, metas, poi_t0)
-    first = l3.judge_first_pass(model, items, listing, budget=budget)
-    if not first.get("ok"):
-        return _split_and_retry(model, batch, metas=metas, poi_t0=poi_t0,
-                                min_confidence=min_confidence, budget=budget, log=log,
-                                error=str(first.get("error") or "未知错误"))
-    result = l4.verify(model, items, first, metas=metas, poi_t0=poi_t0,
-                       min_confidence=min_confidence, budget=budget, log=log)
-    result["calls"] = int(result.get("calls") or 0) + int(first.get("calls") or 0)
-    return result
+    inv = deps.record
+    waves, items_all, wave_of = l2.index_waves(l2.make_waves(to_judge))
+    state = l2.JudgeState()
+    stats["waves"] = len(waves)
+    chunk_size = max(1, settings.judge_batch())
+    cap = settings.call_max_chars()
+    deps.log(f"[judge] {len(to_judge)} 条待判定 → {len(waves)} 波；波内按 {chunk_size} 条切批、"
+             f"共用同一份冻结上下文并发投递；每批重试 {settings.wave_attempts()} 次，"
+             f"并发 {settings.max_concurrency()}")
 
+    def run_chunk(chunk, summary, upstream):
+        """一批：渲染（超长逐级压局部上下文）→ 调模型（整批重试）→ 只收结论。"""
+        level = 2
+        listing = _render_wave(l2, chunk, inv, header, view, summary, upstream, state, level)
+        while len(listing) > cap and level > 0:
+            level -= 1
+            listing = _render_wave(l2, chunk, inv, header, view, summary, upstream, state, level)
+        if len(listing) > cap:
+            deps.log(f"[judge] 一批去掉全部局部上下文后仍为 {len(listing)} 字符（上限 {cap}），照常发送")
+        result: dict[str, Any] | None = None
+        calls = 0
+        for attempt in range(settings.wave_attempts()):
+            if deps.budget.calls >= max_calls:
+                break
+            result = l2.judge_first_pass(deps.model, chunk, listing, budget=deps.budget)
+            calls += 1
+            if result.get("ok"):
+                break
+            deps.log(f"[judge] 一批调用失败（第 {attempt + 1}/{settings.wave_attempts()} 次，"
+                     f"{len(chunk)} 条 / {len(listing)} 字符）：{short(result.get('error'), 80)}")
+        ok = bool(result and result.get("ok"))
+        verdicts = (result or {}).get("verdicts") or {}
+        if ok:
+            failed = [{"triple": triple(item),
+                       "reason": "该批输出缺编号（模型没给出这条边的结论）"}
+                      for item in chunk if item["id"] not in verdicts]
+        else:
+            reason = ("模型调用上限耗尽，未判定" if calls == 0
+                      else f"整批调用失败：{short((result or {}).get('error'), 80)}")
+            failed = [{"triple": triple(item), "reason": reason} for item in chunk]
+        return {"verdicts": verdicts, "failed": failed, "calls": calls, "chars": len(listing),
+                "level": level, "invalid": int((result or {}).get("invalid") or 0), "ok": ok}
 
-def _split_and_retry(model: Any, batch: list[tuple[str, list[dict[str, Any]]]], *, metas: Any,
-                     poi_t0: Any, min_confidence: float, budget: Any, log: Any,
-                     error: str) -> dict[str, Any]:
-    """整批调用失败 → 二分拆批重试（大批判定顶到网关超时/限流时靠这一步兜底）。"""
-    total = sum(len(edges) for _, edges in batch)
-    if total <= 1:
-        only = batch[0][1][0]
-        item = {**only, "id": "E001"}
-        log(f"[judge] 单条边判定失败，记未判定：{error[:80]}")
-        return {"confirmed": [], "excluded": [],
-                "unjudged": [{**item, "reason": f"LLM 调用失败：{short(error, 80)}"}],
-                "calls": 1, "trace": {"failed": 1, "error": short(error, 120)}}
+    with ThreadPoolExecutor(max_workers=settings.max_concurrency()) as pool:
+        for wave in waves:
+            index = int(wave["wave"])
+            items = wave["items"]
+            if deps.budget.calls >= max_calls:
+                stats["unjudged_waves"] += 1
+                for item in items:
+                    failures[triple(item)] = "模型调用上限耗尽，未判定"
+                stats["wave_details"].append({
+                    "wave": index, "dist": int(wave["dist"]), "edges": len(items), "chunks": 0,
+                    "chars": 0, "chars_max": 0, "state_chars": 0, "context_level": 2,
+                    "seconds": 0.0, "confirmed": 0, "excluded": 0, "missing": len(items),
+                    "invalid": 0, "ok": False, "failed_chunks": 0,
+                })
+                continue
 
-    flat = [(key, edge) for key, edges in batch for edge in edges]
-    half = len(flat) // 2
-    left, right = _regroup(flat[:half]), _regroup(flat[half:])
-    log(f"[judge] 一批 {total} 条调用失败（{error[:60]}），拆成 {half}+{len(flat) - half} 重试")
-    out: dict[str, Any] = {"confirmed": [], "excluded": [], "unjudged": [], "calls": 0, "trace": {}}
-    for part in (left, right):
-        sub = judge_batch(model, part, metas=metas, poi_t0=poi_t0, min_confidence=min_confidence,
-                          budget=budget, log=log)
-        for key in ("confirmed", "excluded", "unjudged"):
-            out[key].extend(sub[key])
-        out["calls"] += sub["calls"]
-    return out
+            upstream = {item["id"]: state.upstream(item, inv.process_context,
+                                                   settings.upstream_limit()) for item in items}
+            remaining = [edge for later in waves[index:] for edge in later["items"]]
+            summary = state.build_summary(items, remaining, inv.process_context,
+                                          max_chars=settings.state_max_chars(),
+                                          chain_limit=settings.state_chain_limit())
+            chunks = l2.chunk_wave(items, chunk_size)
+            started = time.time()
+            futures = [pool.submit(run_chunk, chunk, summary, upstream) for chunk in chunks]
+            results: list[dict[str, Any]] = []
+            for future in futures:
+                try:
+                    results.append(future.result())
+                except Exception as exc:  # noqa: BLE001 - 单批异常不能让整波崩
+                    deps.log(f"[judge] 第 {index + 1} 波的一批异常：{type(exc).__name__}: {exc}")
+                    results.append({"verdicts": {}, "failed": [], "calls": 0, "chars": 0,
+                                    "level": 2, "invalid": 0, "ok": False})
 
+            verdicts: dict[str, dict[str, Any]] = {}
+            calls = chars_total = chars_max = invalid = failed_chunks = 0
+            levels: list[int] = []
+            ok_all = True
+            for result in results:
+                calls += int(result.get("calls") or 0)
+                chars_total += int(result.get("chars") or 0)
+                chars_max = max(chars_max, int(result.get("chars") or 0))
+                levels.append(int(result.get("level") or 2))
+                invalid += int(result.get("invalid") or 0)
+                verdicts.update(result.get("verdicts") or {})
+                if not result.get("ok"):
+                    ok_all = False
+                    failed_chunks += 1
+                for failed in result.get("failed") or []:
+                    failures[tuple(failed.get("triple") or ())] = str(failed.get("reason") or "未判定")
+            for item in items:
+                if item["id"] not in verdicts:
+                    failures.setdefault(triple(item), "该波没有给出这条边的结论")
 
-def _regroup(flat: list[tuple[str, dict[str, Any]]]) -> list[tuple[str, list[dict[str, Any]]]]:
-    """把 (步骤键, 边) 列表重新按步骤分组（保持顺序）。"""
-    groups: dict[str, list[dict[str, Any]]] = {}
-    order: list[str] = []
-    for key, edge in flat:
-        if key not in groups:
-            groups[key] = []
-            order.append(key)
-        groups[key].append(edge)
-    return [(key, groups[key]) for key in order]
+            v1.update(verdicts)
+            registered = state.register(items, verdicts, index)
+            stats["calls"] += calls
+            if not ok_all:
+                stats["unjudged_waves"] += 1
+            details = {
+                "wave": index, "dist": int(wave["dist"]), "edges": len(items),
+                "chunks": len(chunks), "chars": chars_total, "chars_max": chars_max,
+                "state_chars": len(summary), "context_level": min(levels) if levels else 2,
+                "seconds": round(time.time() - started, 1),
+                "confirmed": registered["confirmed"], "excluded": registered["excluded"],
+                "missing": registered["missing"], "invalid": invalid, "ok": ok_all,
+                "failed_chunks": failed_chunks,
+            }
+            stats["wave_details"].append(details)
+            deps.log(f"[judge] 第 {index + 1}/{len(waves)} 波（离终点 {details['dist']} 跳）："
+                     f"判 {details['edges']} 条（{details['chunks']} 批）→ 确认 {details['confirmed']} / "
+                     f"排除 {details['excluded']} / 缺失 {details['missing']}；输入合计 {details['chars']} "
+                     f"字符（单批最大 {chars_max}，摘要 {details['state_chars']}），{details['seconds']}s")
+            trace_event(deps.trace, "judge_wave", **details)
+    return items_all, wave_of

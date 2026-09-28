@@ -5,11 +5,11 @@
     python main.py --scenario 6_SQLite_Pipeline_Pollution
     # 六场景批量
     python main.py --all
-    # 只跑确定性层（不调 LLM）：验证 POI / 步骤 / 展开 / 上游候选
+    # 只跑确定性层（不调 LLM）：验证 POI / 进程 / 展开 / 上游候选
     python main.py --scenario 1_Multi_Stage_Data_Exfiltration --dry-run
 
-架构：五层（结构可达 / 压缩与准备 / 语义判别 / 全局校验 / 表达），编排在 `pagent/orchestration/`，
-装配与流程顺序在 `pagent/app.py`。
+架构：三层（结构可达与折叠 / 判定 / 表达；其中判定层是原第 2、3 层合并的结果），编排在
+`pagent/orchestration/`，装配与流程顺序在 `pagent/app.py`。
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ OUTPUT_DIR = settings.REPO_ROOT / "output" / "agent"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="基于溯源图的攻击溯源 agent（五层：展开 → 装批 → 判定 → 复核 → 报告）")
+    parser = argparse.ArgumentParser(description="基于溯源图的攻击溯源 agent（结构可达与折叠 → 判定（上下文 → 逐波判定 → 定结论）→ 报告）")
     parser.add_argument("--scenario", help="场景名（见 provenance-agent/config/scenarios.json）")
     parser.add_argument("--all", action="store_true", help="跑全部场景")
     parser.add_argument("--run-id", default="", help="运行 id（默认按时间生成；不复用）")
@@ -40,6 +40,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out-dir", default=str(OUTPUT_DIR),
                         help="报告输出目录（仅真实运行；--dry-run 一律写 tmp/provenance-agent/dry-run/）")
     return parser.parse_args(argv)
+
+
+def out_dir_of(args: argparse.Namespace) -> Path:
+    """这一次运行该写哪个目录：干跑一律写 `tmp/provenance-agent/dry-run/`，真实运行写 `--out-dir`。
+
+    单场景报告与多场景汇总都走这一个函数，避免“报告分类了、汇总没分类”这类不一致。
+    """
+    return (settings.WORK_DIR / "dry-run") if args.dry_run else Path(args.out_dir)
 
 
 def run_one(scenario_name: str, args: argparse.Namespace) -> dict:
@@ -58,7 +66,7 @@ def run_one(scenario_name: str, args: argparse.Namespace) -> dict:
         report = result["report"]
         stats = result["stats"]
 
-        out_dir = (settings.WORK_DIR / "dry-run") if args.dry_run else Path(args.out_dir)
+        out_dir = out_dir_of(args)
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / f"{scenario.name}.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -93,7 +101,8 @@ def main(argv: list[str] | None = None) -> int:
                  "stop_reason": r.get("stop_reason"), "stats": r.get("stats")} for r in reports
             ]
         }
-        path = Path(args.out_dir) / "SUMMARY.json"
+        path = out_dir_of(args) / "SUMMARY.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"汇总：{path}")
     return 0

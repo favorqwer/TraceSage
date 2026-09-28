@@ -1,4 +1,4 @@
-"""起点定位（编排）：核对终点事件、算实例数与时间范围、定位起始步骤。"""
+"""起点定位（编排）：核对终点事件、算实例数与时间范围。"""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ ORDER BY e.starttime
 
 
 def intake(deps: "Deps") -> dict[str, Any]:
-    """POI 命中校验 + 时间范围现算（实例数/时间范围不写进配置）。步骤键在闭包结束后才生成。"""
+    """POI 命中校验 + 时间范围现算（实例数/时间范围不写进配置）。"""
     poi = deps.scenario.poi.as_dict()
     cypher = _POI_EDGES_CYPHER.format(rel=poi["rel"], label="File" if poi["kind"] == "file" else "Network",
                                       key_name="file_id" if poi["kind"] == "file" else "network_id")
@@ -39,7 +39,7 @@ def intake(deps: "Deps") -> dict[str, Any]:
     inv.poi_instances = len(rows)
     inv.poi_t0 = t_first
     inv.poi_t1 = t_last
-    # 终点事件的原文（闭包引擎的种子；步骤键由闭包结束后按"最早被收进来的边"生成）
+    # 终点事件的原文（闭包引擎的种子）
     inv.poi_rows = [dict(row, rel=poi["rel"]) for row in rows]
     inv.add_hypothesis("POI", f"POI: {owner} {poi['rel']} {poi['syscall']} {poi['key']}", status="confirmed")
 

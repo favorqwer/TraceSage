@@ -29,6 +29,9 @@
 处理顺序（同一份日志换个顺序可能跑出不同结果），破坏"可复现"这条不变式。跑第一遍就是为了把名单
 定死：判据只看静态数据（主干名单 + 各进程自己的边），与遍历顺序无关。
 
+两遍共用同一个取数来源，所以第一遍结束时会把来源侧的计数器取出并清零（`take_stats()`）：两遍的行数
+各自记自己的，不相加（第一遍的数落在 `SiblingGate.stats()` 的 `source_pass1` 里）。
+
 ## 判据的边界（刻意选的）
 
 - 写-读配对**不看时间先后**：只问"这两个进程之间有没有过这条通道上的来往"。加上时间条件更严，
@@ -78,6 +81,7 @@ class SiblingGate:
     written_objects: frozenset[str]      # 主干进程写过的对象
     read_objects: frozenset[str]         # 主干进程读过的对象
     spine_events: int = 0                # 第一遍收进来的事件数（报告用）
+    source_pass1: dict[str, Any] = field(default_factory=dict)   # 第一遍的来源侧计数（单独记，不与第二遍相加）
     _cache: dict[str, bool] = field(default_factory=dict, repr=False)
     checked: int = 0                     # 查过几个非主干的子进程
     linked: int = 0                      # 其中判为"有来往"的
@@ -108,7 +112,8 @@ class SiblingGate:
     def stats(self) -> dict[str, Any]:
         return {"heads": len(self.heads), "written_objects": len(self.written_objects),
                 "read_objects": len(self.read_objects), "spine_events": self.spine_events,
-                "checked": self.checked, "linked": self.linked}
+                "checked": self.checked, "linked": self.linked,
+                "source_pass1": dict(self.source_pass1)}
 
 
 def build_gate(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
@@ -117,6 +122,9 @@ def build_gate(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
     if log:
         log("[closure] 第一遍：定主干（不带子进程；这一遍的结果只用来做参照，不进报告）")
     spine = run_closure(source, seeds, poi_t0=poi_t0, log=log, child_allowed=_no_children)
+    # 来源计数器取出并清零：第一遍的数落在这里，第二遍的数就是来源自己的 stats()
+    # （不然两遍会加在一起，“取回了多少行”会变成一个既不是第一遍也不是第二遍的数）
+    pass1_source = source.take_stats()
     # 主干 = 第一遍里被展开过的进程 + 它们的直接子进程。
     # 不能只拿"被展开过的"：那会把"同一个脚本跑过的命令"这一层也拒在门外；
     # 也不能拿"闭包里出现过的全部进程号"：那只在派生边上出现、自己没被展开的进程就是这里要算的
@@ -129,7 +137,8 @@ def build_gate(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
         for rel, key in _object_edges(source, pid):
             (written if rel in _WRITE_RELS else read).add(key)
     gate = SiblingGate(source=source, heads=frozenset(heads), written_objects=frozenset(written),
-                       read_objects=frozenset(read), spine_events=len(spine["events"]))
+                       read_objects=frozenset(read), spine_events=len(spine["events"]),
+                       source_pass1=pass1_source)
     if log:
         log(f"[closure] 主干（第一遍，不带子进程）：进程 {len(heads)} 个 / 事件 {gate.spine_events} 条 / "
             f"主干写过 {len(written)} 个对象、读过 {len(read)} 个对象")
@@ -142,10 +151,11 @@ def run_gated_closure(source: GraphSource, seeds: list[Event], *, poi_t0: int = 
     gate = build_gate(source, seeds, poi_t0=poi_t0, log=log)
     if log:
         log("[closure] 第二遍：带子进程把关（主干里无条件收，第二层起要有写-读配对）")
-    result = run_closure(source, seeds, poi_t0=poi_t0, log=log, child_allowed=gate.allows)
+    result = run_closure(source, seeds, poi_t0=poi_t0, log=log, child_allowed=gate.allows,
+                         with_events=False)      # 第二遍只吃边行，不再留着事件集合
     result["gate"] = gate.stats()
     if log:
         stats = result["stats"]
         log(f"[closure] 子进程把关：查过 {gate.checked} 个非主干的子进程，放行 {gate.linked} 个，"
-            f"挡下 {stats['dropped'].get('sibling_not_linked', 0)} 条派生边")
+            f"挡下 {stats.get('gate_blocked', 0)} 条派生边")
     return result

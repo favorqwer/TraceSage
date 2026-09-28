@@ -22,7 +22,7 @@ from typing import Any, Optional
 from ...core import edge_rules
 from . import snapshot as snap
 from .closure import Event, rule_code_of
-from .steps import cache_process_info, prefetch_process_info
+from .processes import cache_process_info, prefetch_process_info
 
 # 连接建立类操作（connect / bind）不传递内容：只把两端接起来，不往顶点里写数据，
 # 因此不算"往这个顶点交付了内容"。子进程把关（`siblings.py`）问"有没有写-读配对"时用同一份表。
@@ -137,7 +137,7 @@ class DbSource:
         self.database = graph.database
         self.queries = 0
         self.rows = 0
-        self.shared_not_expanded: dict[str, int] = {}
+        self.shared_not_expanded: dict[str, int] = {}   # 被跳过的共享/虚拟通道顶点展开次数（不是边数）
 
     def _run(self, cypher: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         out = self.graph.run(cypher, params)
@@ -193,6 +193,14 @@ class DbSource:
         return {"source": "db", "queries": self.queries, "rows": self.rows,
                 "shared_not_expanded": dict(sorted(self.shared_not_expanded.items()))}
 
+    def take_stats(self) -> dict[str, Any]:
+        """取出计数并清零（按遍数分开记，见 `closure.py` 的"计数口径"）。"""
+        out = self.stats()
+        self.queries = 0
+        self.rows = 0
+        self.shared_not_expanded = {}
+        return out
+
 
 # --------------------------------------------------------------------------- #
 # 顶点-时间索引快照来源（正式流程唯一取数方式）
@@ -223,7 +231,7 @@ class SnapshotReader:
         self.queries = 0
         self.rows = 0
         self.skipped = 0            # 因已收进闭包而跳过的记录数（含在 rows 里，只影响快慢）
-        self.shared_not_expanded: dict[str, int] = {}   # 共享 / 虚拟通道：只收边、不展开的次数
+        self.shared_not_expanded: dict[str, int] = {}   # 被跳过的共享/虚拟通道顶点展开次数（不是边数）
         self._adj = (self.dir / "adj.bin").open("rb")
 
     # --- 内部 ---
@@ -355,6 +363,14 @@ class SnapshotReader:
                 "skipped_already_included": self.skipped,
                 "shared_not_expanded": dict(sorted(self.shared_not_expanded.items())),
                 "index_dir": str(self.dir), "index_edges": self.meta.get("edges")}
+
+    def take_stats(self) -> dict[str, Any]:
+        """取出计数并清零（按遍数分开记，见 `closure.py` 的"计数口径"）。"""
+        out = self.stats()
+        self.rows = 0
+        self.skipped = 0
+        self.shared_not_expanded = {}
+        return out
 
 
 def open_source(graph: Any, *, log: Any = print) -> SnapshotReader:

@@ -1,7 +1,7 @@
 """规则表加载：从 `pagent/rules/` 读 JSON 文件。
 
 **按原样返回**（不做改写）；结果在进程内缓存。规则内容与代码分开，加规则不用改流程代码；
-但粗筛类规则新增时仍要按口径核对（逐条核对六个场景的人工标注，见 `provenance-agent/README.md`）。
+但新增规则（系统例行文件、伪边）时要按口径核对（逐条核对六个场景的人工标注，见 `provenance-agent/README.md`）。
 """
 
 from __future__ import annotations

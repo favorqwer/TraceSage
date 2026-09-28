@@ -61,7 +61,7 @@ TraceSage/
 │       ├── config.py         # 环境变量/.env 配置（横切）
 │       └── reporting.py      # 进度与跳过行上报（横切）
 │
-├── provenance-agent/         # 溯源调查 agent（Python；五层架构）
+├── provenance-agent/         # 溯源调查 agent（Python；分层：结构可达 / 判定 / 表达）
 │   ├── main.py               # 入口：命令行 + 文件落盘
 │   ├── config/scenarios.json # POI 唯一来源（库名 + POI 签名）
 │   ├── tests/                # dry_run.py（整链路干跑）+ unit/（每层单测）+ fixtures/
@@ -69,15 +69,13 @@ TraceSage/
 │       ├── app.py            # 装配：依赖容器 + 流程顺序
 │       ├── contracts.py      # 层间数据结构与共享小助手
 │       ├── core/             # 横切：settings / scenarios / db / llm / record / prompts / rules / trace
-│       ├── prompts/          # 提示词文本（第一轮、复核）
-│       ├── rules/            # 规则表（粗筛 / 伪边 / 共享通道 / 相位关键词）
-│       ├── orchestration/    # 编排：intake / expand / judging（含二分拆批重试）/ register
-│       └── layers/           # 五层各占一个包（只允许下游读上游；包内按用途分文件）
-│           ├── l1_reach/       # 第 1 层 结构可达：closure / siblings / sources / snapshot / steps
-│           ├── l2_prepare/     # 第 2 层 压缩与准备：fold / summary / prefilter / batching
-│           ├── l3_semantic/    # 第 3 层 语义判别：first_pass（模型调用）
-│           ├── l4_verify/      # 第 4 层 全局校验：select / merge（模型调用）
-│           └── l5_express/     # 第 5 层 表达：report / phases / narrative / evidence
+│       ├── prompts/          # 提示词文本（逐波判定）
+│       ├── rules/            # 规则表（系统例行文件 / 伪边 / 共享通道 / 相位关键词）
+│       ├── orchestration/    # 编排：intake / expand / judging（含整批重试）/ register
+│       └── layers/           # 各层各占一个包（只允许下游读上游；包内按用途分文件）
+│           ├── l1_reach/       # 第 1 层 结构可达与折叠：closure / fold / siblings / sources / snapshot / processes
+│           ├── l2_judge/       # 判定层（原第 2、3 层合并）：context / batching / waves / first_pass / decide（后两项调模型）
+│           └── l3_express/     # 第 3 层 表达：report / phases / narrative / evidence
 │
 ├── progql-local/             # 调查引擎（Java）
 │   ├── src/main/java/        # gql（GQL 求值）/ main（入口）/ model / neo4j / util，
@@ -352,16 +350,16 @@ CLONE_THREAD 过滤    <- clone 的 flags=N(A|B|…)
 
 在 `sysdig-parser` 导入的图上做**反向追踪**的 agent。设计决策与架构见 `provenance-agent/README.md`；本节只记录不可变口径。
 
-- **架构**：确定性展开（纯代码，不调模型）→ **一次性并行判定**（第一轮 + 复核，模型调用只在这里）→ 代码报告。五层各占 `pagent/layers/` 下一个包，编排在 `pagent/orchestration/`。没有调度用的 LLM，没有状态机框架。
+- **架构**：确定性展开（纯代码，不调模型）→ **逐波判定**（模型调用只在这里）→ 代码定结论与报告。各层各占 `pagent/layers/` 下一个包（`l1_reach` / `l2_judge` / `l3_express`），编排在 `pagent/orchestration/`。没有调度用的 LLM，没有状态机框架。
 - **任务范围**：只从 POI 往回走（反向追踪）；不引入"往前看"查询、不做多主机、不引入 `host_id`。
 - **POI 唯一来源**：`provenance-agent/config/scenarios.json`（库名 + POI 签名；实例数/时间范围由 intake 现算，不写进配置）。
   `input/sysdig/*.query`（含引擎方法描述）**不得进入 agent 的任何可见上下文**。
-- **表示层**：一个步骤 = 一个进程实例（**只用于判定时的上下文渲染与分组，不参与可达性计算**）。边归属规则：进程写文件/网络归源进程，文件/网络被进程读写归目标进程，进程派生归子进程；每条边恰好归属一个进程。
+- **表示层**：一条边归一个进程（**进程身份摘要只用于判定时的上下文渲染与分组，不参与可达性计算**）。边归属规则：进程写文件/网络归源进程，文件/网络被进程读写归目标进程，进程派生归子进程；每条边恰好归属一个进程。
 - **只读**：`pagent/core/db.py:ReadOnlyGraph` 是访问 Neo4j 的唯一入口（`execute_read` + 写关键字黑名单 + 禁多语句 + 不截断返回 + 查询审计日志）。
 - **反向闭包（第 1 层，唯一引擎）**：事件级、时间门限、单调推进（`pagent/layers/l1_reach/closure.py`）。三条因果规则：同进程（先发生的可能影响后发生的）、同顶点交付（写入侧 → 读取侧；**只对能承载内容的通道生效**：终端以外的设备节点、内核现生成的伪文件、系统运行目录及其中的套接字只收边、不展开，判据表 `pagent/rules/shared_channels.json`）、派生（父进程 → 子进程）。**派生那条带子进程把关**（`pagent/layers/l1_reach/siblings.py`）：先用“不带子进程”跑一遍定出主干（被展开过的进程 + 它们的直接子进程），主干里的进程无条件带走子进程，第二层起要“和主干有过一次写-读配对”（读的东西主干写过，或写的东西主干读过；共享/虚拟通道与 connect/bind 不算），因此正式流程是两遍。门限只减不增：每个顶点只完整展开一次，门限变高时只补取新增区间（实测六场补取占展开总数 0~7.5%；扫到的记录数是闭包的 1.2~1.3 倍，其中已收进闭包的边在来源侧直接跳过、真正进判定的行数约等于闭包大小）。
 - **展开侧不设任何条数上限**：待考察顶点数、收进闭包的边数、查询返回行数全部不设限；闭包的终止条件是“待考察清单耗尽”。任何条数上限都是按数据分布随机丢边——实测子进程上限 8 让场景 4 的标注覆盖从 100% 掉到 74.6%；判定漏抄 id / 调用失败 → 进 `unjudged`（**不得当成排除**）并记缺口。
-- **报告口径**：`output/agent/<场景>.json` 的 `edges[]` 为 `(src, syscall, dst)` + `confidence` + `event_id`（**没有 `mitre_technique`**）；实体内容口径与 GT 一致（`Process=coalesce(exepath,name)`、`File=path`、`Network=lip:lport->rip:rport`）。候选集（交给模型逐条判断的那一堆）在第 2 层折叠时还会去掉两类边：内核按进程现生成的伪文件（`/proc/<进程号>/`、`/proc/self/` 下）、写进共享 / 虚拟通道的边（判据表 `pagent/rules/candidate_drops.json`；第 1 层照收这些边，只是不进候选集；读取共享通道的边不去掉）。
-- **运行态产物**：`tmp/provenance-agent/`（查询日志 `queries-*.jsonl`、逐条判定 `verdicts-*.jsonl`、原始输出度量 `llm-*.jsonl`、轨迹 `trace-*.jsonl`、调查记录 `state/record-*.json`、第 1 层测量结果 `l1-ablation/`、顶点-时间索引 `l1-index/`），不进 `output/`。
+- **报告口径**：`output/agent/<场景>.json` 的 `edges[]` 为 `(src, syscall, dst)` + `confidence`（档位）+ `confidence_value`（数值）+ `event_id`（**没有 `mitre_technique`**）；**判定只有一轮**：相关且置信度达到阈值（`--min-confidence`，默认 0.5）→ 确认，否则排除；模型没给结论 → 未判定（不等于排除）。实体内容口径与 GT 一致（`Process=coalesce(exepath,name)`、`File=path`、`Network=lip:lport->rip:rport`）。**五条结构式规则的判定都在第 1 层遍历期取边时完成**（同一个规则模块 `core/edge_rules.py`），后果只有一档：命中就不收这条边（两端也不会被推进待考察清单），逐类计数进报告里的 `stats.expand.dropped`（`r1` / `r2` / `prefilter` / `kernel_pid_file` / `shared_channel_write`）；**子进程把关挡下的派生边不属于规则剔除**，单独记 `stats.expand.gate_blocked`。**终点事件不受规则约束**，永远交给模型判定（展开结束的日志打印「规则残留 N 条（终点事件除外，应为 0）」）。**候选表 = 闭包输出折叠之后的内容三元组**（第 1 层尾部的 `fold.py` 只合并不删边），也就是交给模型的那一堆、召回上限的口径。共享 / 虚拟通道那一条是**顶点的判定**（判据表 `shared_channels.json`）：命中的文件顶点只收边、不往回找写入者，也不算写-读配对。判定层**逐波推进**：按「离终点最少几跳」把所有候选边分波（一跳一波）；波内按 70 条（`PAGENT_JUDGE_BATCH`）切批，**同一波的所有批共用同一份冻结的双层滚动上下文、并发投递**，整波判完才更新状态。双层上下文：第 1 层「上游交接明细」列出这条边的上层顶点（第 1 层折叠留下的 `via_kind` / `via_key`）上**已经判过**的边及其结论（`JudgeState.upstream`，每条边最多 `PAGENT_UPSTREAM_LIMIT` 条，默认 3）；第 2 层「调查状态摘要」由纯代码逐波更新，写已确认链片段、本波工作面、相关顶点状态与计数（上限 `PAGENT_STATE_MAX_CHARS`，默认 2500）。每次调用渲染顺序：任务说明（目标事件 = 配置里的 POI 签名、实例数与时间原点、调查方向、清单口径；**只含任务定义**，不含标准答案、`.query` 与场景特化判据）→ 调查状态摘要 → 进程身份表 → 本波边（每条带上游明细与「同一对象接触者」，已判过的接触者带结论）；单次文本超过 `PAGENT_CALL_MAX_CHARS`（默认 80000）时逐级压局部上下文（先接触者、后上游明细），**不丢边**。编号在整次调查里全局唯一。报告 `stats.judge` 里记 `waves` / `wave_details`（每波条数、批数、输入字符、确认/排除/缺失）等可审计计数。
+- **运行态产物**：`tmp/provenance-agent/`（查询日志 `queries-*.jsonl`、逐条判定 `verdicts-*.jsonl`、原始输出度量 `llm-*.jsonl`、轨迹 `trace-*.jsonl`、调查记录 `state/record-*.json`、第 1 层测量结果 `l1-ablation/`、第 2 层重复运行结果 `l2-runs/`（当前方案每场景重复多轮、含评分）、顶点-时间索引 `l1-index/`），不进 `output/`。
 - **评分**：`tools/eval_agent_attack_path.py`，与 `tools/evaluate_gt.py` 同口径。
 ## 10. 场景测试标准流程（provenance-agent）
 

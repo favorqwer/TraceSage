@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 ENTITY_STATUSES = ("unexplored", "tracing", "confirmed", "excluded")
-RELS = ("supports", "refutes", "derived-from", "in-step")
+RELS = ("supports", "refutes", "derived-from")
 
 
 def entity_key(etype: str, content: str) -> str:
@@ -29,8 +29,6 @@ def entity_key(etype: str, content: str) -> str:
         return f"file:{content}"
     if e == "network":
         return f"net:{content}"
-    if e == "step":
-        return f"step:{content}"
     return f"{e}:{content}"
 
 
@@ -48,15 +46,15 @@ class Investigation:
     run_id: str
     scenario: str
     database: str = ""
-    poi_step: str = ""
+    poi_process: str = ""
     poi_owner: str = ""
     poi_instances: int = 0
     poi_t0: int = 0
     poi_t1: int = 0
     # 终点事件的原文（闭包引擎的种子；每行含进程、另一端、操作名、字节数、起止时刻）
     poi_rows: list[dict[str, Any]] = field(default_factory=list)
-    # 步骤元信息：step_key -> {"summary": {...}, "group_cmds": [...]}
-    steps: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # 进程身份摘要：进程标识 -> {"owner": ..., "origin": {...}, "t0": ...}
+    process_context: dict[str, dict[str, Any]] = field(default_factory=dict)
     # 折叠后的边（三元组 -> 记录），供判定与报告使用
     edges: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
     confirmed: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
@@ -106,25 +104,18 @@ class Investigation:
             self.links.append(item)
 
     def register_edges(self, records: list[dict[str, Any]], *, relevant: bool,
-                       step_key: str = "", hypothesis_key: str = "") -> None:
-        """把一批判定结论登记进记录表：实体 + `in-step` / `supports` / `refutes`。"""
-        step_node = entity_key("Step", step_key) if step_key else ""
-        if step_key:
-            self.add_entity("Step", step_key, status="tracing")
+                       hypothesis_key: str = "") -> None:
+        """把一批判定结论登记进记录表：实体 + supports / refutes。"""
         for edge in records:
             src_key = entity_key(edge.get("src_label") or _guess_type(edge["src"]), edge["src"])
             dst_key = entity_key(edge.get("dst_label") or _guess_type(edge["dst"]), edge["dst"])
-            note = f"{edge['src']} --{edge['syscall']}--> {edge['dst']}"
             self.add_entity(edge.get("src_label") or _guess_type(edge["src"]), edge["src"],
                             status="confirmed" if relevant else "excluded")
             self.add_entity(edge.get("dst_label") or _guess_type(edge["dst"]), edge["dst"],
                             status="confirmed" if relevant else "excluded")
-            if relevant and step_key:
-                for key in (src_key, dst_key):
-                    self.link(step_node, "in-step", key, note=note)
             if hypothesis_key:
                 for key in (src_key, dst_key) if relevant else (src_key,):
-                    self.link(key, "supports" if relevant else "refutes", hypothesis_key, note=note)
+                    self.link(key, "supports" if relevant else "refutes", hypothesis_key)
 
     # --- 收尾 ---
     def unclosed(self) -> list[dict[str, Any]]:
@@ -159,7 +150,7 @@ class Investigation:
             return None
         payload = {
             "run_id": self.run_id, "scenario": self.scenario, "database": self.database,
-            "poi_step": self.poi_step,
+            "poi_process": self.poi_process,
             "nodes": list(self.entities.values()) + self.hypotheses + self.gaps,
             "edges": [{"src": s, "rel": r, "dst": d, "note": n} for s, r, d, n in self.links],
         }

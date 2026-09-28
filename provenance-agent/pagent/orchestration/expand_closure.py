@@ -1,13 +1,13 @@
-"""展开（编排，事件级闭包引擎）：终点事件 → 反向闭包 → 边行 → 步骤上下文 + 折叠边。
+"""展开（编排，事件级闭包引擎）：终点事件 → 反向闭包 → 边行 → 折叠边 + 进程上下文。
 
-第 1 层给出闭包的**事件集合**（每条边一条记录，带来源进程），本模块负责把它变成下游要的两种东西：
+第 1 层给出闭包的**事件集合**（每条边一条记录，带来源进程），本模块把它接给两个下游：
 
-- `record.steps`：步骤元信息（进程实例、摘要、同管道组的命令行）——只用于判定时的上下文渲染；
-- `record.edges`：折叠边（内容三元组 → 记录），判定与报告的单位。
+- `record.edges`：折叠边（内容三元组 → 记录），判定与报告的单位 —— 第 1 层尾部的折叠；
+- `record.process_context`：进程身份摘要（命令行、来源、活动时间范围）—— 判定层的上下文准备，
+  必须在事件行还在手上时调用，只用于判定时的渲染与报告的阶段划分。
 
-步骤键（`S:<进程>:<该进程最早一条被收进来的边的时刻>`）只用于分组与渲染，**不参与可达性计算**：
-边的归属由图上的归属规则唯一决定（进程写文件/网络归源进程，文件/网络被进程读写归目标进程，
-进程派生归子进程），不受展开顺序影响。
+判定上下文的分组单位就是**进程**（边的归属由图上的归属规则唯一决定：进程写文件/网络归源进程，
+文件/网络被进程读写归目标进程，进程派生归子进程），没有“步骤 / 实例”这一层，不受展开顺序影响。
 """
 
 from __future__ import annotations
@@ -15,15 +15,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ..contracts import triple
+from ..core import edge_rules, settings
 from ..core.trace import trace_event
 from ..layers import l1_reach as l1
-from ..layers import l2_prepare as l2
+from ..layers import l2_judge as l2
 
 if TYPE_CHECKING:
     from ..app import Deps
-
-_CHANNEL_PREFIXES = ("pipe:[", "unix:[")
-
 
 def seed_events(deps: "Deps") -> list[l1.Event]:
     """把 intake 命中的终点事件转成闭包种子（终点事件本身永远收进闭包，不受规则影响）。"""
@@ -40,86 +38,30 @@ def seed_events(deps: "Deps") -> list[l1.Event]:
     return seeds
 
 
-def _steps_from_rows(rows: list[dict[str, Any]], graph: Any) -> tuple[dict[str, Any], dict[str, list[dict]]]:
-    """按来源进程实例分组成步骤，并给每个步骤生成摘要与同管道组的命令行。
-
-    `rows` 已经按（开始时刻, 事件编号）排好序（闭包引擎排的），分组是顺序遍历，
-    因此每个步骤的边清单天然有序，这里不再逐个步骤重排一遍。
-    """
-    by_step: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
-        by_step.setdefault(str(row["step_key"]), []).append(row)
-
-    metas: dict[str, dict[str, Any]] = {}
-    for step_key, step_rows in by_step.items():
-        step = l1.Step(key=step_key, process_id=_pid_of(step_key), owner=str(step_rows[0]["owner"]),
-                       t0=int(step_rows[0]["starttime"]),
-                       t1=max(int(r.get("endtime") or r["starttime"]) for r in step_rows), rows=step_rows)
-        metas[step_key] = {"step_key": step_key, "owner": step.owner, "group": [step_key],
-                           "summary": l2.summarize(graph, step), "group_cmds": []}
-
-    # 同管道/unix 顶点上时间重叠的步骤并成一组（渲染上下文用；候选集不受影响）
-    channels: dict[str, set[str]] = {}
-    for step_key, step_rows in by_step.items():
-        for row in step_rows:
-            if row["rel"] in ("p2f", "f2p") and str(row["other"]).startswith(_CHANNEL_PREFIXES):
-                channels.setdefault(str(row["other"]), set()).add(step_key)
-    groups = _union_groups(channels)
-    for members in groups:
-        if len(members) < 2:
-            continue
-        cmds: list[str] = []
-        for key in members:
-            summary = (metas.get(key) or {}).get("summary") or {}
-            cmd = f"{summary.get('owner') or ''} {summary.get('owner_args') or ''}".strip()
-            if cmd and cmd not in cmds:
-                cmds.append(cmd)
-        for key in members:
-            metas[key]["group"] = sorted(members)
-            metas[key]["group_cmds"] = cmds
-    return metas, by_step
+def _rule_hit(edge: dict[str, Any]) -> bool:
+    """候选边命中五条规则里的哪一条；未命中返回 False。"""
+    if edge_rules.rule_of(edge["src"], edge["syscall"], edge["dst"],
+                          str(edge.get("src_label") or ""))[0]:
+        return True
+    rel = str((edge.get("rels") or [""])[0])
+    return bool(edge_rules.candidate_drop_code({**edge, "rel": rel}))
 
 
-def _pid_of(step_key: str) -> str:
-    try:
-        return l1.parse_step_key(step_key)[0]
-    except Exception:  # noqa: BLE001 - 键格式异常不该让展开失败
-        return ""
-
-
-def _union_groups(channels: dict[str, set[str]]) -> list[set[str]]:
-    """按共享顶点把步骤并成连通组（确定性：按步骤键排序后逐个合并）。"""
-    parent: dict[str, str] = {}
-
-    def find(x: str) -> str:
-        while parent.get(x, x) != x:
-            parent[x] = parent.get(parent[x], parent[x])
-            x = parent[x]
-        return x
-
-    def union(a: str, b: str) -> None:
-        ra, rb = find(a), find(b)
-        if ra != rb:
-            parent[max(ra, rb)] = min(ra, rb)
-
-    for members in channels.values():
-        ordered = sorted(members)
-        for member in ordered:
-            parent.setdefault(member, member)
-        for member in ordered[1:]:
-            union(ordered[0], member)
-    out: dict[str, set[str]] = {}
-    for member in parent:
-        out.setdefault(find(member), set()).add(member)
-    return [out[key] for key in sorted(out)]
+def _poi_triple(row: dict[str, Any]) -> tuple[str, str, str]:
+    """终点事件的内容三元组（方向由 POI 的关系类型唯一决定）——不算「规则残留」的豁免名单。"""
+    owner = str(row.get("process_content") or "")
+    other = str(row.get("other") or "")
+    syscall = str(row.get("syscall") or "")
+    return (other, syscall, owner) if str(row.get("rel") or "") in ("f2p", "n2p") else (owner, syscall, other)
 
 
 def expand_closure(deps: "Deps") -> dict[str, Any]:
     """跑一次闭包展开，把结果写进 `record`。
 
     展开分两遍（见 `l1_reach/siblings.py`）：第一遍定主干名单，第二遍带子进程把关。
-    两遍都读同一个本地索引，中间没有任何东西会改它，所以两遍看到的是同一份数据；
-    `source.stats()` 里的计数是两遍合计。
+    两遍都读同一个本地索引，中间没有任何东西会改它，所以两遍看到的是同一份数据。
+    来源侧的计数按遍数分开：`source.stats()` 是第二遍的（第一遍的在把关统计的 `source_pass1` 里），
+    两边不相加。
     """
     inv = deps.record
     source = l1.open_source(deps.graph, log=deps.log)
@@ -133,34 +75,56 @@ def expand_closure(deps: "Deps") -> dict[str, Any]:
     finally:
         source.close()
 
-    metas, by_step = _steps_from_rows(rows, deps.graph)
-    inv.steps.update(metas)
+    metas = l2.build_process_context(deps.graph, rows)
+    inv.process_context.update(metas)
+    if settings.command_table_enabled():
+        tally: dict[str, int] = {}
+        for meta in metas.values():
+            command = meta.get("command") or {}
+            key = str(command.get("source") or "?")
+            if key == "none":
+                key = f"none:{command.get('reason')}"
+            tally[key] = tally.get(key, 0) + 1
+        deps.log(f"[commands] 命令表（开关打开）：{dict(sorted(tally.items()))}")
+        trace_event(deps.trace, "commands", **{k: v for k, v in sorted(tally.items())})
     if inv.poi_rows:
         poi_pid = str(inv.poi_rows[0].get("process_id") or "")
-        for key, meta in metas.items():
-            if _pid_of(key) == poi_pid:
-                inv.poi_step = key
-                break
+        if poi_pid in metas:
+            inv.poi_process = poi_pid
 
-    folded = l2.fold(rows)
+    folded = l1.fold(rows)
     for edge in folded.edges:
         record = edge.to_dict(with_event_ids=True)
-        members = sorted(record.get("member_steps") or [])
+        # 上游顶点统一成与边行同一口径的显示内容：进程用可执行路径（空则进程名），
+        # 文件 / 网络端点用路径或标识串本身（两者本来就等于内容）。
+        via = str(record.get("via") or "")
+        if via.startswith("Process "):
+            pid = via.split(" ", 1)[1]
+            info = l1.process_info(deps.graph, pid)
+            shown = str(info.get("exepath") or info.get("name") or "") if info else ""
+            record["via"] = f"Process {shown or pid}"
+        members = sorted(record.get("member_processes") or [])
         if members:
-            record["step_key"] = min(members, key=lambda k: (int((metas.get(k) or {}).get("summary", {}).get("t0") or 0), k))
+            record["process_id"] = min(members, key=lambda k: (int((metas.get(k) or {}).get("t0") or 0), k))
         inv.edges[triple(record)] = record
+
+    # 五条规则都在取边时判完（命中就不收边）：这里数一遍候选表里有没有漏进来的命中
+    # （**终点事件不受规则约束**，不计）。为 0 才说明那条口径成立。
+    poi_triples = {_poi_triple(row) for row in inv.poi_rows}
+    residue = sum(1 for key, edge in inv.edges.items() if key not in poi_triples and _rule_hit(edge))
 
     deps.log(f"[expand] 闭包完成：{stats['rounds']} 轮 / 展开顶点 {stats['process_expands']} 个进程 + "
              f"{stats['object_expands']} 个文件或端点 / 收边 {stats['events_included']} 条 → "
-             f"步骤 {len(inv.steps)} 个 / 折叠边 {len(inv.edges)} 条"
-             f"（另剔除候选集层面 {sum(folded.dropped_candidate.values())} 条）；"
-             f"规则剔除 {stats['dropped']}；来源（两遍合计）{stats['source']}")
-    trace_event(deps.trace, "expand_closure", rounds=stats["rounds"], steps=len(inv.steps),
+             f"进程 {len(inv.process_context)} 个 / 折叠边 {len(inv.edges)} 条；"
+             f"规则残留 {residue} 条（终点事件除外，应为 0）；"
+             f"规则剔除 {stats['dropped']} / 把关挡下 {stats.get('gate_blocked', 0)}；"
+             f"来源（第二遍）{stats['source']}；主干（第一遍）{stats.get('gate')}")
+    trace_event(deps.trace, "expand_closure", rounds=stats["rounds"], processes=len(inv.process_context),
                 edges=len(inv.edges), events=stats["events_included"],
                 rows_fetched=stats["rows_fetched"], dropped=stats["dropped"], gate=stats.get("gate"),
                 queries=stats["source"].get("queries"), source=stats["source"].get("source"))
     return {"rounds": stats["rounds"], "stop_reason": "frontier_exhausted",
             "fold": {"raw_instances": folded.raw_instances, "collapsed_triples": len(inv.edges),
-                     "dropped_r1": folded.dropped_r1, "dropped_r2": folded.dropped_r2,
-                     "dropped_candidate": dict(sorted(folded.dropped_candidate.items()))},
-            "failed": {}, "closure": stats}
+                     "rule_residue": residue},
+            "dropped": dict(sorted(stats["dropped"].items())),
+            "closure": stats}

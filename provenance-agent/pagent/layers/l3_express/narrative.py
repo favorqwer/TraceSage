@@ -1,4 +1,4 @@
-"""叙述、入口点与自审（第 5 层内部）：当前全部是确定性渲染，未经模型改写。
+"""叙述、入口点与自审（表达层内部）：当前全部是确定性渲染，未经模型改写。
 
 阶段二会加"大模型只写叙述文字"（失败回落这里的时间线）。
 """
@@ -37,7 +37,7 @@ def render_narrative(edges: list[dict[str, Any]]) -> str:
         lines.append(
             f"{i + 1}. {edge['src']} --{edge['syscall']}--> {edge['dst']}"
             f"（置信 {edge['confidence']}，实例 {edge.get('instances')}，字节 {edge.get('bytes')}"
-            + ("，争议边：两轮判定不一致" if edge.get("contested") else "") + note + "）"
+            + note + "）"
         )
     return "攻击链（按首次发生时间排序，确定性渲染）：\n" + "\n".join(lines)
 
@@ -46,7 +46,7 @@ def build_reflection(stop_reason: str, phases: list[str], missing: list[str],
                      expand_rounds: int) -> dict[str, Any]:
     """规则推导的自审结论。"""
     sufficient = stop_reason == "frontier_exhausted"
-    critique = ("前沿耗尽：所有未考察候选步骤都已处理" if sufficient
+    critique = ("前沿耗尽：所有未考察的候选顶点都已处理" if sufficient
                 else f"非正常收尾（{stop_reason}）：前沿可能未走完，结论不完整")
     if sufficient and missing:
         critique += f"；仍缺相位：{'、'.join(missing)}"

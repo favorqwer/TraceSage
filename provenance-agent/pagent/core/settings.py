@@ -97,7 +97,7 @@ def llm_api_key() -> Optional[str]:
 # 理由：任何条数上限都是按数据分布随机丢边——同一条攻击链在不同场景里的长度不一样，
 # 上限只要小于真实长度就会掉召回，而"真实长度"事先不知道。实测：子进程上限 8 让场景 4 的
 # 标注覆盖从 100% 掉到 74.6%、场景 5 从 100% 掉到 94.1%；把上限提到 50 两者都回到 100%。
-# 展开的终止条件只有两个：前沿耗尽、或同一个步骤连续失败两次。
+# 展开的终止条件只有一个：待考察清单（前沿）耗尽。
 
 
 # 第 1 层：没有开关。语义口径全部写死在 `l1_reach/` 里（方向约束、遍历期规则、无条数上限、
@@ -116,12 +116,12 @@ def ensure_index_dir() -> None:
 
 
 # --- 判定侧（唯一的模型调用）---
-# 批大小：一批里放多少条边。批次只影响"重复发送的上下文"总量与并行度，不影响判定结果：
+# 批大小：一次请求里放多少条边。批量只影响“重复发送的上下文”总量与并行度：
 # - 批越大 → 调用越少、重复的上下文越少（省输入 token）；
 # - 批越小 → 并行度越高（池子里的调用数更多）。
-# 经验值：批数应 ≥ 并发数，否则池子填不满（636 条边 / 50 = 13 批 ≈ 12 并发）。
-# 单批过大还会顶到网关的超时，因此判定失败时会自动二分拆批重试（见 judge.py）。
-DEFAULT_JUDGE_BATCH = 50
+# 单批过大还会顶到网关的超时（实测 440 条/8.7 万字符的单次请求连顶两次 504），
+# 所以上限保持保守；默认 70 条（2026-09-28 从 50 调高，配合逐波内切批）。
+DEFAULT_JUDGE_BATCH = 70
 
 
 def judge_batch() -> int:
@@ -142,3 +142,61 @@ DEFAULT_MAX_LLM_CALLS = 150
 
 def max_llm_calls() -> int:
     return resolve_int_env("PAGENT_MAX_LLM_CALLS", DEFAULT_MAX_LLM_CALLS, minimum=1)
+
+
+# --- 判定侧：逐波推进与双层滚动上下文（唯一方案）---
+def wave_attempts() -> int:
+    """一波调用失败时整波重试的次数（不切割波）。"""
+    return resolve_int_env("PAGENT_WAVE_ATTEMPTS", 2, minimum=1)
+
+
+def upstream_limit() -> int:
+    """每条边下面最多列几条「上层顶点上已判过的边」（第 1 层明细）。"""
+    return resolve_int_env("PAGENT_UPSTREAM_LIMIT", 3, minimum=0)
+
+
+def call_max_chars() -> int:
+    """单次调用文本长度的目标上限（超出就逐级压缩局部上下文；**不切割波、不丢边**）。
+
+    压缩顺序：先去同一对象接触者，再去上游交接明细；去掉全部局部上下文仍超限就照常发送并在日志里明说。
+    """
+    return resolve_int_env("PAGENT_CALL_MAX_CHARS", 80000, minimum=1000)
+
+
+def state_max_chars() -> int:
+    """调查状态摘要（第 2 层）的字符上限。"""
+    return resolve_int_env("PAGENT_STATE_MAX_CHARS", 2500, minimum=200)
+
+
+def state_chain_limit() -> int:
+    """状态摘要里「已确认链片段」最多列几条。"""
+    return resolve_int_env("PAGENT_STATE_CHAIN_LIMIT", 20, minimum=1)
+
+
+# 任务说明（目标事件 + 时间原点 + 清单口径）：默认开；置 0 仅供对照实验（A/B 同一份代码）
+def task_header_enabled() -> bool:
+    return resolve_int_env("PAGENT_TASK_HEADER", 1, minimum=0) != 0
+
+
+# 边旁的局部上下文：同一对象上的接触者（已判过的会带结论）。主开关 PAGENT_EDGE_CONTEXT=0 时关闭。
+def edge_context_enabled() -> bool:
+    return resolve_int_env("PAGENT_EDGE_CONTEXT", 1, minimum=0) != 0
+
+
+def object_handoff_enabled() -> bool:
+    return edge_context_enabled() and resolve_int_env("PAGENT_OBJECT_HANDOFF", 1, minimum=0) != 0
+
+
+# --- 命令表（第一层末尾按派生关系补命令行）---
+# 默认 0：渲染时命令行仍取图顶点属性，输出与开关加进来之前逐字节相同（同一份代码做对照）。
+# 置 1：图顶点为空时沿派生链往上找父进程的命令行补上（纯代码推断，渲染时标注来源），
+# 并在查不到时写明原因（执行过但没记录 / 采集前就在运行 / 派生链断）。
+# 背景（六场景实测）：2,621 个进程里 81.0% 图顶点有值且与日志逐字相同、0 处冲突；
+# 6.3% 为空但可沿派生链补；12.3% 日志与图都为空；0.4% 图上有值但日志侧无对照。
+def command_table_enabled() -> bool:
+    return resolve_int_env("PAGENT_COMMAND_TABLE", 0, minimum=0) != 0
+
+
+def command_inherit_depth() -> int:
+    """派生链向上找的最大层数（超过就记“派生链断”，不猜）。"""
+    return resolve_int_env("PAGENT_COMMAND_INHERIT_DEPTH", 5, minimum=1)

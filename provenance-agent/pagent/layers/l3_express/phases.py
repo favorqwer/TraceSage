@@ -1,4 +1,4 @@
-"""攻击相位推导（第 5 层内部）：规则表在 `pagent/rules/phases.json`。
+"""攻击相位推导（表达层内部）：规则表在 `pagent/rules/phases.json`。
 
 规则只用图上的事实（操作名 / 标签 / 路径 / 命令行原文），可复现、可审计；
 `Initial Access` 在单主机图里通常判不出来（攻击机进程不在图里），因此基本恒缺。
@@ -39,7 +39,7 @@ def derive_phases(confirmed: list[dict[str, Any]], metas: dict[str, dict[str, An
                 covered.add("Discovery")
             if low.endswith(_ARCHIVE_EXT):
                 covered.add("Collection")
-        args = str((metas.get(str(edge.get("step_key") or "")) or {}).get("summary", {}).get("owner_args") or "")
+        args = str((metas.get(str(edge.get("process_id") or "")) or {}).get("owner_args") or "")
         blob = args.lower()
         if blob:
             if any(tok in blob for tok in _ARCHIVE_ARGS):
