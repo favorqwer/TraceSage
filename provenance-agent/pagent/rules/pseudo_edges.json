@@ -1,4 +1,0 @@
-{
-  "r1_regex": "^/(usr/)?lib[^/]*/.*\\.so(\\.\\d+)*$",
-  "r2_prefixes": ["/usr/bin/", "/bin/", "/usr/sbin/", "/sbin/", "/usr/lib/", "/lib/"]
-}

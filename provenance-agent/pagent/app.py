@@ -30,12 +30,11 @@ class Deps:
     model: Any
     budget: LlmBudget
     record: Investigation
-    min_confidence: float = 0.5
     log: Callable[[str], None] = print
     trace: list[dict[str, Any]] = field(default_factory=list)
 
 
-def build_deps(scenario: Any, run_id: str, *, model: Any = None, min_confidence: float = 0.5,
+def build_deps(scenario: Any, run_id: str, *, model: Any = None,
                log: Callable[[str], None] = print) -> Deps:
     """造一次运行的依赖。"""
     settings.ensure_work_dirs()
@@ -43,7 +42,7 @@ def build_deps(scenario: Any, run_id: str, *, model: Any = None, min_confidence:
     budget = LlmBudget()
     record = Investigation(run_id=run_id, scenario=scenario.name, database=scenario.database)
     return Deps(scenario=scenario, graph=graph, model=model, budget=budget, record=record,
-                min_confidence=min_confidence, log=log)
+                log=log)
 
 
 def run_once(deps: Deps, *, dry_run: bool) -> dict[str, Any]:

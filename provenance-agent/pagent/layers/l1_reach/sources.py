@@ -8,9 +8,9 @@
 两条来源共用的取边口径（除广度与方向外）：
 
 - 对象顶点只取**写入侧**（读不会把内容送回顶点），且 `connect` / `bind` 不算交付；
-- **共享 / 虚拟通道不展开**：命中 `edge_rules.shared_channel_label` 的文件顶点（内核现生成的
-  伪文件、设备节点、系统运行目录及其中的套接字），只把"读取它"的那条边收进闭包，不再往回找
-  写入者；这类跳过逐类计数，进 `stats()` 里的 `shared_not_expanded`。
+- **非交付通道不展开**：角色是非交付通道的文件顶点（内核现生成的伪文件、设备节点、系统运行目录
+  及其中的套接字，`core/vertices.py` 的文件段），只把"读取它"的那条边收进闭包，不再往回找写入者；
+  这类跳过逐类计数，进 `stats()` 里的 `nondelivery_not_expanded`。
 """
 
 from __future__ import annotations
@@ -19,10 +19,10 @@ import json
 import struct
 from typing import Any, Optional
 
-from ...core import edge_rules
+from ...core import vertices
 from . import snapshot as snap
-from .closure import Event, rule_code_of
-from .processes import cache_process_info, prefetch_process_info
+from .closure import Event
+from .process_attributes import cache_process_info, prefetch_process_info
 
 # 连接建立类操作（connect / bind）不传递内容：只把两端接起来，不往顶点里写数据，
 # 因此不算"往这个顶点交付了内容"。子进程把关（`siblings.py`）问"有没有写-读配对"时用同一份表。
@@ -101,7 +101,7 @@ RETURN p.process_id AS pid, coalesce(p.exepath, p.name) AS owner, e.event_id AS 
 }
 
 # 进程读写过的对象端点（仅用于子进程把关的"有没有来往"判定）。
-# 两条分支与 `snapshot._SIDES` 的拥有者口径一致：p2f / p2n 里进程在源侧，f2p / n2p 里进程在目标侧。
+# 两条分支与 `core/graph_facts.py` 的归属端口径一致：p2f / p2n 里进程在源侧，f2p / n2p 里进程在目标侧。
 _OBJECT_EDGES = """
 MATCH (p:Process {process_id: $pid})-[e:p2f|p2n]->(x)
 RETURN type(e) AS rel, e.syscall AS syscall, coalesce(x.path, x.network_id) AS key,
@@ -124,9 +124,7 @@ def _event(row: dict[str, Any]) -> Event:
                  bytes=int(row.get("bytes") or 0), start=start,
                  end=int(row.get("endtime") or start), pid=str(row.get("pid") or ""),
                  owner=owner, other=other, other_label=other_label,
-                 other_process_id=str(row.get("other_process_id") or ""),
-                 # 直查来源自己算规则编码（参考实现不读索引里预先算好的值）：与索引来源逐条可比
-                 rule_code=rule_code_of(rel, syscall, owner, other, other_label))
+                 other_process_id=str(row.get("other_process_id") or ""))
 
 
 class DbSource:
@@ -137,7 +135,7 @@ class DbSource:
         self.database = graph.database
         self.queries = 0
         self.rows = 0
-        self.shared_not_expanded: dict[str, int] = {}   # 被跳过的共享/虚拟通道顶点展开次数（不是边数）
+        self.nondelivery_not_expanded: dict[str, int] = {}   # 被跳过的非交付通道顶点展开次数（不是边数）
 
     def _run(self, cypher: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         out = self.graph.run(cypher, params)
@@ -162,10 +160,11 @@ class DbSource:
         if kind == "File":
             kept: list[tuple[str, int, int]] = []
             for key, lo, hi in items:
-                label = edge_rules.shared_channel_label(key)
+                label = vertices.nondelivery_label(key)
                 if label:
-                    # 共享 / 虚拟通道：只收边、不展开（与索引来源同一判据）
-                    self.shared_not_expanded[label] = self.shared_not_expanded.get(label, 0) + 1
+                    # 非交付通道：只收边、不展开（与索引来源同一判据）
+                    self.nondelivery_not_expanded[label] = \
+                        self.nondelivery_not_expanded.get(label, 0) + 1
                     continue
                 kept.append((key, lo, hi))
             items = kept
@@ -191,14 +190,14 @@ class DbSource:
 
     def stats(self) -> dict[str, Any]:
         return {"source": "db", "queries": self.queries, "rows": self.rows,
-                "shared_not_expanded": dict(sorted(self.shared_not_expanded.items()))}
+                "nondelivery_not_expanded": dict(sorted(self.nondelivery_not_expanded.items()))}
 
     def take_stats(self) -> dict[str, Any]:
         """取出计数并清零（按遍数分开记，见 `closure.py` 的"计数口径"）。"""
         out = self.stats()
         self.queries = 0
         self.rows = 0
-        self.shared_not_expanded = {}
+        self.nondelivery_not_expanded = {}
         return out
 
 
@@ -231,7 +230,7 @@ class SnapshotReader:
         self.queries = 0
         self.rows = 0
         self.skipped = 0            # 因已收进闭包而跳过的记录数（含在 rows 里，只影响快慢）
-        self.shared_not_expanded: dict[str, int] = {}   # 被跳过的共享/虚拟通道顶点展开次数（不是边数）
+        self.nondelivery_not_expanded: dict[str, int] = {}   # 被跳过的非交付通道顶点展开次数（不是边数）
         self._adj = (self.dir / "adj.bin").open("rb")
 
     # --- 内部 ---
@@ -273,7 +272,7 @@ class SnapshotReader:
         return str(self._syscalls[sid]) if sid < len(self._syscalls) else ""
 
     def _event(self, rec: tuple) -> Event:
-        owner_id, other_id, rel_code, sid, start, end, event_id, nbytes, rule_code = rec
+        owner_id, other_id, rel_code, sid, start, end, event_id, nbytes = rec
         owner_vertex = self.vertices[owner_id]
         other_vertex = self.vertices[other_id]
         other_kind = other_vertex["kind"]
@@ -283,8 +282,7 @@ class SnapshotReader:
                      bytes=nbytes, start=start, end=end,
                      pid=owner_vertex["key"], owner=owner_vertex["content"], other=other,
                      other_label=other_kind,
-                     other_process_id=other_vertex["key"] if other_kind == "Process" else "",
-                     rule_code=rule_code)
+                     other_process_id=other_vertex["key"] if other_kind == "Process" else "")
 
     # --- GraphSource ---
     def expand_process(self, items: list[tuple[str, int, int]],
@@ -311,10 +309,11 @@ class SnapshotReader:
             vid = self._id_of.get((kind, key))
             if vid is None:
                 continue
-            shared = self.vertices[vid].get("shared") if kind == "File" else None
-            if shared:
-                # 共享 / 虚拟通道：只收边、不展开（标记在建索引时算好，见 snapshot.py）
-                self.shared_not_expanded[shared] = self.shared_not_expanded.get(shared, 0) + 1
+            label = vertices.nondelivery_label(key) if kind == "File" else ""
+            if label:
+                # 非交付通道：只收边、不展开（路径判据现算，索引里不存标记）
+                self.nondelivery_not_expanded[label] = \
+                    self.nondelivery_not_expanded.get(label, 0) + 1
                 continue
             for rec in self._iter_block(vid, lo, hi):
                 rel_code = rec[2]
@@ -340,6 +339,17 @@ class SnapshotReader:
                 "exepath": vertex.get("exepath"), "args": vertex.get("args"), "cwd": vertex.get("cwd"),
             })
 
+    def network_protocols(self) -> dict[str, str]:
+        """网络端点标识 -> 传输层协议（索引顶点表里有的才收录；空值不写）。"""
+        out: dict[str, str] = {}
+        for vertex in self.vertices:
+            if vertex.get("kind") != "Network":
+                continue
+            protocol = str(vertex.get("protocol") or "").strip()
+            if protocol:
+                out[str(vertex.get("key") or "")] = protocol
+        return out
+
     def iter_object_edges(self, pid: str):
         """生成器：跑到第一个命中就停，不会把整个顶点的边建成列表。"""
         vid = self._id_of.get(("Process", pid))
@@ -361,7 +371,7 @@ class SnapshotReader:
     def stats(self) -> dict[str, Any]:
         return {"source": "snapshot", "queries": 0, "rows": self.rows,
                 "skipped_already_included": self.skipped,
-                "shared_not_expanded": dict(sorted(self.shared_not_expanded.items())),
+                "nondelivery_not_expanded": dict(sorted(self.nondelivery_not_expanded.items())),
                 "index_dir": str(self.dir), "index_edges": self.meta.get("edges")}
 
     def take_stats(self) -> dict[str, Any]:
@@ -369,7 +379,7 @@ class SnapshotReader:
         out = self.stats()
         self.rows = 0
         self.skipped = 0
-        self.shared_not_expanded = {}
+        self.nondelivery_not_expanded = {}
         return out
 
 

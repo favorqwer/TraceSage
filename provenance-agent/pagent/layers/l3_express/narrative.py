@@ -36,7 +36,7 @@ def render_narrative(edges: list[dict[str, Any]]) -> str:
         note = f"，理由：{_short(edge.get('reason'))}" if edge.get("reason") else ""
         lines.append(
             f"{i + 1}. {edge['src']} --{edge['syscall']}--> {edge['dst']}"
-            f"（置信 {edge['confidence']}，实例 {edge.get('instances')}，字节 {edge.get('bytes')}"
+            f"（实例 {edge.get('instances')}，字节 {edge.get('bytes')}"
             + note + "）"
         )
     return "攻击链（按首次发生时间排序，确定性渲染）：\n" + "\n".join(lines)
@@ -44,7 +44,12 @@ def render_narrative(edges: list[dict[str, Any]]) -> str:
 
 def build_reflection(stop_reason: str, phases: list[str], missing: list[str],
                      expand_rounds: int) -> dict[str, Any]:
-    """规则推导的自审结论。"""
+    """规则推导的自审结论（**无置信度字段**）。
+
+    旧版这里有一个名为 confidence 的"把握"，但它由"是否完整 + 是否缺相位"算出，
+    而完整度恒为真（停止原因只有一个）、相位基本总缺 Initial Access，那个数在六份报告里恒为 0.6。
+    常量的字段会让人误以为它是评估结果，故删除（2026-10-05）。
+    """
     sufficient = stop_reason == "frontier_exhausted"
     critique = ("前沿耗尽：所有未考察的候选顶点都已处理" if sufficient
                 else f"非正常收尾（{stop_reason}）：前沿可能未走完，结论不完整")
@@ -52,7 +57,6 @@ def build_reflection(stop_reason: str, phases: list[str], missing: list[str],
         critique += f"；仍缺相位：{'、'.join(missing)}"
     return {
         "sufficient": sufficient,
-        "confidence": 0.75 if (sufficient and not missing) else (0.6 if sufficient else 0.4),
         "covered_phases": phases,
         "missing_phases": missing,
         "critique": critique,

@@ -57,6 +57,9 @@ class Investigation:
     process_context: dict[str, dict[str, Any]] = field(default_factory=dict)
     # 折叠后的边（三元组 -> 记录），供判定与报告使用
     edges: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
+    # 服务会话一览（判定时的上下文；见 l1_reach/sessions.py）：连接端点、服务进程、
+    # 命令活动条数、候选条数。不参与收边、不过滤候选。
+    session_index: list[dict[str, Any]] = field(default_factory=list)
     confirmed: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
     excluded: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
     unjudged: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)

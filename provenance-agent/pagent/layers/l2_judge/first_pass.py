@@ -9,10 +9,13 @@ from __future__ import annotations
 from typing import Any
 
 from ...contracts import parse_verdicts
-from ...core import prompts
+from ...core import prompts, settings
 from ...core.llm import BudgetCallback, call_json
 
-JUDGE_SYSTEM = prompts.load("judge_first_pass.md")
+# 提示词里用 `{REASON_MAX_CHARS}` 占位符写理由长度，在这里注入参数文件里那个数字
+# （`config/agent.toml` 的 `render.reason_max_chars`；代码渲染已判理由时用同一个数截断）。
+JUDGE_SYSTEM = prompts.load("judge_first_pass.md").replace(
+    "{REASON_MAX_CHARS}", str(settings.reason_max_chars()))
 
 
 def judge_first_pass(

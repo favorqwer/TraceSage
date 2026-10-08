@@ -6,6 +6,11 @@
 **原始输出度量**（2026-09-24 加）：实测单批判定会吐出 4600~5000 个输出 token，而落库的判定理由
 只有 30~50 字符——钱花在看不见的地方。因此每次调用都把「提示词字符数 / 原始输出字符数 /
 输出 token / 耗时」写一行 JSONL，并附一小段原始文本样本，供事后归因。
+
+**思考模式默认关闭**（2026-09-30 加）：每次请求显式带 DeepSeek 官方字段
+`thinking = {"type": "disabled"}`（官方默认是 `enabled`）。开着思考时，上报的输出词里有很大一部分
+是网关返回、我们拿不到的推理文字（`reasoning_content`），它们照样占生成时间并能顶到网关超时。
+参数文件的 `judge.thinking = true` 恢复官方默认，仅用于对照实验；详见 `settings.thinking_enabled`。
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from ..contracts import short
 from . import settings
 
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
@@ -59,12 +65,12 @@ class LlmBudget:
         else:
             self.failures += 1
             self.by_node_failures[node] = self.by_node_failures.get(node, 0) + 1
-        if len(self.log) < 2000:
+        if len(self.log) < settings.diagnostic_keep():
             self.log.append({
                 "node": node, "ms": round(ms, 1), "ok": ok,
                 "tokens_in": tokens_in, "tokens_out": tokens_out,
                 "prompt_chars": prompt_chars, "out_chars": out_chars,
-                "error": error[:160] if error else "",
+                "error": short(error) if error else "",
             })
 
     @property
@@ -75,7 +81,10 @@ class LlmBudget:
     def total_ms(self) -> float:
         return sum(self.by_node_ms.values())
 
-    def slowest(self, n: int = 5) -> list[dict[str, Any]]:
+    def slowest(self, n: Any = None) -> list[dict[str, Any]]:
+        """最慢的若干次调用（默认取参数文件里的审计样例条数）。"""
+        if n is None:
+            n = settings.audit_sample_n()
         return sorted((r for r in self.log if r["ok"]), key=lambda r: -r["ms"])[:n]
 
     def to_dict(self) -> dict[str, Any]:
@@ -103,7 +112,6 @@ class LlmBudget:
 
 _RAW_LOG_PATH: Optional[Path] = None
 _RAW_LOCK = threading.Lock()
-_RAW_SAMPLE_CHARS = 800
 
 
 def set_raw_log(path: Optional[Path]) -> None:
@@ -125,8 +133,8 @@ def _log_raw(role: str, prompt_chars: int, text: str, ms: float, usage: tuple[in
         "tokens_out": usage[1],
         "ms": round(ms, 1),
         "ok": ok,
-        "error": (error or "")[:200],
-        "text_head": (text or "")[:_RAW_SAMPLE_CHARS],
+        "error": short(error),
+        "text_head": (text or "")[:settings.diagnostic_keep()],
     }
     try:
         with _RAW_LOCK:
@@ -184,7 +192,7 @@ class BudgetCallback(BaseCallbackHandler):
         self.budget.run_nodes.pop(run_id, None)
 
 
-def make_model(*, temperature: float = 0.0, max_tokens: Optional[int] = None, model_name: Optional[str] = None) -> ChatOpenAI:
+def make_model(*, temperature: float = 0.0, model_name: Optional[str] = None) -> ChatOpenAI:
     kwargs: dict[str, Any] = {
         "model": model_name or settings.llm_model(),
         "temperature": temperature,
@@ -192,11 +200,12 @@ def make_model(*, temperature: float = 0.0, max_tokens: Optional[int] = None, mo
         "base_url": settings.llm_base_url(),
         # 网关（ALB）自己会在 ~60s 返 504，所以客户端超时不需要很长；
         # 重试交给下面的 _invoke_with_retry（带退避），不用 SDK 内置重试。
-        "timeout": 120,
-        "max_retries": 0,
+        "timeout": settings.llm_timeout_seconds(),
+        "max_retries": settings.llm_sdk_retries(),
     }
-    if max_tokens is not None:
-        kwargs["max_tokens"] = max_tokens
+    if not settings.thinking_enabled():
+        # 思考模式默认关闭（DeepSeek 官方字段；官方默认是 enabled）。理由与实测见 settings.thinking_enabled。
+        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
     return ChatOpenAI(**kwargs)
 
 
@@ -295,7 +304,6 @@ def extract_json(text: str) -> Optional[dict[str, Any]]:
 
 _RATE_LIMIT_HINT = re.compile(r"429|rate[ _-]?limit|too many requests|请求过于频繁", re.IGNORECASE)
 _RETRY_AFTER = re.compile(r"retryAfterSeconds['\"]?\s*:\s*([0-9.]+)")
-_MAX_RATE_LIMIT_WAITS = 8   # 限流最多等 8 次（每次 5~60s，总计约 3 分钟）
 
 
 def _is_rate_limit(exc: BaseException) -> bool:
@@ -312,16 +320,23 @@ def _invoke_with_retry(
     model: ChatOpenAI,
     messages: list[Any],
     *,
-    max_retries: int = 3,
-    base_delay: float = 2.0,
+    max_retries: Any = None,
+    base_delay: Any = None,
     config: Optional[dict[str, Any]] = None,
 ) -> Any:
     """带退避的调用。**限流（429）单独给更长的等待与更多次重试**，其余错误按指数退避。
 
     实测教训：网关有限流（`{'limit': 20, 'retryAfterSeconds': 3}`），而 judge 的并行扇出会瞬时打满；
     原先只退避 2/4/8s 就放弃并让节点降级，会把整轮跑测打成“半瘫”。限流不该降级，该等。
+    `max_retries` 与 `base_delay` 省略时取参数文件里的值（`llm.plain_retries` / `llm.plain_retry_base_seconds`）。
     记时/记账交给 BudgetCallback（若 config 里带了）。
     """
+    max_retries = settings.llm_plain_retries() if max_retries is None else int(max_retries)
+    base_delay = (settings.llm_plain_retry_base_seconds() if base_delay is None
+                  else float(base_delay))
+    rate_limit_waits = settings.llm_rate_limit_waits()
+    wait_start = settings.llm_rate_limit_wait_start_seconds()
+    wait_max = settings.llm_rate_limit_wait_max_seconds()
     last: Optional[Exception] = None
     plain = 0       # 普通传输错误次数
     limited = 0     # 限流次数
@@ -332,9 +347,9 @@ def _invoke_with_retry(
             last = exc
             if _is_rate_limit(exc):
                 limited += 1
-                if limited > _MAX_RATE_LIMIT_WAITS:
+                if limited > rate_limit_waits:
                     break
-                wait = max(_retry_after_seconds(exc) or 0.0, min(60.0, 5.0 * limited))
+                wait = max(_retry_after_seconds(exc) or 0.0, min(wait_max, wait_start * limited))
             else:
                 plain += 1
                 if plain > max_retries:
@@ -349,15 +364,17 @@ def call_json(
     system: str,
     user: str,
     *,
-    max_retries: int = 2,
+    max_retries: Any = None,
     config: Optional[dict[str, Any]] = None,
     role: str = "judge",
 ) -> dict[str, Any]:
     """要求模型只输出 JSON；解析失败回灌自校正；**传输失败降级不抛异常**。
 
+    `max_retries` 省略时取参数文件里的值（`llm.format_retries`）。
     token/耗时记账由 `BudgetCallback` 完成（通过 `config` 里的 callbacks 传递）；
     原始输出长度与文本样本写进 `set_raw_log()` 指定的 JSONL（见模块开头）。
     """
+    max_retries = settings.llm_format_retries() if max_retries is None else int(max_retries)
     messages = [SystemMessage(content=system), HumanMessage(content=user)]
     prompt_chars = len(system) + len(user)
     last_error = "未知错误"
@@ -368,7 +385,7 @@ def call_json(
         except Exception as exc:  # noqa: BLE001 - 降级：返回失败标记，由调用方决定如何退化
             _log_raw(role, prompt_chars, "", (time.perf_counter() - t0) * 1000.0, (0, 0),
                      ok=False, error=f"{type(exc).__name__}: {exc}")
-            return {"_raw_ok": False, "_error": f"{type(exc).__name__}: {str(exc)[:200]}", "_transport": True}
+            return {"_raw_ok": False, "_error": f"{type(exc).__name__}: {short(exc)}", "_transport": True}
         text = _content(response)
         _log_raw(role, prompt_chars, text, (time.perf_counter() - t0) * 1000.0, _usage(response))
         parsed = extract_json(text)

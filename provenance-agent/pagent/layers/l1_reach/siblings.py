@@ -19,7 +19,7 @@
    子进程只有在**和主干之间有过一次写-读配对**时才收：
    - 它**读**的东西，主干里的进程写过；或者
    - 它**写**的东西，主干里的进程读过。
-   共享 / 虚拟通道（`core/edge_rules.py` 的判定表）不算——这些是多对多广播，两个进程都用过它
+   非交付通道（顶点表的文件段，`core/vertices.py`）不算——这些是多对多广播，两个进程都用过它
    不代表它们之间传过东西；连接建立类操作（connect / bind）也不算（它不传递内容）。
 3. 把关放行进来的进程就是普通成员：正常展开、正常往下走；它自己的子进程同样按第 2 条判。
 
@@ -44,11 +44,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Optional
 
-from ...core import edge_rules
+from ...core import graph_facts, vertices
 from .closure import Event, GraphSource, run_closure
 from .sources import SETUP_SYSCALLS
-
-_WRITE_RELS = ("p2f", "p2n")
 
 def _no_children(parent: str, child: str) -> bool:
     """只用于第一遍：任何子进程都不跟着进（于是收到的就是主干）。"""
@@ -58,13 +56,13 @@ def _no_children(parent: str, child: str) -> bool:
 def _object_edges(source: GraphSource, pid: str) -> Iterator[tuple[str, str]]:
     """这个进程读写过的对象端点 (关系类型, 对象键)。
 
-    与闭包引擎同一份口径：共享 / 虚拟通道不算（多对多广播，两个进程都用过它不代表传过东西），
+    与闭包引擎同一份口径：非交付通道不算（多对多广播，两个进程都用过它不代表传过东西），
     连接建立类操作（connect / bind）也不算（它不传递内容）。
     """
     for rel, syscall, key, label in source.iter_object_edges(pid):
         if not key or syscall in SETUP_SYSCALLS:
             continue
-        if label == "File" and edge_rules.shared_channel_label(key):
+        if label == "File" and vertices.is_nondelivery(key):
             continue
         yield rel, key
 
@@ -102,7 +100,7 @@ class SiblingGate:
     def _has_link(self, child: str) -> bool:
         """它读的东西主干写过，或它写的东西主干读过。"""
         for rel, key in _object_edges(self.source, child):
-            if rel in _WRITE_RELS:
+            if rel in graph_facts.PRODUCER_RELS:
                 if key in self.read_objects:
                     return True
             elif key in self.written_objects:
@@ -116,8 +114,8 @@ class SiblingGate:
                 "source_pass1": dict(self.source_pass1)}
 
 
-def build_gate(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
-               log: Optional[Callable[[str], None]] = None) -> SiblingGate:
+def _build_gate(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
+                log: Optional[Callable[[str], None]] = None) -> SiblingGate:
     """第一遍：跑"不带子进程"的闭包得到主干；再算出主干读写过的对象，造出把关。"""
     if log:
         log("[closure] 第一遍：定主干（不带子进程；这一遍的结果只用来做参照，不进报告）")
@@ -130,12 +128,12 @@ def build_gate(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
     # 也不能拿"闭包里出现过的全部进程号"：那只在派生边上出现、自己没被展开的进程就是这里要算的
     # 第一层子进程，取全部会把它们后面的层也一起放宽。
     heads = set(spine["expanded_processes"])
-    heads |= {ev.pid for ev in spine["events"] if ev.rel == "p2p" and ev.pid not in heads}
+    heads |= {ev.pid for ev in spine["events"] if graph_facts.is_derivation(ev.rel) and ev.pid not in heads}
     written: set[str] = set()
     read: set[str] = set()
     for pid in sorted(heads):
         for rel, key in _object_edges(source, pid):
-            (written if rel in _WRITE_RELS else read).add(key)
+            (written if rel in graph_facts.PRODUCER_RELS else read).add(key)
     gate = SiblingGate(source=source, heads=frozenset(heads), written_objects=frozenset(written),
                        read_objects=frozenset(read), spine_events=len(spine["events"]),
                        source_pass1=pass1_source)
@@ -148,7 +146,7 @@ def build_gate(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
 def run_gated_closure(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
                       log: Optional[Callable[[str], None]] = None) -> dict[str, Any]:
     """两遍跑完一条闭包：第一遍定主干，第二遍带把关。返回结果里多一项 `gate`（把关计数）。"""
-    gate = build_gate(source, seeds, poi_t0=poi_t0, log=log)
+    gate = _build_gate(source, seeds, poi_t0=poi_t0, log=log)
     if log:
         log("[closure] 第二遍：带子进程把关（主干里无条件收，第二层起要有写-读配对）")
     result = run_closure(source, seeds, poi_t0=poi_t0, log=log, child_allowed=gate.allows,

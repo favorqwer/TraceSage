@@ -3,6 +3,7 @@
 第 1 层给出闭包的**事件集合**（每条边一条记录，带来源进程），本模块把它接给两个下游：
 
 - `record.edges`：折叠边（内容三元组 → 记录），判定与报告的单位 —— 第 1 层尾部的折叠；
+  网络端点的传输层协议在折叠后补进记录（只供判定时渲染，不属于三元组、不进报告）；
 - `record.process_context`：进程身份摘要（命令行、来源、活动时间范围）—— 判定层的上下文准备，
   必须在事件行还在手上时调用，只用于判定时的渲染与报告的阶段划分。
 
@@ -15,7 +16,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ..contracts import triple
-from ..core import edge_rules, settings
+from ..core import edge_rules, graph_facts, settings
 from ..core.trace import trace_event
 from ..layers import l1_reach as l1
 from ..layers import l2_judge as l2
@@ -39,12 +40,11 @@ def seed_events(deps: "Deps") -> list[l1.Event]:
 
 
 def _rule_hit(edge: dict[str, Any]) -> bool:
-    """候选边命中五条规则里的哪一条；未命中返回 False。"""
-    if edge_rules.rule_of(edge["src"], edge["syscall"], edge["dst"],
-                          str(edge.get("src_label") or ""))[0]:
-        return True
+    """这条候选边命中哪条影响往回走的判据（对象角色 / 内容形状）；未命中返回 False。"""
     rel = str((edge.get("rels") or [""])[0])
-    return bool(edge_rules.candidate_drop_code({**edge, "rel": rel}))
+    owner, other, _other_label = graph_facts.endpoints_of(
+        rel, str(edge.get("src") or ""), str(edge.get("dst") or ""))
+    return bool(edge_rules.traversal_drop_code(rel, str(edge.get("syscall") or ""), owner, other))
 
 
 def _poi_triple(row: dict[str, Any]) -> tuple[str, str, str]:
@@ -52,7 +52,7 @@ def _poi_triple(row: dict[str, Any]) -> tuple[str, str, str]:
     owner = str(row.get("process_content") or "")
     other = str(row.get("other") or "")
     syscall = str(row.get("syscall") or "")
-    return (other, syscall, owner) if str(row.get("rel") or "") in ("f2p", "n2p") else (owner, syscall, other)
+    return (other, syscall, owner) if str(row.get("rel") or "") in graph_facts.CONSUMER_RELS else (owner, syscall, other)
 
 
 def expand_closure(deps: "Deps") -> dict[str, Any]:
@@ -64,35 +64,38 @@ def expand_closure(deps: "Deps") -> dict[str, Any]:
     两边不相加。
     """
     inv = deps.record
+    protocol_by_network: dict[str, str] = {}
     source = l1.open_source(deps.graph, log=deps.log)
     try:
         result = l1.run_gated_closure(source, seed_events(deps),
                                       poi_t0=int(inv.poi_t0 or 0), log=deps.log)
         rows = result["rows"]
+        # 网络端点的传输层协议（顶点属性；索引顶点表里图着，只取一份）
+        protocol_by_network = source.network_protocols()
+        scope_stats: dict[str, Any] = {"enabled": False}
+        drop_stats: dict[str, Any] = {"enabled": False}
+        rows, out_stats = l1.filter_output_rows(rows, inv.poi_rows,
+                                                 enabled=settings.output_filter_enabled(),
+                                                 log=deps.log)
+        scope_stats = out_stats["scope"]
+        drop_stats = out_stats["routine"]
         stats = dict(result["stats"])
         stats["source"] = source.stats()
         stats["gate"] = result.get("gate")
+        stats["scope"] = scope_stats
+        stats["routine"] = drop_stats
     finally:
         source.close()
 
     metas = l2.build_process_context(deps.graph, rows)
     inv.process_context.update(metas)
-    if settings.command_table_enabled():
-        tally: dict[str, int] = {}
-        for meta in metas.values():
-            command = meta.get("command") or {}
-            key = str(command.get("source") or "?")
-            if key == "none":
-                key = f"none:{command.get('reason')}"
-            tally[key] = tally.get(key, 0) + 1
-        deps.log(f"[commands] 命令表（开关打开）：{dict(sorted(tally.items()))}")
-        trace_event(deps.trace, "commands", **{k: v for k, v in sorted(tally.items())})
     if inv.poi_rows:
         poi_pid = str(inv.poi_rows[0].get("process_id") or "")
         if poi_pid in metas:
             inv.poi_process = poi_pid
 
     folded = l1.fold(rows)
+    records: list[dict[str, Any]] = []
     for edge in folded.edges:
         record = edge.to_dict(with_event_ids=True)
         # 上游顶点统一成与边行同一口径的显示内容：进程用可执行路径（空则进程名），
@@ -106,9 +109,29 @@ def expand_closure(deps: "Deps") -> dict[str, Any]:
         members = sorted(record.get("member_processes") or [])
         if members:
             record["process_id"] = min(members, key=lambda k: (int((metas.get(k) or {}).get("t0") or 0), k))
+        # 网络端点协议（一条边最多一个网络端点）：给渲染用，不属于三元组、不进报告
+        if str(record.get("src_label") or "") == "Network":
+            record["network_protocol"] = protocol_by_network.get(str(record.get("src") or ""), "")
+        elif str(record.get("dst_label") or "") == "Network":
+            record["network_protocol"] = protocol_by_network.get(str(record.get("dst") or ""), "")
+        else:
+            record["network_protocol"] = ""
+        records.append(record)
+
+    # 会话命令活动（第 1 层尾部，只给属于某次服务会话的记录）：渲染给模型看的一句事实，
+    # 不参与收边、不过滤候选。口径与实测见 `l1_reach/sessions.py`。
+    # 会话命令活动与“会话一览”（第 1 层尾部）：贴给候选记录的那句事实仍然照旧渲染；
+    # 一览是判定时给模型的全局对比视图，始终产出。
+    # 两张东西共用同一次会话计算（`session_tables` 只算一遍）。
+    # 两者都不参与收边、不过滤候选。
+    tables = l1.session_tables(rows, records)
+    session_tagged = l1.attach_session_activity(rows, records, tables=tables)
+    session_rows = l1.session_overview(rows, records, tables=tables)
+    inv.session_index = session_rows
+    for record in records:
         inv.edges[triple(record)] = record
 
-    # 五条规则都在取边时判完（命中就不收边）：这里数一遍候选表里有没有漏进来的命中
+    # 影响往回走的判定都在取边时判完（命中就不收边）：这里数一遍候选表里有没有漏进来的命中
     # （**终点事件不受规则约束**，不计）。为 0 才说明那条口径成立。
     poi_triples = {_poi_triple(row) for row in inv.poi_rows}
     residue = sum(1 for key, edge in inv.edges.items() if key not in poi_triples and _rule_hit(edge))
@@ -118,6 +141,8 @@ def expand_closure(deps: "Deps") -> dict[str, Any]:
              f"进程 {len(inv.process_context)} 个 / 折叠边 {len(inv.edges)} 条；"
              f"规则残留 {residue} 条（终点事件除外，应为 0）；"
              f"规则剔除 {stats['dropped']} / 把关挡下 {stats.get('gate_blocked', 0)}；"
+             f"实例范围 {scope_stats}；例行活动剔除 {drop_stats}；"
+             f"带会话命令活动的记录 {session_tagged} 条；会话一览 {len(session_rows)} 次会话；"
              f"来源（第二遍）{stats['source']}；主干（第一遍）{stats.get('gate')}")
     trace_event(deps.trace, "expand_closure", rounds=stats["rounds"], processes=len(inv.process_context),
                 edges=len(inv.edges), events=stats["events_included"],
@@ -125,6 +150,8 @@ def expand_closure(deps: "Deps") -> dict[str, Any]:
                 queries=stats["source"].get("queries"), source=stats["source"].get("source"))
     return {"rounds": stats["rounds"], "stop_reason": "frontier_exhausted",
             "fold": {"raw_instances": folded.raw_instances, "collapsed_triples": len(inv.edges),
-                     "rule_residue": residue},
+                     "rule_residue": residue, "session_activity": session_tagged},
             "dropped": dict(sorted(stats["dropped"].items())),
+            "scope": scope_stats,
+            "routine": drop_stats,
             "closure": stats}

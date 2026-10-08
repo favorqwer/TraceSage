@@ -34,7 +34,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--scenario", help="场景名（见 provenance-agent/config/scenarios.json）")
     parser.add_argument("--all", action="store_true", help="跑全部场景")
     parser.add_argument("--run-id", default="", help="运行 id（默认按时间生成；不复用）")
-    parser.add_argument("--min-confidence", type=float, default=0.5, help="判定为相关的最低置信度")
     parser.add_argument("--model", default=None, help="覆盖 OPENAI_MODEL")
     parser.add_argument("--dry-run", action="store_true", help="只跑确定性层（POI/展开/上游），不调 LLM")
     parser.add_argument("--out-dir", default=str(OUTPUT_DIR),
@@ -56,8 +55,7 @@ def run_one(scenario_name: str, args: argparse.Namespace) -> dict:
     if args.model:
         os.environ["OPENAI_MODEL"] = args.model
 
-    deps = app.build_deps(scenario, run_id, model=None if args.dry_run else make_model(),
-                          min_confidence=args.min_confidence)
+    deps = app.build_deps(scenario, run_id, model=None if args.dry_run else make_model())
     if not args.dry_run:
         set_raw_log(settings.LOG_DIR / f"llm-{run_id}.jsonl")   # 原始输出度量（每次调用的长度 + 样本）
 
@@ -84,6 +82,9 @@ def run_one(scenario_name: str, args: argparse.Namespace) -> dict:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     settings.load_dotenv()
+    print(f"[config] 参数文件 {settings.config_path()}")
+    for warning in settings.config_warnings():
+        print(f"[config] 注意：{warning}")
     if args.all:
         names = scenarios.available_scenarios()
     elif args.scenario:

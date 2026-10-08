@@ -14,14 +14,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...core import settings
+from ...core import graph_facts
 from ..l1_reach import process_info
 
 
 def _origins(by_process: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str, Any]]:
     """进程标识 -> 来源（执行新程序 / 派生 / 无记录），取时间最早的那条派生边。
 
-    派生边的另一端就是父进程：记下父进程标识与内容、派生条数，供渲染与命令表使用（不再查库）。
+    派生边的另一端就是父进程：记下父进程标识与内容、派生条数，供渲染使用（不再查库）。
     """
     out: dict[str, dict[str, Any]] = {}
     for pid, rows in by_process.items():
@@ -29,7 +29,7 @@ def _origins(by_process: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str,
         exec_p = spawn_p = exec_pc = spawn_pc = ""
         n = 0
         for row in rows:
-            if str(row.get("rel") or "") != "p2p":
+            if not graph_facts.is_derivation(str(row.get("rel") or "")):
                 continue
             t = int(row.get("starttime") or 0)
             other = str(row.get("other_process_id") or "")
@@ -65,77 +65,6 @@ def summarize_process(graph: Any, process_id: str, owner: str,
     }
 
 
-def _resolve_parent(graph: Any, origins: dict[str, dict[str, Any]], pid: str, *, limit: int,
-                    seen: set[str]) -> tuple[str, list[str], str, bool]:
-    """沿派生链往上找命令行，返回（值, 找过的祖先链, 结束原因, 是否遇到过歧义）。
-
-    `pid` 是直接父进程；返回的链从它上面一代开始、到“命令行取自哪一代”为止（找到值的那一代在链末尾）。
-    只往上找、不猜：父进程没有派生边、或它的命令行也是空，就停在那里并记原因。
-    """
-    chain: list[str] = []
-    cur = pid
-    ambiguous = False
-    for _ in range(limit):
-        info = process_info(graph, cur) or {}
-        args = str(info.get("args") or "")
-        origin = origins.get(cur) or {}
-        kind = str(origin.get("kind") or "none")
-        parent = str(origin.get("parent") or "")
-        if int(origin.get("n") or 0) > 1:
-            ambiguous = True
-        if args:
-            return args, chain, "graph", ambiguous
-        if kind == "spawn" and parent and parent not in seen:
-            seen.add(parent)
-            chain.append(parent)
-            cur = parent
-            continue
-        return "", chain, ("chain_broken" if kind == "spawn" and parent else "no_parent"), ambiguous
-    return "", chain, "too_deep", ambiguous
-
-
-def attach_commands(graph: Any, by_process: dict[str, list[dict[str, Any]]],
-                    metas: dict[str, dict[str, Any]], *, limit: int = 5) -> dict[str, int]:
-    """给每个进程算命令行与来源（开关打开时才调；纯代码、确定性）。
-
-    取值优先级：图顶点非空就用图顶点；空则只在“这个进程是派生出来的、未执行新程序”时
-    沿派生链往上找父进程的命令行；其余情况保留空值并写明原因。结果写进 meta 的 command 字段
-    （值 / 来源 / 父链 / 原因），供渲染与日志使用；不改 meta 里的 owner_args（报告的相位推导仍读它）。
-    """
-    origins = _origins(by_process)
-    counts = {"graph": 0, "inherited": 0, "none_exec": 0, "none_no_derivation": 0,
-              "none_chain_broken": 0, "none_no_parent": 0, "none_too_deep": 0,
-              "ambiguous": 0}
-    for pid, meta in metas.items():
-        value = str(meta.get("owner_args") or "")
-        if value:
-            meta["command"] = {"line": value, "source": "graph", "via": [], "reason": ""}
-            counts["graph"] += 1
-            continue
-        origin = origins.get(pid) or {}
-        kind = str(origin.get("kind") or "none")
-        parent = str(origin.get("parent") or "")
-        if kind == "spawn" and parent:
-            found, chain, reason, ambiguous = _resolve_parent(
-                graph, origins, parent, limit=limit, seen={pid})
-            if found:
-                meta["command"] = {"line": found, "source": "inherited",
-                                   "via": [parent] + list(chain), "reason": ""}
-                counts["inherited"] += 1
-            else:
-                meta["command"] = {"line": "", "source": "none",
-                                   "via": chain or [parent], "reason": reason}
-                key = f"none_{reason}"
-                counts[key] = counts.get(key, 0) + 1
-            if ambiguous:
-                counts["ambiguous"] += 1
-            continue
-        where = "none_exec" if kind == "exec" else "none_no_derivation"
-        meta["command"] = {"line": "", "source": "none", "via": [], "reason": where}
-        counts[where] += 1
-    return counts
-
-
 def build_process_context(graph: Any, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """从闭包产出的事件行生成每个进程的身份摘要（按进程标识去重）。
 
@@ -153,7 +82,4 @@ def build_process_context(graph: Any, rows: list[dict[str, Any]]) -> dict[str, d
         meta["origin"] = origins.get(pid) or {"kind": "none", "parent": "", "parent_content": "",
                                               "t": 0, "n": 0}
         metas[pid] = meta
-    # 命令表：图顶点为空时沿派生链往上找（默认关；关时不产生任何额外查询）
-    if settings.command_table_enabled():
-        attach_commands(graph, by_process, metas, limit=settings.command_inherit_depth())
     return metas

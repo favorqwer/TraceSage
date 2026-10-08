@@ -6,7 +6,7 @@
 
 **双层滚动上下文**（逐波更新，替代静态概览）：
 - 第 1 层「上游交接明细」：这条边的上层顶点上**已经判过**的边及其结论（`JudgeState.upstream`）。
-- 第 2 层「调查状态摘要」：已确认链片段、本波工作面、相关顶点状态、计数（`build_summary`）。
+- 第 2 层「调查状态摘要」：已确认链片段 + 服务会话一览（`build_summary`）。
 
 确定性：分组、排序、编号、摘要裁剪全部固定；模型只影响判定结论与折叠文本。
 """
@@ -16,11 +16,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ...contracts import conf, short, triple
+from ...contracts import short, triple
+from ...core import settings
 
-# 摘要各小节最多渲染的行数（再按字符上限裁剪）
-_WORKFACE_LIMIT = 30
-_VERTEX_LIMIT = 40
+# 摘要两节之间的间隔
 _NARRATIVE_GAP = "\n\n"
 
 
@@ -63,23 +62,19 @@ def index_waves(waves: list[dict[str, Any]],
     return indexed, flat, wave_of
 
 
-def via_content(item: dict[str, Any], metas: dict[str, dict[str, Any]]) -> str:
-    """这条边的上层顶点在图上的内容（进程用可执行路径口径，对象用路径本身）。
-
-    `via_kind` / `via_key` 是第 1 层折叠时留下的原始标识；进程侧要换成与边端点同一口径的内容，
-    才能和已经判过的相邻边对上。
-    """
-    kind = str(item.get("via_kind") or "")
-    key = str(item.get("via_key") or "")
-    if not key:
-        return ""
-    if kind == "Process":
-        return str((metas.get(key) or {}).get("owner") or key)
-    return key
-
-
 def _via_raw(item: dict[str, Any]) -> tuple[str, str]:
     return (str(item.get("via_kind") or ""), str(item.get("via_key") or ""))
+
+
+def _identities(item: dict[str, Any]) -> list[tuple[str, str]]:
+    """这条边的两端身份（第 1 层折叠时存下）；同一身份只留一次。"""
+    found: list[tuple[str, str]] = []
+    for field_name in ("src_identities", "dst_identities"):
+        for pair in item.get(field_name) or ():
+            ident = (str(pair[0]), str(pair[1]))
+            if ident[1]:
+                found.append(ident)
+    return list(dict.fromkeys(found))
 
 
 def chunk_wave(items: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]]:
@@ -116,12 +111,17 @@ def chunk_wave(items: list[dict[str, Any]], size: int) -> list[list[dict[str, An
 
 @dataclass
 class JudgeState:
-    """逐波累计的调查状态（纯内存、确定性更新）。"""
+    """逐波累计的调查状态（纯内存、确定性更新）。
+
+    「上层已判过的边」按**顶点身份**索引（进程 → 进程标识、文件 → 路径、网络 → 四元组）：
+    一个程序在一台机器上可能跑了很多次，按内容（可执行文件路径）找会把同名进程的历史混在一起
+    （场景 3 实测：模型看到的 2,713 条“以前判过的记录”里只有 2.5% 真的关于那个进程）。
+    身份由第 1 层的折叠给出（`src_identities` / `dst_identities`）。
+    """
 
     by_triple: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
-    by_via: dict[tuple[str, str], list[dict[str, Any]]] = field(default_factory=dict)
-    by_content: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
-    vertex: dict[str, list[int]] = field(default_factory=dict)   # 内容 -> [确认条数, 排除条数]
+    by_ident: dict[tuple[str, str], list[dict[str, Any]]] = field(default_factory=dict)
+    session: dict[str, list[int]] = field(default_factory=dict)  # 连接端点 -> [确认条数, 排除条数]
     chain: list[dict[str, Any]] = field(default_factory=list)    # 已确认边，按波顺序
     counts: dict[str, int] = field(default_factory=lambda: {"confirmed": 0, "excluded": 0,
                                                             "missing": 0})
@@ -141,124 +141,106 @@ class JudgeState:
                 "id": item.get("id"), "wave": wave_index, "item": item,
                 "triple": triple(item),
                 "verdict": verdict, "relevant": relevant,
-                "via_raw": _via_raw(item),
                 "via": str(item.get("via") or ""),
             }
             self.by_triple[triple(item)] = record
-            if record["via_raw"] != ("", ""):
-                self.by_via.setdefault(record["via_raw"], []).append(record)
-            # 源与目标内容相同时只登记一次（否则同一张记录会被记两遍、顶点计数翻倍）
-            for content in dict.fromkeys((str(item.get("src") or ""), str(item.get("dst") or ""))):
-                if content:
-                    self.by_content.setdefault(content, []).append(record)
-                    node = self.vertex.setdefault(content, [0, 0])
-                    node[0 if relevant else 1] += 1
+            for ident in _identities(item):
+                self.by_ident.setdefault(ident, []).append(record)
+            conn = str(item.get("session_conn") or "")
+            if conn:
+                node = self.session.setdefault(conn, [0, 0])
+                node[0 if relevant else 1] += 1
             self.counts["confirmed" if relevant else "excluded"] += 1
             out["confirmed" if relevant else "excluded"] += 1
             if relevant:
                 self.chain.append(record)
         return out
 
-    def upstream(self, item: dict[str, Any], metas: dict[str, dict[str, Any]],
-                 limit: int) -> list[dict[str, Any]]:
+    def upstream(self, item: dict[str, Any], limit: int) -> list[dict[str, Any]]:
         """第 1 层：这条边的上层顶点上已经判过的边（跳数最少在前、去重、最多 limit 条）。
 
-        `limit` 为 0 时返回空（上限为 0 表示这一层明细不渲染）。
+        按上层顶点的**身份**（`via_kind` / `via_key`）查，只取确实以这个身份为一端的已判记录；
+        优先给属主就是这个进程实例的记录。`limit` 为 0 表示这一层明细不渲染。
         """
-        content = via_content(item, metas)
-        if not content or limit <= 0:
+        kind = str(item.get("via_kind") or "")
+        key = str(item.get("via_key") or "")
+        if limit <= 0 or not kind or not key:
             return []
-        seen: set[str] = set()
-        found: list[dict[str, Any]] = []
-        for record in sorted(self.by_content.get(content) or [],
-                             key=lambda r: (int(r.get("wave") or 0),
-                                            int((r.get("item") or {}).get("t0") or 0))):
-            rid = str(record.get("id") or "")
-            if rid in seen:
-                continue
-            if len(found) >= limit:
-                break
-            seen.add(rid)
-            found.append(record)
-        return found
+        own: list[dict[str, Any]] = []
+        others: list[dict[str, Any]] = []
+        for record in self.by_ident.get((kind, key)) or []:
+            owner = str((record.get("item") or {}).get("process_id") or "")
+            (own if owner == key else others).append(record)
+        order = lambda r: (int(r.get("wave") or 0),
+                           int((r.get("item") or {}).get("t0") or 0),
+                           str(r.get("id")))
+        return (sorted(own, key=order) + sorted(others, key=order))[:limit]
 
     # ------------------------------------------------------------------ #
     # 第 2 层：调查状态摘要
     # ------------------------------------------------------------------ #
 
     def _chain_lines(self, limit: int) -> list[str]:
+        """已确认链片段：只写边与上层顶点，**不写置信度数值**（数值不参与判断，写进去只会当锚点）。"""
         lines = []
         for record in self.chain[-limit:]:
             item = record.get("item") or {}
-            verdict = record.get("verdict") or {}
-            via = short(record.get("via") or "终点事件", 60)
+            via = short(record.get("via") or "终点事件", settings.via_max_chars())
             lines.append(f"- {item.get('src')} --{item.get('syscall')}--> {item.get('dst')}"
-                         f"（置信度 {conf(verdict):.2f}；上层顶点 {via}）")
+                         f"（上层顶点 {via}）")
         return lines
 
-    def _workface_lines(self, current_items: list[dict[str, Any]]) -> list[str]:
-        order: list[str] = []
-        counts: dict[str, list[int]] = {}
-        for item in current_items:
-            raw = _via_raw(item)
-            key = f"{raw[0]} {raw[1]}".strip() or "终点事件"
-            if key not in counts:
-                counts[key] = [0, 0, 0]
-                order.append(key)
-            counts[key][2] += 1
-            for record in self.by_via.get(raw) or []:
-                counts[key][0 if record.get("relevant") else 1] += 1
-        lines = []
-        for key in order[:_WORKFACE_LIMIT]:
-            confirmed, excluded, current = counts[key]
-            lines.append(f"- {short(key, 80)}：已判确认 {confirmed} 条 / 排除 {excluded} 条；本次要判 {current} 条")
-        if len(order) > _WORKFACE_LIMIT:
-            lines.append(f"- 另有 {len(order) - _WORKFACE_LIMIT} 个上层顶点未列出。")
+    def _session_lines(self, sessions: list[dict[str, Any]] | None) -> list[str]:
+        """服务会话一览（第 2 层）：同一服务进程的多次连接放在一起比。
+
+        数据全部来自第 1 层（`l1_reach/sessions.py`）；这里只做汇总与渲染，不参与判定。
+        """
+        if not sessions:
+            return []
+        limit = settings.session_overview_lines()
+        active = [s for s in sessions if int(s.get("activity") or 0) > 0]
+        zero = [s for s in sessions if int(s.get("activity") or 0) <= 0]
+        lines = [f"- 本次清单里共 {len(sessions)} 次被服务进程接受过的连接："
+                 f"命令活动大于 0 的 {len(active)} 次，等于 0 的 {len(zero)} 次。"]
+        if active:
+            lines.append("- 命令活动大于 0（有实际后续活动）：")
+            for item in active[:limit]:
+                lines.append("  " + self._session_line(item))
+            if len(active) > limit:
+                lines.append(f"  （另有 {len(active) - limit} 次未列出）")
+        if zero:
+            candidates = sum(int(s.get("candidates") or 0) for s in zero)
+            counts = [self.session.get(str(s.get("conn")), [0, 0]) for s in zero]
+            confirmed = sum(c[0] for c in counts)
+            excluded = sum(c[1] for c in counts)
+            lines.append(f"- 命令活动等于 0 的 {len(zero)} 次：本清单候选合计 {candidates} 条，"
+                         f"已判 {confirmed + excluded} 条（确认 {confirmed} / 排除 {excluded}）；"
+                         "这些会话除连接本身与自身的读写之外没有留下任何记录。")
         return lines
 
-    def _vertex_lines(self, remaining_items: list[dict[str, Any]],
-                      metas: dict[str, dict[str, Any]]) -> list[str]:
-        relevant: set[str] = set()
-        for item in remaining_items:
-            for content in (str(item.get("src") or ""), str(item.get("dst") or "")):
-                if content:
-                    relevant.add(content)
-            via = via_content(item, metas)
-            if via:
-                relevant.add(via)
-        rows = []
-        for content in relevant:
-            node = self.vertex.get(content)
-            if not node or (node[0] == 0 and node[1] == 0):
-                continue
-            rows.append((node[0], node[1], content))
-        rows.sort(key=lambda r: (-r[0], -r[1], r[2]))
-        lines = [f"- {short(content, 80)}：确认 {c} 条 / 排除 {e} 条" for c, e, content in rows[:_VERTEX_LIMIT]]
-        if len(rows) > _VERTEX_LIMIT:
-            lines.append(f"- 另有 {len(rows) - _VERTEX_LIMIT} 个相关顶点未列出。")
-        return lines
+    def _session_line(self, item: dict[str, Any]) -> str:
+        conn = str(item.get("conn") or "")
+        counts = self.session.get(conn, [0, 0])
+        service = str(item.get("service") or "")
+        head = f"{conn}（{service}）" if service else conn
+        return (f"{head}：命令活动 {item.get('activity')} 条，本清单候选 "
+                f"{item.get('candidates')} 条，已判 {counts[0] + counts[1]} 条"
+                f"（确认 {counts[0]} / 排除 {counts[1]}）")
 
-    def build_summary(self, current_items: list[dict[str, Any]], remaining_items: list[dict[str, Any]],
-                      metas: dict[str, dict[str, Any]], *, max_chars: int, chain_limit: int) -> str:
-        """组装第 2 层摘要；超长按「计数 → 顶点状态 → 工作面 → 链片段」从低到高丢弃。"""
+    def build_summary(self, *, chain_limit: int,
+                      sessions: list[dict[str, Any]] | None = None) -> str:
+        """组装第 2 层摘要（已确认链片段 + 服务会话一览）。
+
+        两节各自的条数由结构性上限管住（链片段 `chain_limit` 条、会话一览节内的 8 行），
+        不另设字符上限。
+        """
         sections: list[str] = []
         chain = self._chain_lines(chain_limit)
         if chain:
             sections.append("### 已确认的上游活动（从终点往上，最近若干条）\n" + "\n".join(chain))
-        workface = self._workface_lines(current_items)
-        if workface:
-            sections.append("### 本波工作面（上层顶点：已判数与本次条数）\n" + "\n".join(workface))
-        vertices = self._vertex_lines(remaining_items, metas)
-        if vertices:
-            sections.append("### 相关顶点状态（只列后面还会出现的顶点）\n" + "\n".join(vertices))
-        sections.append(f"### 计数\n- 到目前：已判 {len(self.by_triple)} 条"
-                        f"（确认 {self.counts['confirmed']}，排除 {self.counts['excluded']}，"
-                        f"缺失 {self.counts['missing']}）；本波 {len(current_items)} 条；"
-                        f"剩余（含本波）{len(remaining_items)} 条。")
-        while len(sections) > 1 and len(_NARRATIVE_GAP.join(sections)) > max_chars:
-            sections.pop()
-        text = _NARRATIVE_GAP.join(sections)
-        if len(text) > max_chars:
-            text = text[:max_chars] + "\n（摘要已按长度上限截断）"
-        return text
+        session_lines = self._session_lines(sessions)
+        if session_lines:
+            sections.append("### 服务会话一览（被服务进程接受过的连接，按命令活动从多到少）\n"
+                            + "\n".join(session_lines))
+        return _NARRATIVE_GAP.join(sections)
 

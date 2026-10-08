@@ -19,21 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from .closure import labels_of
-
-
-def _project(row: dict[str, Any]) -> tuple[str, str, str]:
-    """一行边记录 -> (src 内容, 操作名, dst 内容)。方向由关系类型唯一决定。"""
-    rel = row["rel"]
-    owner = row["owner"]
-    other = row["other"]
-    if rel in ("p2f", "p2n"):
-        return owner, row["syscall"], other
-    if rel in ("f2p", "n2p"):
-        return other, row["syscall"], owner
-    if rel == "p2p":
-        return other, row["syscall"], owner
-    raise ValueError(f"未知关系类型 {rel!r}")
+from ...core import graph_facts
 
 
 @dataclass
@@ -50,6 +36,11 @@ class CollapsedEdge:
     t1: int = 0
     rels: set[str] = field(default_factory=set)
     members: set[str] = field(default_factory=set)   # 来源进程（同一个内容三元组可能由多个进程产生）
+    # 两端顶点的**身份**（判定层“按身份找上层已判过的边”用）：进程 → ("Process", 进程标识)、
+    # 文件 → ("File", 路径)、网络 → ("Network", 四元组)。内容三元组与报告口径不受影响，
+    # 只是多存一份身份，避免“同一个程序跑了 191 次”时把 191 个进程的判定历史混在一起。
+    src_identities: set[tuple[str, str]] = field(default_factory=set)
+    dst_identities: set[tuple[str, str]] = field(default_factory=set)
     # 结构上下文（判定时渲染给模型看，不进报告）：离终点事件最少几跳、从哪个顶点被回推出来。
     # `via` 是给人读的显示文本（进程显示可执行路径）；`via_kind` / `via_key` 是原始标识
     # （判定层的“上游交接明细”按它定位上一层顶点：进程侧是进程标识，对象侧是路径本身）。
@@ -71,6 +62,8 @@ class CollapsedEdge:
             "t1": self.t1,
             "rels": sorted(self.rels),
             "member_processes": sorted(self.members),
+            "src_identities": sorted([list(x) for x in self.src_identities]),
+            "dst_identities": sorted([list(x) for x in self.dst_identities]),
             "dist": self.dist,
             "via": self.via,
             "via_kind": self.via_kind,
@@ -93,15 +86,28 @@ def _via_label(row: dict[str, Any]) -> str:
     return f"{kind} {row.get('via_key') or ''}".strip() if kind else "终点事件"
 
 
+def _other_identity(row: dict[str, Any]) -> tuple[str, str]:
+    """这条边“另一端”（非归属进程那一端）的身份。
+
+    派生边（p2p）的另一端是父进程，取它的进程标识；文件与网络端点取路径 / 四元组。
+    取不到标识时返回空串身份，折叠时会被丢弃（宁可这一端没有身份，也不要拿内容冒充身份）。
+    """
+    label = str(row.get("other_label") or "")
+    if label == "Process":
+        return label, str(row.get("other_process_id") or "")
+    return label, str(row.get("other") or "")
+
+
 def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
     """把事件实例折成内容三元组（行里已经没有命中规则的边，所以这里不删边）。"""
     table: dict[tuple[str, str, str], CollapsedEdge] = {}
     raw = 0
     for row in rows:
         raw += 1
-        src, syscall, dst = _project(row)
+        src, syscall, dst, src_label = graph_facts.content_triple_of(
+            row["rel"], row["syscall"], row["owner"], row["other"])
         # 两端标签用于消除 `/usr/bin/mv` 这类"既是进程又是文件"的内容歧义（与取边时的判定共用一份）
-        src_label, dst_label = labels_of(row["rel"], str(row.get("other_label") or ""))
+        _src_label, dst_label = graph_facts.labels_of(row["rel"])
         key = (src, syscall, dst)
         edge = table.get(key)
         if edge is None:
@@ -133,5 +139,14 @@ def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
         edge.rels.add(row["rel"])
         if row.get("process_id"):
             edge.members.add(str(row["process_id"]))
+        # 两端身份：属主那一端一定是进程（归属规则），另一端按标签取；标识为空就丢这一端
+        owner_ident = ("Process", str(row.get("process_id") or ""))
+        other_ident = _other_identity(row)
+        src_ident, dst_ident = ((owner_ident, other_ident) if graph_facts.owner_is_source(row["rel"])
+                                else (other_ident, owner_ident))
+        if src_ident[1]:
+            edge.src_identities.add(src_ident)
+        if dst_ident[1]:
+            edge.dst_identities.add(dst_ident)
     edges = sorted(table.values(), key=lambda e: (e.t0, e.src, e.syscall, e.dst))
     return FoldResult(edges=edges, raw_instances=raw)

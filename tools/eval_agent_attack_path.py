@@ -10,7 +10,7 @@
         --gt-dir groundtruth [--json-out output/.../agent-metrics.json]
 
 输入:
-    - agent 报告 JSON：`{"scenario":..., "edges":[{"src","syscall","dst","confidence"?}, ...]}`；
+    - agent 报告 JSON：`{"scenario":..., "edges":[{"src","syscall","dst"}, ...]}`；
       `edges` 也可以直接放在顶层数组（此时用 --scenario 指定场景名）。
     - GT：groundtruth/<场景>.groundtruth.json（attack_path）
 
@@ -30,11 +30,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import evaluate_gt as eg  # noqa: E402
 
-CONFIDENCE_ORDER = {"high": 3, "medium": 2, "low": 1}
 
+def load_agent_report(path, scenario=None):
+    """agent 报告 -> (scenario, {(src,syscall,dst): dict}, skipped)。
 
-def load_agent_report(path, scenario=None, min_confidence=None):
-    """agent 报告 -> (scenario, {(src,syscall,dst): dict}, skipped)。"""
+    报告里的其它字段（含模型自报的把握）一律不读：评分只看内容三元组。
+    """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if isinstance(data, list):
         edges = data
@@ -44,24 +45,18 @@ def load_agent_report(path, scenario=None, min_confidence=None):
         scenario = scenario or data.get("scenario") or Path(path).stem
     triples = {}
     skipped = 0
-    dropped_confidence = 0
     for edge in edges:
         src, dst = edge.get("src"), edge.get("dst")
         syscall = edge.get("syscall")
         if not src or not dst or not syscall:
             skipped += 1
             continue
-        if min_confidence:
-            have = edge.get("confidence")
-            if have is not None and CONFIDENCE_ORDER.get(str(have).lower(), 0) < CONFIDENCE_ORDER[min_confidence]:
-                dropped_confidence += 1
-                continue
         triples.setdefault((src, syscall, dst), edge)
-    return scenario, triples, skipped, dropped_confidence
+    return scenario, triples, skipped
 
 
-def evaluate(report_path, gt_path, min_confidence=None, scenario=None):
-    scenario, triples, skipped, dropped = load_agent_report(report_path, scenario, min_confidence)
+def evaluate(report_path, gt_path, scenario=None):
+    scenario, triples, skipped = load_agent_report(report_path, scenario)
     gt, gt_triples = eg.load_gt(gt_path)
     hits = [g for g in gt_triples if (g[0], g[1], g[2]) in triples]
     missed = [g for g in gt_triples if (g[0], g[1], g[2]) not in triples]
@@ -77,7 +72,6 @@ def evaluate(report_path, gt_path, min_confidence=None, scenario=None):
         "misses": len(missed),
         "extra_triples": len(extras),
         "skipped_edges": skipped,
-        "dropped_by_confidence": dropped,
         "recall": len(hits) / len(gt_triples) if gt_triples else 0.0,
         "precision": len(hits) / len(triples) if triples else 0.0,
         "missed_list": [{"src": m[0], "syscall": m[1], "dst": m[2], "phase": m[3]} for m in missed],
@@ -95,8 +89,6 @@ def print_report(result):
     )
     if result["skipped_edges"]:
         print(f"警告: {result['skipped_edges']} 条边缺 src/dst/syscall，无法比对，已排除")
-    if result["dropped_by_confidence"]:
-        print(f"信息: 按 --min-confidence 过滤掉 {result['dropped_by_confidence']} 条边")
     if result["missed_list"]:
         print(f"未召回 ({len(result['missed_list'])}):")
         for m in result["missed_list"]:
@@ -115,8 +107,6 @@ def main():
     ap.add_argument("--results-dir", default=str(ROOT / "output" / "agent-vs-engine" / "results"))
     ap.add_argument("--gt-dir", default=str(ROOT / "groundtruth"))
     ap.add_argument("--scenario", help="报告顶层是数组时用于指定场景名")
-    ap.add_argument("--min-confidence", choices=["high", "medium", "low"],
-                    help="只统计该置信度及以上的边（未标注 confidence 的边保留）")
     ap.add_argument("--json-out", help="把逐场景指标写入该 JSON（含合计 micro）")
     args = ap.parse_args()
 
@@ -132,13 +122,13 @@ def main():
             if not gt_path.exists():
                 print(f"跳过 {report_path.name}: 找不到 {gt_path.name}")
                 continue
-            res = evaluate(report_path, gt_path, args.min_confidence, scenario)
+            res = evaluate(report_path, gt_path, scenario)
             results.append(res)
             print_report(res)
     else:
         if not args.report or not args.gt:
             ap.error("需要 --report 与 --gt（或 --all）")
-        res = evaluate(args.report, args.gt, args.min_confidence, args.scenario)
+        res = evaluate(args.report, args.gt, args.scenario)
         results.append(res)
         print_report(res)
 
@@ -146,14 +136,13 @@ def main():
         tot_gt = sum(r["gt_edges"] for r in results)
         tot_hits = sum(r["hits"] for r in results)
         tot_tri = sum(r["reported_triples"] for r in results)
-        print("\n== 合计（micro，未过滤项按 --min-confidence 处理）==")
+        print("\n== 合计（micro）==")
         print(f"场景数 {len(results)}  召回 {tot_hits}/{tot_gt} = "
               f"{(tot_hits/tot_gt if tot_gt else 0):.1%}  查准 {tot_hits}/{tot_tri} = "
               f"{(tot_hits/tot_tri if tot_tri else 0):.1%}")
         if args.json_out:
             out = {
                 "convention": "边=(源内容,syscall,目标内容) 精确三元组；召回=命中/GT；查准=命中/报告去重三元组（无豁免清单）",
-                "min_confidence": args.min_confidence,
                 "scenarios": [{k: v for k, v in r.items() if k not in ("missed_list", "extra_list")} for r in results],
                 "totals": {
                     "gt_edges": tot_gt,

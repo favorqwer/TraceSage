@@ -15,7 +15,8 @@ WHERE e.syscall = $sc
 RETURN e.event_id AS event_id, e.starttime AS starttime, e.endtime AS endtime,
        e.syscall AS syscall, e.bytes AS bytes, p.process_id AS process_id,
        coalesce(p.exepath,p.name) AS process_content,
-       coalesce(o.path, o.network_id) AS other, labels(o)[0] AS other_label
+       coalesce(o.path, o.network_id) AS other, labels(o)[0] AS other_label,
+       o.protocol AS other_protocol
 ORDER BY e.starttime
 """
 

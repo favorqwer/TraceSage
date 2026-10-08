@@ -4,25 +4,23 @@
 某时刻的边有哪些"。把整库导成按顶点分块、块内按时间排序的定长记录文件后，闭包变成纯内存操作，
 不再依赖数据库往返；索引可重建、可校验（与直查结果逐条比对，见 `tests/unit/test_snapshot.py`）。
 
-## 文件格式（v3，目录 `tmp/provenance-agent/l1-index/<库名>/`）
+## 文件格式（v5，目录 `tmp/provenance-agent/l1-index/<库名>/`）
 
-- `meta.json`：格式版本、库名、边数、最大事件编号、顶点数、入射记录数、规则表校核值、
-  构建时间、语句表。它是**唯一的"这份索引可用"标记**。
+- `meta.json`：格式版本、库名、边数、最大事件编号、顶点数、入射记录数、构建时间、语句表。
+  它是**唯一的"这份索引可用"标记**。
 - `vertices.json`：顶点表（按编号索引）：类型、键、内容；进程还带静态属性（摘要要用），
-  文件顶点若属共享 / 虚拟通道则带 `shared`（值是该通道的类别名，见 `core/edge_rules.py`）。
+  网络顶点带传输层协议 `protocol`（日志有记录才写）。
 - `offsets.json`：顶点编号 -> [起始记录下标, 记录数]（记录定长，可直接定位）。
-- `adj.bin`：定长 45 字节记录数组，按顶点编号分块，块内按（开始时刻, 事件编号）排序。
+- `adj.bin`：定长 43 字节记录数组，按顶点编号分块，块内按（开始时刻, 事件编号）排序。
 
 一条**入射**记录 = 一条边在一个端点上的出现（一条边有两个端点，因此写两条入射记录）：
 
-    owner_id(4) other_id(4) rel(1) syscall_id(2) start(8) end(8) event_id(8) bytes(8) rule_code(1)
+    owner_id(4) other_id(4) rel(1) syscall_id(2) start(8) end(8) event_id(8) bytes(8)
 
 `owner` 是按归属规则拥有这条边的进程（写文件归源进程、被读写归目标进程、派生归子进程），
-`other` 是另一个端点。`rule_code` 是这条边的结构性伪边判定结果（`edge_rules.RULE_CODE_OF`）：
-它只由这条边的静态内容（源内容、操作名、目标内容、源标签）决定，所以在建索引时算一次写进记录，
-遍历时只看这个整数、不再重算。规则表一改，上面的校核值就对不上，索引会被当作过期重建，
-因此不会拿旧规则算出来的标记去遍历。构建时用 64 个桶做外部排序，内存占用与桶大小同阶
-（不随库规模增长）。
+`other` 是另一个端点。索引里**不存任何规则判定结果**：顶点角色与剔除都在遍历时按当前规则表现算，
+所以规则表怎么改都不需要重建索引（失效判据只有边数与最大事件编号）。构建时用 64 个桶做外部排序，
+内存占用与桶大小同阶（不随库规模增长）。
 
 用法：
 
@@ -40,23 +38,16 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from ...core import edge_rules, settings
-from .closure import rule_code_of
+from ...core import graph_facts, settings
 
-FORMAT_VERSION = 3
+FORMAT_VERSION = 5
 BUCKET_COUNT = 64
 
-# 定长记录：'<' 无对齐填充；最后一字节是建索引时算好的规则编码（见文件头格式说明）
-_FINAL = struct.Struct("<IIBHqqqqxB")     # 45 字节
-_BUCKET = struct.Struct("<IIIBHqqqqxB")   # 49 字节（多一个 block_id）
+# 定长记录：'<' 无对齐填充
+_FINAL = struct.Struct("<IIBHqqqq")     # 43 字节
+_BUCKET = struct.Struct("<IIIBHqqqq")   # 47 字节（多一个 block_id）
 
-# 关系类型 -> (拥有者所在的端点, 另一端所在的端点)
-_SIDES = {"p2f": ("a", "b"), "f2p": ("b", "a"), "p2n": ("a", "b"), "n2p": ("b", "a"),
-          "p2p": ("b", "a")}
-
-_KIND_BY_REL_SIDE = {"p2f": ("Process", "File"), "f2p": ("File", "Process"),
-                     "p2n": ("Process", "Network"), "n2p": ("Network", "Process"),
-                     "p2p": ("Process", "Process")}
+# 关系类型 -> 两端标签与归属端由 `core/graph_facts.py` 唯一决定（这里不再各写一份）
 
 _REL_CODE = {"p2f": 0, "f2p": 1, "p2n": 2, "n2p": 3, "p2p": 4}
 _REL_BY_CODE = {v: k for k, v in _REL_CODE.items()}
@@ -65,7 +56,8 @@ _VERTEX_QUERIES = {
     "Process": ("MATCH (p:Process) RETURN p.process_id AS key, coalesce(p.exepath, p.name) AS content, "
                 "p.pid AS pid, p.name AS name, p.exepath AS exepath, p.args AS args, p.cwd AS cwd"),
     "File": "MATCH (f:File) RETURN f.file_id AS key, f.path AS content",
-    "Network": "MATCH (n:Network) RETURN n.network_id AS key, n.network_id AS content",
+    "Network": ("MATCH (n:Network) RETURN n.network_id AS key, n.network_id AS content, "
+                "n.protocol AS protocol"),
 }
 
 _EDGE_QUERIES = {
@@ -154,14 +146,9 @@ def build_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
                     continue
                 vertex_ids[(kind, key)] = len(vertices)
                 item = {"kind": kind, "key": key, "content": str(row.get("content") or key)}
-                for extra in ("pid", "name", "exepath", "args", "cwd"):
+                for extra in ("pid", "name", "exepath", "args", "cwd", "protocol"):
                     if row.get(extra) is not None:
                         item[extra] = row[extra]
-                if kind == "File":
-                    # 共享 / 虚拟通道的标记在这里算一次（遍历时只看这个字段，不再重算路径前缀）
-                    shared = edge_rules.shared_channel_label(key)
-                    if shared:
-                        item["shared"] = shared
                 vertices.append(item)
         log(f"[snapshot] 顶点 {len(vertices)} 个（{time.time() - t0:.1f}s）")
 
@@ -175,8 +162,9 @@ def build_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
             for path in buckets:
                 handles.append(path.open("wb"))
             for rel, cypher in _EDGE_QUERIES.items():
-                owner_side, other_side = _SIDES[rel]
-                kind_a, kind_b = _KIND_BY_REL_SIDE[rel]
+                kind_a, kind_b = graph_facts.labels_of(rel)
+                owner_side = "a" if graph_facts.owner_is_source(rel) else "b"
+                other_side = "b" if owner_side == "a" else "a"
                 last = 0
                 while True:
                     rows = graph.run(cypher, {"last": last, "limit": PAGE})
@@ -201,18 +189,10 @@ def build_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
                             sid = syscall_ids[syscall] = len(syscall_ids)
                         start = int(row.get("starttime") or 0)
                         end = int(row.get("endtime") or start)
-                        # 规则判定只看这条边的静态内容：在这里算一次写进两条入射记录，
-                        # 遍历时不再重算（内容取值口径与 `sources.SnapshotReader._event` 一致）
-                        other_vertex = vertices[other_id]
-                        other_kind = other_vertex["kind"]
-                        rule_code = rule_code_of(
-                            rel, syscall, vertices[owner_id]["content"],
-                            other_vertex["key"] if other_kind in ("File", "Network")
-                            else other_vertex["content"], other_kind)
                         for block_id in (owner_id, other_id):
                             handles[block_id % BUCKET_COUNT].write(_BUCKET.pack(
                                 block_id, owner_id, other_id, _REL_CODE[rel], sid, start, end,
-                                event_id, int(row.get("bytes") or 0), rule_code))
+                                event_id, int(row.get("bytes") or 0)))
                             incidences += 1
                     log(f"[snapshot] {rel} 已导 {last}（边 {edge_count} 条 / 入射 {incidences} 条）")
         finally:
@@ -228,12 +208,12 @@ def build_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
                 records = [_BUCKET.unpack_from(raw, i) for i in range(0, len(raw), _BUCKET.size)]
                 records.sort(key=lambda r: (r[0], r[5], r[7]))      # (block, start, event_id)
                 for rec in records:
-                    block_id, owner_id, other_id, rel_code, sid, start, end, event_id, nbytes, rule = rec
+                    block_id, owner_id, other_id, rel_code, sid, start, end, event_id, nbytes = rec
                     if offsets.get(block_id) is None:
                         offsets[block_id] = [record_index, 0]
                     offsets[block_id][1] += 1
                     out.write(_FINAL.pack(owner_id, other_id, rel_code, sid, start, end, event_id,
-                                          nbytes, rule))
+                                          nbytes))
                     record_index += 1
                 path.unlink(missing_ok=True)
 
@@ -245,7 +225,6 @@ def build_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
         meta = {"format": FORMAT_VERSION, "database": database, "edges": edge_count,
                 "max_event_id": max_event_id, "vertices": len(vertices), "incidences": incidences,
                 "syscalls": syscalls, "built_at": int(time.time()),
-                "rules": edge_rules.rules_fingerprint(),
                 "build_seconds": round(time.time() - t0, 1)}
 
         # --- 4) 提交：三份数据文件原子替换，最后写描述文件 ---
@@ -264,10 +243,9 @@ def build_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
 
 
 def ensure_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
-    """确保索引可用：缺失、损坏、过期（库的边总数/最大事件编号变了）或规则表换过就重建。
+    """确保索引可用：缺失、损坏、过期（库的边总数/最大事件编号变了）就重建。
 
-    规则表也在过期判据里：记录里的规则编码是建索引时按当时的规则表算的，规则一改就得重建，
-    否则会拿旧标记当判定结果。
+    索引里不存规则判定结果，所以规则表怎么改都不用重建（失效判据只有库本身）。
 
     索引建不出来（磁盘、权限等）就报错停下——**不做隐式降级**：慢与快两种取数方式
     混在一起会让"这次到底读了什么"变得不可确认。
@@ -275,9 +253,8 @@ def ensure_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
     meta = read_meta(graph.database)
     if meta is not None:
         fingerprint = db_fingerprint(graph)
-        same_db = ((meta.get("edges"), meta.get("max_event_id"))
-                   == (fingerprint["edges"], fingerprint["max_event_id"]))
-        if same_db and meta.get("rules") == edge_rules.rules_fingerprint():
+        if ((meta.get("edges"), meta.get("max_event_id"))
+                == (fingerprint["edges"], fingerprint["max_event_id"])):
             return meta
     return build_snapshot(graph, log=log)
 

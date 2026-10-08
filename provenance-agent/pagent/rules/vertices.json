@@ -1,0 +1,32 @@
+{
+  "note": "顶点表（第 1 层唯一一份顶点判据，合并原 objects.json 与 processes.json）。文件段三种角色：deliver（普通交付对象）、system（系统提供的文件与程序）、nondelivery（非交付通道）；进程段三类：resident（常驻系统进程）、shell、command（其余）。判定函数在 core/vertices.py。",
+  "files": {
+    "note": "对象角色：每个文件顶点怎么参与因果闭包、范围过滤与例行剔除，全部只看这一段。deliver：普通交付对象（写边收、读边收、顶点展开找写入者、算写读配对、范围过滤追写入者）。system：系统提供的文件与程序（闭包里的待遇与 deliver 一样；但范围过滤不从这里追写入者——读一份系统文件，不代表写它的人参与了攻击）。nondelivery：非交付通道（写入它的边不收；从它读的边收、但不展开、不算写读配对；范围过滤也不追写入者）。drop_reads 只标在“内核按进程号现生成的伪文件”上：这类读边连边都不收（理由见剔除表的说明；口径与实测见 README）。class 是对象类别剔除用的对象类别，与角色同表维护，避免同一批路径前缀写两遍。终端不单列：/dev/ 整个算非交付通道。",
+    "roles": [
+      {"role": "nondelivery", "class": "proc", "drop_reads": true, "label": "内核按进程号现生成的伪文件",
+       "regexes": ["^/proc/[0-9]+/", "^/proc/(self|thread-self)/"]},
+      {"role": "nondelivery", "class": "proc", "label": "内核现生成的伪文件（按名字）",
+       "prefixes": ["/proc/"]},
+      {"role": "nondelivery", "class": "sys", "label": "内核现生成的伪文件（/sys）",
+       "prefixes": ["/sys/"]},
+      {"role": "nondelivery", "class": "device", "label": "设备节点（含终端）",
+       "prefixes": ["/dev/"]},
+      {"role": "nondelivery", "class": "run", "label": "系统运行目录（会话与服务的文件、套接字）",
+       "prefixes": ["/run/", "/var/run/", "/var/lock/"]},
+      {"role": "nondelivery", "class": "system_socket", "label": "系统级套接字路径",
+       "prefixes": ["unix:[/run/", "unix:[/var/run/", "unix:[/tmp/.X11-unix/", "unix:[/tmp/.ICE-unix/"]},
+      {"role": "system", "class": "system_file", "label": "系统提供的文件与程序",
+       "prefixes": ["/usr/", "/lib/", "/lib64/", "/etc/", "/var/lib/", "/boot/", "/snap/"]},
+      {"role": "system", "class": "other_path", "label": "系统提供的程序目录（/bin、/sbin）",
+       "prefixes": ["/bin/", "/sbin/"]}
+    ],
+    "default_role": "deliver"
+  },
+  "processes": {
+    "note": "进程类别：resident（常驻系统进程）有两个用途——范围过滤里是“会话边界”（遇到就不再往下展开会话，否则会把整台机器的会话都拉进来），例行剔除里是属主类别“服务”；shell 用于例行剔除；其余全部算普通命令。",
+    "resident": ["sshd", "systemd", "init", "gnome-terminal-server", "cron", "atd", "login",
+                 "gdm", "gdm-session-worker", "dbus-daemon", "systemd-logind", "systemd-user",
+                 "kthreadd"],
+    "shell": ["bash", "sh", "dash", "zsh"]
+  }
+}

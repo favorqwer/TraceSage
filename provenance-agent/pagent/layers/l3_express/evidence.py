@@ -7,11 +7,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...core import graph_facts
+
 
 def resolve_event_ids(graph: Any, edges: list[dict[str, Any]]) -> tuple[int, int]:
     """回库给缺证据编号的边补证据；返回（补上的条数，补不到的条数）。"""
     content = "coalesce({a}.path, {a}.network_id, coalesce({a}.exepath, {a}.name))"
-    rels = ("p2f", "f2p", "p2n", "n2p", "p2p")
+    rels = graph_facts.ALL_RELS
     resolved = unresolved = 0
     for edge in edges:
         if edge.get("event_id"):

@@ -1,23 +1,31 @@
-"""配置（横切）：.env 加载、路径、模型与判定侧参数。
+"""配置（横切）：路径、凭据（`.env`）、以及全部参数（`config/agent.toml`）。
 
-口径与 `sysdig-parser/parsers/config.py` 一致：stdlib-only 的 .env 加载器，
-`setdefault` 不覆盖已有环境变量，凭据绝不硬编码。
+**参数只有一个入口**：`provenance-agent/config/agent.toml`。本模块负责读它、校验它、缓存它，
+对外只暴露“取某个数”的函数；别的模块不再自己写数字。
 
-展开侧**不设任何条数上限**（理由见下方注释）；旋钮只剩判定侧三类：批大小、并发、单次调查的调用上限。
+凭据与连接信息（数据库地址与口令、接口地址与密钥、模型名）不走那份文件，仍然从环境变量或
+仓库根 `.env` 读，`setdefault` 不覆盖已有环境变量，凭据绝不硬编码。
+
+容错口径：某一项没写就用本模块内置的默认值；类型不对或小于下限也用默认值，并在启动时打印一行
+说明（不报错、不崩）；文件整份缺失时全部用默认值。
+
+展开侧**不设任何条数上限**（理由见下方注释）。
 """
 
 from __future__ import annotations
 
 import os
 import re
+import tomllib
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 # --- 路径 ---
 PKG_DIR = Path(__file__).resolve().parent          # provenance-agent/pagent/core
 AGENT_DIR = PKG_DIR.parent.parent                  # provenance-agent
 REPO_ROOT = AGENT_DIR.parent                       # 仓库根
 CONFIG_DIR = AGENT_DIR / "config"
+CONFIG_FILE = CONFIG_DIR / "agent.toml"            # 全部参数（唯一真源）
 SCENARIOS_FILE = CONFIG_DIR / "scenarios.json"
 PROMPTS_DIR = PKG_DIR.parent / "prompts"           # provenance-agent/pagent/prompts
 RULES_DIR = PKG_DIR.parent / "rules"               # provenance-agent/pagent/rules
@@ -51,16 +59,100 @@ def load_dotenv(path: Optional[str] = None) -> None:
                 os.environ.setdefault(match.group(1), match.group(2))
 
 
-def resolve_int_env(name: str, default: int, minimum: int) -> int:
-    raw = os.environ.get(name)
-    if raw is not None:
+# --- 参数文件（config/agent.toml）：读、校验、缓存 ---
+_CONFIG: Optional[dict[str, Any]] = None
+_CONFIG_PATH: Path = CONFIG_FILE
+_WARNINGS: list[str] = []
+
+
+def config_path() -> Path:
+    """当前用的参数文件路径。"""
+    return _CONFIG_PATH
+
+
+def use_config(path: Optional[str] = None) -> Path:
+    """换一份参数文件（None = 回到默认那份）；下一次读参数时重新加载。
+
+    测试与对照实验用（换一份文件跑，不改默认那份）。
+    """
+    global _CONFIG_PATH, _CONFIG
+    _CONFIG_PATH = Path(path) if path is not None else CONFIG_FILE
+    _CONFIG = None
+    _WARNINGS.clear()
+    return _CONFIG_PATH
+
+
+def config_warnings() -> list[str]:
+    """加载参数文件时发现的问题（缺项不算问题；类型不对、超范围、读不了才算）。
+
+    空表表示没问题；入口启动时把非空的内容打印一行。
+    """
+    _config()
+    return list(_WARNINGS)
+
+
+def _config() -> dict[str, Any]:
+    """读一次、缓存住（一次运行只读一次文件）。"""
+    global _CONFIG
+    if _CONFIG is not None:
+        return _CONFIG
+    data: dict[str, Any] = {}
+    if _CONFIG_PATH.is_file():
         try:
-            value = int(raw.strip())
-            if value >= minimum:
-                return value
-        except ValueError:
-            pass
-    return default
+            with _CONFIG_PATH.open("rb") as fh:
+                loaded = tomllib.load(fh)
+            if isinstance(loaded, dict):
+                data = loaded
+        except Exception as exc:  # noqa: BLE001 - 读不了就全部用默认值，启动时打印
+            _warn(f"参数文件 {_CONFIG_PATH} 读不了（{type(exc).__name__}），全部用默认值")
+    _CONFIG = data
+    return _CONFIG
+
+
+def _warn(message: str) -> None:
+    if message not in _WARNINGS:
+        _WARNINGS.append(message)
+
+
+def _raw(section: str, key: str) -> Any:
+    node = _config().get(section)
+    return node.get(key) if isinstance(node, dict) else None
+
+
+def _pick_int(section: str, key: str, default: int, minimum: int) -> int:
+    value = _raw(section, key)
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int):
+        _warn(f"{section}.{key} 要整数，现在写的是 {value!r}；用默认值 {default}")
+        return default
+    if value < minimum:
+        _warn(f"{section}.{key} 不能小于 {minimum}，现在写的是 {value}；用默认值 {default}")
+        return default
+    return value
+
+
+def _pick_float(section: str, key: str, default: float, minimum: float) -> float:
+    value = _raw(section, key)
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        _warn(f"{section}.{key} 要数字，现在写的是 {value!r}；用默认值 {default}")
+        return default
+    if float(value) < minimum:
+        _warn(f"{section}.{key} 不能小于 {minimum}，现在写的是 {value}；用默认值 {default}")
+        return default
+    return float(value)
+
+
+def _pick_bool(section: str, key: str, default: bool) -> bool:
+    value = _raw(section, key)
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        _warn(f"{section}.{key} 要 true/false，现在写的是 {value!r}；用默认值 {default}")
+        return default
+    return value
 
 
 def ensure_work_dirs() -> None:
@@ -100,7 +192,8 @@ def llm_api_key() -> Optional[str]:
 # 展开的终止条件只有一个：待考察清单（前沿）耗尽。
 
 
-# 第 1 层：没有开关。语义口径全部写死在 `l1_reach/` 里（方向约束、遍历期规则、无条数上限、
+# 第 1 层只有一个开关：输出期过滤（`output_filter_enabled`，默认开，只用于对照实验）。
+# 其余语义口径全部写死在 `l1_reach/` 里（方向约束、遍历期规则、无条数上限、
 # 同一主体子进程算上游、写入者时间界取读取结束时刻、进程状态上界取终点事件时刻、不设时间窗）；
 # 取数方式也固定：读本地顶点-时间索引快照，缺失或过期就重建（见 `l1_reach/snapshot.py`）。
 # 定成读索引的理由：直查数据库按行计价（实测每行约 27~39 微秒），三个大闭包场景（3/4/5）要
@@ -115,88 +208,125 @@ def ensure_index_dir() -> None:
     L1_INDEX_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# --- 判定侧（唯一的模型调用）---
-# 批大小：一次请求里放多少条边。批量只影响“重复发送的上下文”总量与并行度：
-# - 批越大 → 调用越少、重复的上下文越少（省输入 token）；
-# - 批越小 → 并行度越高（池子里的调用数更多）。
-# 单批过大还会顶到网关的超时（实测 440 条/8.7 万字符的单次请求连顶两次 504），
-# 所以上限保持保守；默认 70 条（2026-09-28 从 50 调高，配合逐波内切批）。
-DEFAULT_JUDGE_BATCH = 70
+# --- 参数：全部从 `config/agent.toml` 读，括号里是文件里的位置 ---
+# 每一项的“为什么是这个值”写在参数文件里；这里只写它管什么。取值都走 `_pick_*`：
+# 缺项、类型不对、超范围都回到默认值（默认值仅用于容错，日常改值请改参数文件）。
+
+# 第 1 层：输出期过滤（`layers/l1_reach/output_filter.py`）。
+# 它决定第二层能看到哪些候选边：折叠前先剔掉“属主进程不在终点事件那次执行范围内”的实例，
+# 再按剔除表的 output 段（`rules/filters.json`）剔掉整类例行活动。
+def output_filter_enabled() -> bool:
+    return _pick_bool("judge", "output_filter", True)
 
 
 def judge_batch() -> int:
-    return resolve_int_env("PAGENT_JUDGE_BATCH", DEFAULT_JUDGE_BATCH, minimum=1)
-
-
-# 判定池的并发上限。网关实测限流是 20，超了会 429（24 次重试把 judge 阶段从 281s 拉到 333s）。
-DEFAULT_MAX_CONCURRENCY = 12
+    """每批边数上限（波内切批）。"""
+    return _pick_int("judge", "batch", 70, 1)
 
 
 def max_concurrency() -> int:
-    return resolve_int_env("PAGENT_MAX_CONCURRENCY", DEFAULT_MAX_CONCURRENCY, minimum=1)
+    """同一波的批的并发上限。"""
+    return _pick_int("judge", "concurrency", 12, 1)
 
 
-# 单次调查的模型调用上限（超过就停止判定，未判定的边显式记成 unjudged）
-DEFAULT_MAX_LLM_CALLS = 150
+def thinking_enabled() -> bool:
+    """模型是否先内部推理再回答（官方接口上的那个字段）。"""
+    return _pick_bool("judge", "thinking", False)
 
 
-def max_llm_calls() -> int:
-    return resolve_int_env("PAGENT_MAX_LLM_CALLS", DEFAULT_MAX_LLM_CALLS, minimum=1)
-
-
-# --- 判定侧：逐波推进与双层滚动上下文（唯一方案）---
 def wave_attempts() -> int:
-    """一波调用失败时整波重试的次数（不切割波）。"""
-    return resolve_int_env("PAGENT_WAVE_ATTEMPTS", 2, minimum=1)
+    """一批最多尝试几次（首次 + 失败后重发，不切割波）。"""
+    return _pick_int("judge", "wave_attempts", 2, 1)
 
 
 def upstream_limit() -> int:
     """每条边下面最多列几条「上层顶点上已判过的边」（第 1 层明细）。"""
-    return resolve_int_env("PAGENT_UPSTREAM_LIMIT", 3, minimum=0)
-
-
-def call_max_chars() -> int:
-    """单次调用文本长度的目标上限（超出就逐级压缩局部上下文；**不切割波、不丢边**）。
-
-    压缩顺序：先去同一对象接触者，再去上游交接明细；去掉全部局部上下文仍超限就照常发送并在日志里明说。
-    """
-    return resolve_int_env("PAGENT_CALL_MAX_CHARS", 80000, minimum=1000)
-
-
-def state_max_chars() -> int:
-    """调查状态摘要（第 2 层）的字符上限。"""
-    return resolve_int_env("PAGENT_STATE_MAX_CHARS", 2500, minimum=200)
+    return _pick_int("judge", "upstream_limit", 3, 0)
 
 
 def state_chain_limit() -> int:
     """状态摘要里「已确认链片段」最多列几条。"""
-    return resolve_int_env("PAGENT_STATE_CHAIN_LIMIT", 20, minimum=1)
+    return _pick_int("judge", "state_chain_limit", 20, 1)
 
 
-# 任务说明（目标事件 + 时间原点 + 清单口径）：默认开；置 0 仅供对照实验（A/B 同一份代码）
-def task_header_enabled() -> bool:
-    return resolve_int_env("PAGENT_TASK_HEADER", 1, minimum=0) != 0
+def neighbor_per_side() -> int:
+    """同一对象上前侧、后侧各最多列几条时间邻居（0 = 不列这一项）。"""
+    return _pick_int("judge", "neighbor_per_side", 2, 0)
 
 
-# 边旁的局部上下文：同一对象上的接触者（已判过的会带结论）。主开关 PAGENT_EDGE_CONTEXT=0 时关闭。
-def edge_context_enabled() -> bool:
-    return resolve_int_env("PAGENT_EDGE_CONTEXT", 1, minimum=0) != 0
+def overlap_neighbor_count() -> int:
+    """同一对象上前侧或后侧为空时，补几条时间重叠的邻居。"""
+    return _pick_int("render", "overlap_neighbor", 1, 0)
 
 
-def object_handoff_enabled() -> bool:
-    return edge_context_enabled() and resolve_int_env("PAGENT_OBJECT_HANDOFF", 1, minimum=0) != 0
+def reason_max_chars() -> int:
+    """判定理由长度：提示词按它要求模型，代码按同一个数截断渲染出来的理由。"""
+    return _pick_int("render", "reason_max_chars", 40, 1)
 
 
-# --- 命令表（第一层末尾按派生关系补命令行）---
-# 默认 0：渲染时命令行仍取图顶点属性，输出与开关加进来之前逐字节相同（同一份代码做对照）。
-# 置 1：图顶点为空时沿派生链往上找父进程的命令行补上（纯代码推断，渲染时标注来源），
-# 并在查不到时写明原因（执行过但没记录 / 采集前就在运行 / 派生链断）。
-# 背景（六场景实测）：2,621 个进程里 81.0% 图顶点有值且与日志逐字相同、0 处冲突；
-# 6.3% 为空但可沿派生链补；12.3% 日志与图都为空；0.4% 图上有值但日志侧无对照。
-def command_table_enabled() -> bool:
-    return resolve_int_env("PAGENT_COMMAND_TABLE", 0, minimum=0) != 0
+def via_max_chars() -> int:
+    """状态摘要里「上层顶点」文字的截断长度。"""
+    return _pick_int("render", "via_max_chars", 60, 1)
 
 
-def command_inherit_depth() -> int:
-    """派生链向上找的最大层数（超过就记“派生链断”，不猜）。"""
-    return resolve_int_env("PAGENT_COMMAND_INHERIT_DEPTH", 5, minimum=1)
+def session_overview_lines() -> int:
+    """状态摘要里「服务会话一览」最多列几条有命令活动的会话。"""
+    return _pick_int("render", "session_overview_lines", 8, 1)
+
+
+def log_text_limit() -> int:
+    """日志、审计文件、原始输出样本的统一截断长度（报告里判定理由的长度也是它）。"""
+    return _pick_int("logging", "text_limit", 120, 1)
+
+
+def audit_sample_n() -> int:
+    """报告与统计里举几条样例（未判定的边举例、最慢的调用列表共用）。"""
+    return _pick_int("logging", "sample_n", 5, 1)
+
+
+def diagnostic_keep() -> int:
+    """诊断保留量：每次调用保留多少字符的原文样本 = 内存里最多留多少条调用明细。"""
+    return _pick_int("logging", "diagnostic_keep", 2000, 1)
+
+
+# 模型通道（`core/llm.py`）：超时、两层重试、退避与限流等待。
+def llm_timeout_seconds() -> int:
+    return _pick_int("llm", "timeout_seconds", 120, 1)
+
+
+def llm_sdk_retries() -> int:
+    """接口库自身的重试次数（设 0 关掉它，重试交给程序自己的退避逻辑）。"""
+    return _pick_int("llm", "sdk_retries", 0, 0)
+
+
+def llm_plain_retries() -> int:
+    return _pick_int("llm", "plain_retries", 3, 0)
+
+
+def llm_plain_retry_base_seconds() -> float:
+    return _pick_float("llm", "plain_retry_base_seconds", 2.0, 0.0)
+
+
+def llm_rate_limit_waits() -> int:
+    return _pick_int("llm", "rate_limit_waits", 8, 0)
+
+
+def llm_rate_limit_wait_start_seconds() -> float:
+    return _pick_float("llm", "rate_limit_wait_start_seconds", 5.0, 0.0)
+
+
+def llm_rate_limit_wait_max_seconds() -> float:
+    return _pick_float("llm", "rate_limit_wait_max_seconds", 60.0, 0.0)
+
+
+def llm_format_retries() -> int:
+    """模型输出不是合法结构时，把错误灌回去再要一次的次数。"""
+    return _pick_int("llm", "format_retries", 2, 0)
+
+
+# --- 服务会话一览（第 1 层算、第 2 层摘要里渲染）---
+# 始终产出：把“每次连接：服务进程、命令活动条数、候选条数”写进调查状态摘要，
+# 让模型能比较同一服务进程的多次连接（命令活动 0 的那几次没有引出后续活动）。
+# 只增上下文，不参与收边、不过滤候选。
+# 会话命令活动口径见 `l1_reach/sessions.py`（零活动 = 这次会话除连接本身与自身的读写之外
+# 没有留下任何候选记录；没有阈值，判断仍由模型做）。

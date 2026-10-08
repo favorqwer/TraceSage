@@ -12,8 +12,8 @@
 2. **同顶点交付**：甲写入同一个文件或网络顶点，乙从该顶点读取，
    且甲的开始时刻不晚于乙的结束时刻（流式读写允许边写边读）。
    只算写入侧——读不会把内容送回顶点。**交付只发生在能承载内容的通道上**：
-   命中 `core/edge_rules.py` 的 `shared_channel_label` 的文件顶点（内核现生成的伪文件、
-   设备节点、系统运行目录及其中的套接字）**只收边、不展开**——读取它的那条边照样进闭包，
+   角色是非交付通道的文件顶点（内核现生成的伪文件、设备节点、系统运行目录及其中的套接字，
+   判据表 `core/vertices.py` 的文件段）**只收边、不展开**——读取它的那条边照样进闭包，
    但不沿它往回找写入者。
 3. **派生**：甲是进程派生事件（父进程到子进程），乙是该子进程在甲之后的事件。
    子进程要不要算上游，由调用方给的把关函数决定（`siblings.py`）：不传把关函数就是全收。
@@ -33,13 +33,15 @@
 规则的"不进闭包"那一类（`stats.dropped`）、零字节的数据读取（边照收，只是不从它的顶点往回找，
 `stats.empty_reads`）、子进程把关（`stats.gate_blocked`）；每一类都逐条计数，互不混装。
 
-## 规则判定（五条边规则与折叠共用一份判据，都在取边时完成）
+## 规则判定（影响往回走的那些，取边时执行，判据唯一来源 `core/edge_rules.traversal_drop_code`）
 
-五条结构式规则都在**取边时**判定（同一个规则模块 `core/edge_rules.py`），后果只有一档：**命中就不收**
-这条边，两端也不会被推进待考察清单；逐类计数进 `stats.dropped`（编号：`r1` / `r2` / `prefilter` /
-`kernel_pid_file` / `shared_channel_write`）。
+取边时只删"**不可能通向终点事件**"的边：写非交付通道、读内核按进程号现生成的伪文件（顶点表
+文件段，`core/vertices.py`），动态库读取、系统程序自我执行、系统例行文件读取（内容形状，
+剔除表的 traversal 段）。
+后果只有一档：**命中就不收**这条边，两端也不会被推进待考察清单；逐类计数进 `stats.dropped`
+（编号：`r1` / `r2` / `prefilter` / `kernel_pid_file` / `nondelivery_write`）。
 
-**终点事件不受规则约束**：它是唯一绕过五条规则的边（加入闭包时明确不判规则），永远交给模型判定。
+**终点事件不受规则约束**：它是唯一绕过这些判定的边（加入闭包时明确不判规则），永远交给模型判定。
 （代价：若终点事件本身命中某条规则，它仍会进候选表 —— 它定义了这次调查，不应被规则抹掉。）
 
 ## 输出
@@ -54,8 +56,8 @@
 - `stats` 里的每一个数都只统计**这一次调用**（每次 `run_closure` 用一套新计数器）；
 - `rows_fetched` 是**进判定**的行数；来源侧扫到的记录数 = `rows_fetched` + 来源的
   `skipped_already_included`（已收进闭包、在来源侧直接跳掉的那些）；
-- `dropped` 只装五条结构式规则的逐类剔除数（`r1` / `r2` / `prefilter` / `kernel_pid_file` /
-  `shared_channel_write`）；子进程把关挡下的派生边单独计在 `gate_blocked`；
+- `dropped` 只装影响往回走的逐类剔除数（`r1` / `r2` / `prefilter` / `kernel_pid_file` /
+  `nondelivery_write`）；子进程把关挡下的派生边单独计在 `gate_blocked`；
 - 来源自己的计数器由 `take_stats()` 取出并**清零**，因此可以按遍数分开记：正式流程第一遍的数
   落在 `siblings.SiblingGate.stats()` 的 `source_pass1` 里，第二遍的数就是来源的 `stats()`。
 """
@@ -65,9 +67,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Protocol
 
-from ...core import edge_rules
-
-_CONSUMER_RELS = ("f2p", "n2p")
+from ...core import edge_rules, graph_facts
 
 # 数据读取类操作名（已归一）：只有它们才用"字节数"判断有没有拿到内容。
 # `execve` / `accept` / `connect` 这类事件的字节数按设计就是 0，不能用它当"没交付"的判据。
@@ -77,52 +77,20 @@ _DATA_READ_SYSCALLS = ("read", "recvfrom")
 _KIND_ORDER = ("File", "Network", "Process")
 
 
-def labels_of(rel: str, other_label: str) -> tuple[str, str]:
-    """一条边的两端标签（方向由关系类型唯一决定）——规则判定与折叠共用这一份。"""
-    other = other_label or "Process"
-    if rel in ("p2f", "p2n"):
-        return "Process", other
-    if rel in _CONSUMER_RELS:
-        return other, "Process"
-    return "Process", "Process"
-
-
-def content_triple_of(rel: str, syscall: str, owner: str, other: str,
-                      other_label: str) -> tuple[str, str, str, str]:
-    """(源内容, 操作名, 目标内容, 源标签)——与折叠、规则判定的口径一致。
-
-    取边来源、闭包引擎与索引构造必须都走这一个函数：规则判定按它下结论，口径一分岔，
-    索引里预先算好的规则编码就会与遍历时现算的结果对不上。
-    """
-    src_label, _dst_label = labels_of(rel, other_label)
-    src, dst = (owner, other) if rel in ("p2f", "p2n") else (other, owner)
-    return src, syscall, dst, src_label
-
-
-def rule_code_of(rel: str, syscall: str, owner: str, other: str, other_label: str) -> int:
-    """这条边命中哪条结构性伪边规则（`edge_rules.RULE_CODE_OF` 的编码，0 = 不命中）。"""
-    name, _label = edge_rules.rule_of(*content_triple_of(rel, syscall, owner, other, other_label))
-    return edge_rules.RULE_CODE_OF.get(name, 0)
-
-
 class Event:
     """一条图上的边（事件）。`pid` 是按归属规则拥有它的进程。
 
     用固定槽位的普通类而不是数据类：闭包在大日志上要建上百万个，构造开销直接落在总耗时里。
-
-    `rule_code` 是这条边命中哪条结构性伪边规则（`edge_rules.RULE_CODE_OF`）：`-1` 表示来源
-    没有预先判定、遍历时现算（手工构造的事件与数据库直查来源走这条路），`0` 表示已判定为不命中。
-    另两条结构式规则（内核按进程现生成的伪文件、写进共享 / 虚拟通道）不进索引（索引里不存与它们
-    有关的标记），在取边时现算，所以它们没有编号字段。
+    规则命中与否不在这里预存：影响往回走的判定在取边时按边的形状现算并缓存（见 `include`）。
     """
 
     __slots__ = ("event_id", "rel", "syscall", "bytes", "start", "end", "pid", "owner",
-                 "other", "other_label", "other_process_id", "rule_code",
+                 "other", "other_label", "other_process_id",
                  "dist", "via_kind", "via_key")
 
     def __init__(self, event_id: int, rel: str, syscall: str, bytes: int, start: int, end: int,
                  pid: str, owner: str, other: str, other_label: str, other_process_id: str = "",
-                 rule_code: int = -1, dist: int = 0, via_kind: str = "", via_key: str = "") -> None:
+                 dist: int = 0, via_kind: str = "", via_key: str = "") -> None:
         self.event_id = event_id
         self.rel = rel
         self.syscall = syscall
@@ -134,16 +102,11 @@ class Event:
         self.other = other
         self.other_label = other_label
         self.other_process_id = other_process_id
-        self.rule_code = rule_code
         # 结构上下文（只用于判定时的渲染，不参与收边判定）：离终点事件最少几跳（种子 = 0），
         # 以及这条边是从哪个顶点被回推出来的（`via_kind` 为空 = 终点事件本身）
         self.dist = dist
         self.via_kind = via_kind
         self.via_key = via_key
-
-    def content_triple(self) -> tuple[str, str, str, str]:
-        """(源内容, 操作名, 目标内容, 源标签)——与折叠、规则判定的口径一致。"""
-        return content_triple_of(self.rel, self.syscall, self.owner, self.other, self.other_label)
 
 
 class GraphSource(Protocol):
@@ -179,9 +142,9 @@ class GraphSource(Protocol):
         """释放句柄（索引来源为空实现）。"""
 
     def stats(self) -> dict[str, Any]:
-        """来源侧的计数（查询次数、扫到的记录数、共享通道跳过的顶点展开次数等）。
+        """来源侧的计数（查询次数、扫到的记录数、非交付通道跳过的顶点展开次数等）。
 
-        `shared_not_expanded` 计的是**被跳过的共享 / 虚拟通道顶点展开次数**，不是被跳过的边数。
+        `nondelivery_not_expanded` 计的是**被跳过的非交付通道顶点展开次数**，不是被跳过的边数。
         """
 
     def take_stats(self) -> dict[str, Any]:
@@ -248,16 +211,12 @@ def run_closure(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
     stats = _Stats()
     drop_cache: dict[tuple[str, str, str, str, str], str] = {}
 
-    def candidate_mark(ev: Event) -> str:
-        """两条结构式规则的判定（与上面三条同一处、同一个规则模块），按边形状缓存。"""
-        key = (ev.rel, ev.syscall, ev.owner, ev.other, ev.other_label)
+    def early_mark(ev: Event) -> str:
+        """影响往回走的剔除判定（对象角色 + 剔除表的 traversal 段），按边的形状缓存：同一形状只算一次。"""
+        key = (ev.rel, ev.syscall, ev.owner, ev.other)
         mark = drop_cache.get(key)
         if mark is None:
-            src, syscall, dst, src_label = ev.content_triple()
-            _src_label, dst_label = labels_of(ev.rel, ev.other_label)
-            mark = edge_rules.candidate_drop_code(
-                {"src": src, "syscall": syscall, "dst": dst, "src_label": src_label,
-                 "dst_label": dst_label, "rel": ev.rel})
+            mark = edge_rules.traversal_drop_code(ev.rel, ev.syscall, ev.owner, ev.other)
             drop_cache[key] = mark
         return mark
 
@@ -307,26 +266,13 @@ def run_closure(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
                 prev.via_kind, prev.via_key = via_kind, via_key
             return False
         if apply_rules:
-            code = ev.rule_code
-            if code < 0:
-                # 来源没预先判定（手工构造的事件、数据库直查来源）：现算
-                src, syscall, dst, src_label = ev.content_triple()
-                name = edge_rules.rule_of(src, syscall, dst, src_label)[0]
-                if name:
-                    stats.note_drop(name)
-                    return False
-            elif code:
-                # 索引里建的时候就算好了：只查一次名字，不重算
-                stats.note_drop(edge_rules.RULE_CODE_NAMES[code])
-                return False
-            # 两条结构式规则（内核按进程现生成的伪文件、写进共享 / 虚拟通道）：与上面三条**同一处
-            # 判定、同一后果**——命中就不收这条边（两端也不会被推进待考察清单），按边形状缓存。
-            drop = candidate_mark(ev)
-            if drop:
-                stats.note_drop(drop)
+            # 影响往回走的判定：命中就不收这条边（两端也不会被推进待考察清单），按边的形状缓存
+            code = early_mark(ev)
+            if code:
+                stats.note_drop(code)
                 return False
         # 零字节的数据读取：什么都没拿到，因此不再从它的顶点往回找（边本身仍然收）
-        empty_read = (ev.rel in _CONSUMER_RELS and ev.syscall in _DATA_READ_SYSCALLS
+        empty_read = (ev.rel in graph_facts.CONSUMER_RELS and ev.syscall in _DATA_READ_SYSCALLS
                       and int(ev.bytes or 0) <= 0)
         ev.dist = dist
         ev.via_kind, ev.via_key = via_kind, via_key
@@ -337,13 +283,13 @@ def run_closure(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
             push("Process", ev.pid, ev.start, dist)      # 进程状态这条通道照走
             return True
 
-        if ev.rel in ("p2f", "p2n"):
+        if ev.rel in graph_facts.PRODUCER_RELS:
             push("Process", ev.pid, ev.start, dist)
-        elif ev.rel in _CONSUMER_RELS:
+        elif ev.rel in graph_facts.CONSUMER_RELS:
             push("Process", ev.pid, ev.start, dist)
             # 写入者的时间界取读取的结束时刻：流式读写允许边写边读
             push(ev.other_label, ev.other, ev.end, dist)
-        elif ev.rel == "p2p":
+        elif graph_facts.is_derivation(ev.rel):
             # 派生事件：往回只走父进程那一侧（子进程是下游，它的活动由文件 / 通道顶点接回来）
             push("Process", ev.other_process_id, ev.start, dist)
             # 同一主体派生出去的其它子进程也算上游（有意识的超集口径），受子进程把关约束
