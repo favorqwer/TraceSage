@@ -1,8 +1,0 @@
-{
-  "order": ["Initial Access", "Execution", "Persistence", "Discovery", "Collection", "Exfiltration"],
-  "persistence_paths": ["/etc/systemd", "/etc/cron", "/var/spool/cron", "/etc/rc", "/etc/init.d", ".config/systemd", ".bashrc", ".profile", "/etc/profile.d"],
-  "discovery_paths": ["/etc/passwd", "/etc/shadow", "/etc/group", "/etc/hosts", "/proc/", "/etc/os-release"],
-  "discovery_args": ["whoami", "uname", "hostname", "ifconfig", "netstat", "ip a", "ip addr", "nmap", "enumeration", "id -", "ps aux"],
-  "archive_args": ["tar ", "gzip", "zip ", "7z", "rar ", "mysqldump", "sqlite3", "base64"],
-  "archive_ext": [".tar", ".tar.gz", ".tgz", ".zip", ".gz", ".7z", ".rar", ".sql", ".db", ".csv", ".log"]
-}

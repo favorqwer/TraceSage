@@ -157,8 +157,7 @@ def _run_waves(deps: "Deps", to_judge: list[dict[str, Any]], *, header: str, vie
             items = wave["items"]
             upstream = {item["id"]: state.upstream(item, settings.upstream_limit())
                         for item in items}
-            summary = state.build_summary(chain_limit=settings.state_chain_limit(),
-                                          sessions=inv.session_index)
+            summary = state.build_summary(chain_limit=settings.state_chain_limit())
             chunks = l2.chunk_wave(items, chunk_size)
             started = time.time()
             futures = [pool.submit(run_chunk, chunk, summary, upstream, index + 1, len(waves),

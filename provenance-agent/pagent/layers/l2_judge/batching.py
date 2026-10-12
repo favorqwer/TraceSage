@@ -247,11 +247,6 @@ def _edge_line(item: dict[str, Any], ref_t: Any) -> str:
             f"[{item.get('dst_label')}] {_endpoint_display(item, 'dst_label', item['dst'])}"
             f" | 折叠事件数={item.get('instances')} 字节={item.get('bytes')}"
             f" 时间={_rel_time(item.get('t0'), ref_t)}~{_rel_time(item.get('t1'), ref_t)}")
-    activity = item.get("session_activity")
-    if activity is not None:
-        # 第 1 层的“会话命令活动”（只给属于某次服务会话的记录）：这次会话里由非服务进程
-        # 产生的清单记录条数；0 = 这次会话除连接本身与自身读写外没有命令活动。
-        line += f" | 本会话命令活动={activity} 条记录"
     return line
 
 

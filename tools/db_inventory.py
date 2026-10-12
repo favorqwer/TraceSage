@@ -6,8 +6,8 @@ JSON（标签、关系、属性键与填充率、syscall 取值、event_id 连�
 `tools/coverage_gap.py` 与日志侧清单做差。
 
 用法：
-    python tools/db_inventory.py tracesage-1-multi-stage-data-exfiltration \
-        -o output/inventory/1_Multi_Stage_Data_Exfiltration.db-inventory.json
+    python tools/db_inventory.py attack-3-phishing-beacon-cryptomining \
+        -o output/inventory/3_Phishing_Beacon_Cryptomining.db-inventory.json
     # 不传库名则用 .env / 环境变量的 NEO4J_DATABASE
 """
 

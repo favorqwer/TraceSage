@@ -2,18 +2,23 @@
 """GT (ground truth) 召回/查准评估工具。
 
 用法:
-    python tools/evaluate_gt.py output/baseline/<dir>/baseline.json [--window SECONDS]
+    python tools/evaluate_gt.py output/baseline/<场景>/baseline.json \
+        --gt groundtruth/<场景>.groundtruth.json [--window SECONDS]
 
 输入:
-    - groundtruth/1_Multi_Stage_Data_Exfiltration.groundtruth.json（--gt 可指定其他）
+    - GT 文件：groundtruth/<场景>.groundtruth.json（用 --gt 指定，无默认值）
     - BaselineRunner 产出的 baseline.json
 
-匹配口径（与 GT 文件 matching_convention 一致）:
+匹配口径（见 docs/攻击路径评分口径.md）:
     - 顶点内容: Process=coalesce(exepath,name)，File=path，Network=lip:lport->rip:rport
       （与引擎 EntityNode.signature 的内容段一致，签名形如 "355: /etc/resolv.conf"）
-    - 边匹配: (src, syscall, dst) 精确三元组；同类边多实例命中任一即算命中
-    - 召回 = 命中 attack_path 的三元组数 / attack_path 三元组数
-    - 查准 = 命中三元组数 / 最终图去重后的内容三元组数（多出边一律计假阳）
+    - 必须集合（attack_path 的 edges）: (src, syscall, dst) 精确三元组；同类边多实例命中任一即算命中
+    - 可能集合（attack_path 的 rules）: 报告里存在至少一条边满足规则的全部条件（源／动作／目标）即算命中，
+      该步骤只算一分；满足规则的边全部算正确边
+    - 召回（按步骤）= (命中条目数 + 命中规则数) / (条目数 + 规则数)
+    - 查准（按边）= (命中条目边数 + 满足规则的边数) / 报告去重后的内容三元组数
+    - 规则条件里的端点种类（process/file/network）从场景库顶点标签判定（场景名 -> 库名见
+      provenance-agent/config/scenarios.json）；连不上库时 vertex 条件不参与判定
 
 baseline.json 的 final_edges 键是 "host|srcId|dstId|eventId"（数字 id 空间），
 不含 syscall/时间。旧产物经 Neo4j 按 event_id + 端点内容反查补全（连接参数取根 .env）；
@@ -31,8 +36,9 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-# GT JSON 与场景 .md 说明同放 groundtruth/（input/sysdig/ 只有 jsonl 与 query）。
-GT_DEFAULT = ROOT / "groundtruth" / "1_Multi_Stage_Data_Exfiltration.groundtruth.json"
+sys.path.insert(0, str(ROOT / "tools"))
+import rules_match as rm  # noqa: E402
+# GT 文件与场景说明同放 groundtruth/。
 
 
 def load_env(path=ROOT / ".env"):
@@ -50,7 +56,7 @@ def load_gt(path):
     gt = json.loads(Path(path).read_text(encoding="utf-8"))
     triples = []
     for phase in gt["attack_path"]:
-        for edge in phase["edges"]:
+        for edge in phase.get("edges", []) or []:
             triples.append((edge["src"], edge["syscall"], edge["dst"], phase["phase"]))
     return gt, triples
 
@@ -176,23 +182,29 @@ def fmt_offset(seconds):
     return f"{sign}{abs(seconds):.3f}s"
 
 
-def report(title, triples, gt_triples, instances=None, poi=None):
-    gt_keys = [(t[0], t[1], t[2]) for t in gt_triples]
-    hits = [g for g in gt_triples if (g[0], g[1], g[2]) in triples]
-    miss = [g for g in gt_triples if (g[0], g[1], g[2]) not in triples]
-    extra = sorted(k for k in triples if k not in set(gt_keys))
+def report(title, triples, gt_triples, rules=(), kinds=None, instances=None, poi=None):
+    met = rm.evaluate_report(gt_triples, rules, sorted(triples), kinds=kinds)
     print(f"\n== {title} ==")
     print(
-        f"召回 {len(hits)}/{len(gt_triples)} = {len(hits)/len(gt_triples):.1%}   "
-        f"查准 {len(hits)}/{len(triples)} = {len(hits)/len(triples):.1%}"
+        f"召回（按步骤） {met['steps_hit']}/{met['steps_total']} = {met['recall_steps']:.1%}   "
+        f"（必须条目 {len(met['must_hits'])}/{met['gt_edges']}，规则 "
+        f"{len(met['rule_hits'])}/{met['rules_total']}）"
     )
-    if miss:
-        print("未召回:")
-        for src, syscall, dst, phase in miss:
+    print(
+        f"查准（按边）   {met['correct_edges']}/{met['reported_triples']} = "
+        f"{met['precision_edges']:.1%}"
+    )
+    if met["kinds_degraded"]:
+        print("提示: 未取到场景库的顶点种类，规则里的 vertex 条件未参与判定")
+    if met["must_misses"]:
+        print("未召回的必须条目:")
+        for src, syscall, dst, phase in met["must_misses"]:
             print(f"  [{phase}] {src} --{syscall}--> {dst}")
-    if extra:
-        print(f"多出边 ({len(extra)}):")
-        for src, syscall, dst in extra:
+    if met["rule_misses"]:
+        print(f"未命中的规则: {', '.join(met['rule_misses'])}")
+    if met["extras"]:
+        print(f"多出边 ({len(met['extras'])}):")
+        for src, syscall, dst in met["extras"]:
             line = f"  {src} --{syscall}--> {dst}"
             if instances is not None and poi is not None:
                 offs = [
@@ -204,13 +216,14 @@ def report(title, triples, gt_triples, instances=None, poi=None):
                 if offs:
                     line += f"   [相对POI {offs[0]}]"
             print(line)
-    return len(hits), len(triples)
+    return met["steps_hit"], met["steps_total"], met["correct_edges"], met["reported_triples"]
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("baseline", help="baseline.json 路径")
-    parser.add_argument("--gt", default=str(GT_DEFAULT), help="GT 文件路径")
+    parser.add_argument("--gt", required=True,
+                        help="GT 文件路径（groundtruth/<场景>.groundtruth.json）")
     parser.add_argument(
         "--window",
         type=float,
@@ -221,6 +234,8 @@ def main():
     args = parser.parse_args()
 
     gt, gt_triples = load_gt(args.gt)
+    rules = rm.load_rules(gt)
+    kinds = rm.VertexKinds.for_gt(gt)
     instances, poi, meta, embedded, _ = load_final_graph(args.baseline)
     print(
         f"baseline: {args.baseline}\n"
@@ -235,7 +250,7 @@ def main():
             print(f"警告: {unmatched} 条实例未能从 Neo4j 反查到 syscall/时间")
 
     triples_all, _ = to_triples(instances)
-    report("最终图（未过滤）", triples_all, gt_triples, instances=instances, poi=poi)
+    report("最终图（未过滤）", triples_all, gt_triples, rules=rules, kinds=kinds, instances=instances, poi=poi)
 
     for window in args.window or []:
         triples_w, kept = to_triples(instances, window=window, poi=poi)
@@ -243,6 +258,8 @@ def main():
             f"POI 时间窗 W={window:g}s（保留实例 {len(kept)}/{len(instances)}）",
             triples_w,
             gt_triples,
+            rules=rules,
+            kinds=kinds,
             instances=instances,
             poi=poi,
         )

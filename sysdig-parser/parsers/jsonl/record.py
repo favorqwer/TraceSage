@@ -214,9 +214,9 @@ def record_failed(record: Dict[str, str]) -> bool:
 
 
 # EINPROGRESS(115)：非阻塞 connect 的正常中间态 —— 连接已发起、四元组已由内核
-# 分配，稍后由 poll/getsockopt 完成，语义上不是失败。实测六个场景该返回码只出现
-# 在 connect 的退出记录里（45/306/95/248/732/305 条，无一落在其他事件类型），
-# 所以例外只给 connect 家族，record_failed 本体与其余 6 处调用不受影响；
+# 分配，稍后由 poll/getsockopt 完成，语义上不是失败。这个返回码属于 connect 家族专有
+# （连接未完成的中间态，其他事件类型没有），所以例外只给 connect 家族，
+# record_failed 本体与其余 6 处调用不受影响；
 # -101 ENETUNREACH / -111 ECONNREFUSED / -2 ENOENT / -13 EACCES 仍是真失败。
 _ERRNO_EINPROGRESS = -115
 

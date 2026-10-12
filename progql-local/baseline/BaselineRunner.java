@@ -59,10 +59,9 @@ import util.GraphOperations;
 import util.llm.LlmConfig;
 
 /**
- * Deterministic re-execution of the investigation flow described by
- * input/sysdig/1_Multi_Stage_Data_Exfiltration.query, against the Neo4j
- * provenance store (sysdig-parser import), producing a JSON artifact for
- * regression comparison.
+ * Deterministic re-execution of the investigation flow of the ProGQL query layer,
+ * against the Neo4j provenance store (sysdig-parser import), producing a JSON
+ * artifact for regression comparison.
  *
  * The flow replicates the pipeline logic of main.Main.processSingleProGQLQuery
  * for this query shape (no LLM clause): backward causal traversal, CPR edge
@@ -71,14 +70,15 @@ import util.llm.LlmConfig;
  * intersection. The ProGQL query text is reconstructed programmatically instead
  * of being parsed.
  *
- * POI 属性默认取场景 1（`nc --write--> 192.168.122.129:49580 -> 192.168.122.128:4444`），
- * 可用 `--poi-srcip/--poi-srcport/--poi-dstip/--poi-dstport/--poi-optype` 覆盖以跑其它场景；
- * 属性名沿用 PG 侧写法，由 Neo4jServerTraversal 兼容层翻译到 Neo4j schema
- * （lip/lport/rip/rport/syscall，并剥掉 /32、/128 后缀）。
+ * POI 没有默认值，必须显式给：网络 POI 用
+ * `--poi-srcip/--poi-srcport/--poi-dstip/--poi-dstport/--poi-optype`；文件 POI 用
+ * `--poi-file <绝对路径>`，此时 dst 标签切为 File
+ * （`(p:Process)-[st:FileEvent{optype:"write"}]->(f:File{name:"..."})`，`name` 经兼容层映射到 `path`）。
+ * 各场景的 POI 见 `provenance-agent/config/scenarios.json`。属性名沿用 PG 侧写法，
+ * 由 Neo4jServerTraversal 兼容层翻译到 Neo4j schema（lip/lport/rip/rport/syscall，
+ * 并剥掉 /32、/128 后缀）。
  *
- * File POI（场景 3-6 的 `(p:Process)-[st:FileEvent{optype:"write"}]->(f:File{name:"..."})`）
- * 用 `--poi-file <绝对路径>` 切换 dst 标签为 File（`name` 经兼容层映射到 `path`）。
- * 入口数默认 5，可用 `--entry-limit N` 覆盖（场景 5 的 query 用 LIMIT 10）。
+ * 入口数默认 5，可用 `--entry-limit N` 覆盖。
  * final_edges 内嵌 `syscall/starttime/endtime`（秒，浮点），使产物自足、
  * 评分（tools/evaluate_gt.py）无需回库。
  */
@@ -86,11 +86,11 @@ public class BaselineRunner {
    private static final double CPR_MERGE_WINDOW = 10.0;
    private static int entryLimit = 5;
 
-   // POI 匹配参数（默认 = 场景 1：nc write 49580 -> 4444）。
-   private static String poiSrcIp = "192.168.122.129/32";
-   private static String poiSrcPort = "49580";
-   private static String poiDstIp = "192.168.122.128/32";
-   private static String poiDstPort = "4444";
+   // POI 匹配参数：没有默认值，必须由命令行给全（见类注释）；optype 默认 write。
+   private static String poiSrcIp = "";
+   private static String poiSrcPort = "";
+   private static String poiDstIp = "";
+   private static String poiDstPort = "";
    private static String poiOptype = "write";
    private static String poiFile = null;
    private static final Map<Long, Double> entryCompositeScores = new HashMap<>();
@@ -98,10 +98,15 @@ public class BaselineRunner {
    private static double entryTimeWeight = 0.3;
 
    public static void main(String[] args) throws Exception {
-      String dbName = args.length > 0 ? args[0] : "1_Multi_Stage_Data_Exfiltration";
+      if (args.length == 0 || args[0].isEmpty()) {
+         throw new IllegalArgumentException("usage: <scenarioName> [outDir] "
+            + "[--poi-srcip v --poi-srcport v --poi-dstip v --poi-dstport v --poi-optype v] "
+            + "[--poi-file path] [--entry-limit N]（POI 无默认值，必须显式给）");
+      }
+      String dbName = args[0];
       String outDirArg = args.length > 1 ? args[1] : "output/baseline/" + dbName;
 
-      // 可选 POI 覆盖参数（见类注释；缺省 = 场景 1）。
+      // POI 参数（见类注释；无默认值）。
       for (int i = 2; i < args.length; i++) {
          String key = args[i];
          if (!(key.startsWith("--poi-") || key.equals("--entry-limit")) || i + 1 >= args.length) {
@@ -121,6 +126,12 @@ public class BaselineRunner {
             default:
                throw new IllegalArgumentException("Unknown POI option: " + key);
          }
+      }
+
+      if (poiFile == null
+            && (poiSrcIp.isEmpty() || poiSrcPort.isEmpty() || poiDstIp.isEmpty() || poiDstPort.isEmpty())) {
+         throw new IllegalArgumentException("需要 --poi-file <路径>，或四个网络 POI 参数 "
+            + "--poi-srcip/--poi-srcport/--poi-dstip/--poi-dstport");
       }
 
       Path outDir = Paths.get(outDirArg);

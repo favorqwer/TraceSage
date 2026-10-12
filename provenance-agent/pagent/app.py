@@ -64,8 +64,7 @@ def run_once(deps: Deps, *, dry_run: bool) -> dict[str, Any]:
 
     stats = {
         "expand": {"rounds": expand["rounds"], "fold": expand["fold"],
-                   "dropped": expand.get("dropped") or {},
-                   "gate_blocked": (expand.get("closure") or {}).get("gate_blocked", 0)},
+                   "scope": expand.get("scope") or {}},
         "judge": judge_stats,
         "llm": deps.budget.to_dict(),
         "queries": deps.graph.query_count,

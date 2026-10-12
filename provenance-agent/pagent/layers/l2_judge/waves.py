@@ -6,7 +6,7 @@
 
 **双层滚动上下文**（逐波更新，替代静态概览）：
 - 第 1 层「上游交接明细」：这条边的上层顶点上**已经判过**的边及其结论（`JudgeState.upstream`）。
-- 第 2 层「调查状态摘要」：已确认链片段 + 服务会话一览（`build_summary`）。
+- 第 2 层「调查状态摘要」：已确认链片段（`build_summary`）。
 
 确定性：分组、排序、编号、摘要裁剪全部固定；模型只影响判定结论与折叠文本。
 """
@@ -121,7 +121,6 @@ class JudgeState:
 
     by_triple: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
     by_ident: dict[tuple[str, str], list[dict[str, Any]]] = field(default_factory=dict)
-    session: dict[str, list[int]] = field(default_factory=dict)  # 连接端点 -> [确认条数, 排除条数]
     chain: list[dict[str, Any]] = field(default_factory=list)    # 已确认边，按波顺序
     counts: dict[str, int] = field(default_factory=lambda: {"confirmed": 0, "excluded": 0,
                                                             "missing": 0})
@@ -146,10 +145,6 @@ class JudgeState:
             self.by_triple[triple(item)] = record
             for ident in _identities(item):
                 self.by_ident.setdefault(ident, []).append(record)
-            conn = str(item.get("session_conn") or "")
-            if conn:
-                node = self.session.setdefault(conn, [0, 0])
-                node[0 if relevant else 1] += 1
             self.counts["confirmed" if relevant else "excluded"] += 1
             out["confirmed" if relevant else "excluded"] += 1
             if relevant:
@@ -190,57 +185,11 @@ class JudgeState:
                          f"（上层顶点 {via}）")
         return lines
 
-    def _session_lines(self, sessions: list[dict[str, Any]] | None) -> list[str]:
-        """服务会话一览（第 2 层）：同一服务进程的多次连接放在一起比。
-
-        数据全部来自第 1 层（`l1_reach/sessions.py`）；这里只做汇总与渲染，不参与判定。
-        """
-        if not sessions:
-            return []
-        limit = settings.session_overview_lines()
-        active = [s for s in sessions if int(s.get("activity") or 0) > 0]
-        zero = [s for s in sessions if int(s.get("activity") or 0) <= 0]
-        lines = [f"- 本次清单里共 {len(sessions)} 次被服务进程接受过的连接："
-                 f"命令活动大于 0 的 {len(active)} 次，等于 0 的 {len(zero)} 次。"]
-        if active:
-            lines.append("- 命令活动大于 0（有实际后续活动）：")
-            for item in active[:limit]:
-                lines.append("  " + self._session_line(item))
-            if len(active) > limit:
-                lines.append(f"  （另有 {len(active) - limit} 次未列出）")
-        if zero:
-            candidates = sum(int(s.get("candidates") or 0) for s in zero)
-            counts = [self.session.get(str(s.get("conn")), [0, 0]) for s in zero]
-            confirmed = sum(c[0] for c in counts)
-            excluded = sum(c[1] for c in counts)
-            lines.append(f"- 命令活动等于 0 的 {len(zero)} 次：本清单候选合计 {candidates} 条，"
-                         f"已判 {confirmed + excluded} 条（确认 {confirmed} / 排除 {excluded}）；"
-                         "这些会话除连接本身与自身的读写之外没有留下任何记录。")
-        return lines
-
-    def _session_line(self, item: dict[str, Any]) -> str:
-        conn = str(item.get("conn") or "")
-        counts = self.session.get(conn, [0, 0])
-        service = str(item.get("service") or "")
-        head = f"{conn}（{service}）" if service else conn
-        return (f"{head}：命令活动 {item.get('activity')} 条，本清单候选 "
-                f"{item.get('candidates')} 条，已判 {counts[0] + counts[1]} 条"
-                f"（确认 {counts[0]} / 排除 {counts[1]}）")
-
-    def build_summary(self, *, chain_limit: int,
-                      sessions: list[dict[str, Any]] | None = None) -> str:
-        """组装第 2 层摘要（已确认链片段 + 服务会话一览）。
-
-        两节各自的条数由结构性上限管住（链片段 `chain_limit` 条、会话一览节内的 8 行），
-        不另设字符上限。
-        """
+    def build_summary(self, *, chain_limit: int) -> str:
+        """组装第 2 层摘要（已确认链片段，条数由 `chain_limit` 管住，不另设字符上限）。"""
         sections: list[str] = []
         chain = self._chain_lines(chain_limit)
         if chain:
             sections.append("### 已确认的上游活动（从终点往上，最近若干条）\n" + "\n".join(chain))
-        session_lines = self._session_lines(sessions)
-        if session_lines:
-            sections.append("### 服务会话一览（被服务进程接受过的连接，按命令活动从多到少）\n"
-                            + "\n".join(session_lines))
         return _NARRATIVE_GAP.join(sections)
 

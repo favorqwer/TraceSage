@@ -12,7 +12,6 @@ from typing import Any
 
 from ...contracts import triple
 from .narrative import _short, build_reflection, pick_entry_point, render_narrative
-from .phases import _PHASES, derive_phases
 
 
 def _edge_record(edge: dict[str, Any]) -> dict[str, Any]:
@@ -36,9 +35,6 @@ def build_report(inv: Any, *, poi: dict[str, Any], stats: dict[str, Any], stop_r
     confirmed.sort(key=lambda e: (int(e.get("t0") or 0), triple(e)))
     edges = [_edge_record(edge) for edge in confirmed]
 
-    phases = derive_phases(confirmed, inv.process_context)
-    missing = [phase for phase in _PHASES if phase not in phases]
-
     gaps: list[dict[str, Any]] = []
     gaps.extend({"label": g["label"], "next_action": g.get("next_action"), "status": g["status"]}
                 for g in inv.gaps)
@@ -58,11 +54,10 @@ def build_report(inv: Any, *, poi: dict[str, Any], stats: dict[str, Any], stop_r
         "poi": poi,
         "edges": edges,
         "narrative": render_narrative(edges),
-        "tactics": phases,
         "entry_point": pick_entry_point(confirmed),
         "gaps": gaps,
         "hypotheses": [{"key": h["key"], "label": h["label"], "status": h["status"]} for h in inv.hypotheses],
-        "reflection": build_reflection(stop_reason, phases, missing, expand_rounds),
+        "reflection": build_reflection(stop_reason, expand_rounds),
         "stop_reason": stop_reason,
         "selection_note": f"确定性报告：确认边 {len(edges)} 条全部保留（判为相关的边）",
         "generated_by": "deterministic_reporter",

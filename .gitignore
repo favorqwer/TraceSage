@@ -9,3 +9,4 @@ groundtruth/
 tmp/
 tmp.md
 provenance-agent/tests/
+attack/

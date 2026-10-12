@@ -22,18 +22,16 @@
 所以规则表怎么改都不需要重建索引（失效判据只有边数与最大事件编号）。构建时用 64 个桶做外部排序，
 内存占用与桶大小同阶（不随库规模增长）。
 
-用法：
+用法（建/重建索引，命令行在 `tools/l1_index.py`）：
 
-    python -m pagent.layers.l1_reach.snapshot --database tracesage-3-ssh-spray
+    python tools/l1_index.py --database attack-3-phishing-beacon-cryptomining [--force]
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import struct
-import sys
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -44,13 +42,13 @@ FORMAT_VERSION = 5
 BUCKET_COUNT = 64
 
 # 定长记录：'<' 无对齐填充
-_FINAL = struct.Struct("<IIBHqqqq")     # 43 字节
-_BUCKET = struct.Struct("<IIIBHqqqq")   # 47 字节（多一个 block_id）
+RECORD = struct.Struct("<IIBHqqqq")        # 43 字节（一条入射记录）
+_BUCKET = struct.Struct("<IIIBHqqqq")     # 47 字节（多一个 block_id）
 
 # 关系类型 -> 两端标签与归属端由 `core/graph_facts.py` 唯一决定（这里不再各写一份）
 
 _REL_CODE = {"p2f": 0, "f2p": 1, "p2n": 2, "n2p": 3, "p2p": 4}
-_REL_BY_CODE = {v: k for k, v in _REL_CODE.items()}
+REL_BY_CODE = {v: k for k, v in _REL_CODE.items()}   # 公开：取数来源按编号还原关系名
 
 _VERTEX_QUERIES = {
     "Process": ("MATCH (p:Process) RETURN p.process_id AS key, coalesce(p.exepath, p.name) AS content, "
@@ -212,7 +210,7 @@ def build_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
                     if offsets.get(block_id) is None:
                         offsets[block_id] = [record_index, 0]
                     offsets[block_id][1] += 1
-                    out.write(_FINAL.pack(owner_id, other_id, rel_code, sid, start, end, event_id,
+                    out.write(RECORD.pack(owner_id, other_id, rel_code, sid, start, end, event_id,
                                           nbytes))
                     record_index += 1
                 path.unlink(missing_ok=True)
@@ -259,30 +257,3 @@ def ensure_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
     return build_snapshot(graph, log=log)
 
 
-def _main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="构建第 1 层的顶点-时间索引快照")
-    parser.add_argument("--database", required=True, help="Neo4j 库名（见 config/scenarios.json）")
-    parser.add_argument("--force", action="store_true", help="已存在也重建")
-    args = parser.parse_args(argv)
-
-    settings.load_dotenv()
-    settings.ensure_work_dirs()
-    settings.ensure_index_dir()
-    sys.path.insert(0, str(settings.AGENT_DIR))
-    from ...core.db import ReadOnlyGraph
-
-    if not args.force:
-        meta = read_meta(args.database)
-        if meta is not None:
-            print(f"索引已存在：{meta_path(args.database)}（--force 可重建）")
-            return 0
-    graph = ReadOnlyGraph(args.database, run_id=f"snapshot-{os.getpid()}")
-    try:
-        build_snapshot(graph, log=print)
-    finally:
-        graph.close()
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(_main())

@@ -2,11 +2,11 @@
 
 用法：
     # 单场景
-    python main.py --scenario 6_SQLite_Pipeline_Pollution
-    # 六场景批量
+    python main.py --scenario 3_Phishing_Beacon_Cryptomining
+    # 全部场景批量（config/scenarios.json 里的全部条目）
     python main.py --all
     # 只跑确定性层（不调 LLM）：验证 POI / 进程 / 展开 / 上游候选
-    python main.py --scenario 1_Multi_Stage_Data_Exfiltration --dry-run
+    python main.py --scenario 1_Web_Exploit_Ransomware --dry-run
 
 架构：三层（结构可达与折叠 / 判定 / 表达；其中判定层是原第 2、3 层合并的结果），编排在
 `pagent/orchestration/`，装配与流程顺序在 `pagent/app.py`。

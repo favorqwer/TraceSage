@@ -16,8 +16,8 @@
 
 用法：
     python tools/coverage_gap.py \
-        --log output/inventory/1_Multi_Stage_Data_Exfiltration.log-inventory.json \
-        --database tracesage-1-multi-stage-data-exfiltration \
+        --log output/inventory/3_Phishing_Beacon_Cryptomining.log-inventory.json \
+        --database attack-3-phishing-beacon-cryptomining \
         --out-dir output/coverage
     # 也可复用已生成的图侧清单，避免重复查库
     python tools/coverage_gap.py --log <log.json> --db-inventory <db.json> --out-dir out/

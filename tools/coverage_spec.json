@@ -34,7 +34,7 @@
     "dpid", "spid", "vid", "flags", "name", "names"
   ],
   "declared_no_edge_events": {
-    "fcntl": "已决策不建边（2026-09-16 口径收口）：fcntl 是 fd 记账调用，六场景 157,347 次调用中 F_GETFL/F_SETFL/F_GETFD/F_SETFD 占 72.5%、F_*LK* 文件锁 19.8%、F_DUPFD* 复制 7.4%；不搬数据、不带路径、无 bytes。实测建边上限 ≈1.5 万条边且全部为噪声（journal stdout / snapd assertions / 字体 F_SETFD / /dev/null / /proc/<pid>/status / 证书库 F_SETLK），Network 侧 219 个 (Process,Network) 组合全部已由 accept/read 建有 n2p 边 → 新增连通性 0。故不计入“已建模（建边）”、不进哨兵；解析器保留注册但 handler 不再建边（原 n2p 建边分支已删除：口径声明与代码路径保持一致；六库实测 fcntl 边 0 条，删除分支对既有图零影响）。保留注册仅供 fd 表记账与失败/审计口径复用。证据见 docs/log-db-coverage-gap.md §5.1。"
+    "fcntl": "已决策不建边（2026-09-16 口径收口）：fcntl 是 fd 记账调用（查状态 / 加锁 / 复制 fd），不搬数据、不带路径、无 bytes，边模型分不出 F_GETFL 与 F_SETLK，建出来的边全是噪声（journal stdout / snapd assertions / 字体 F_SETFD / /dev/null / /proc/<pid>/status / 证书库 F_SETLK），新增连通性也为 0（这类 (Process,Network) 组合的连接边已由 accept/read 建出）。故不计入“已建模（建边）”、不进哨兵；解析器保留注册但 handler 不再建边（原 n2p 建边分支已删除：口径声明与代码路径保持一致）。该事件在当前库是否真的 0 条边，由覆盖率工具的哨兵列直接核（见 AGENTS.md 第 7 节）。保留注册仅供 fd 表记账与失败/审计口径复用。"
   },
   "event_precondition": {
     "accept": "network",

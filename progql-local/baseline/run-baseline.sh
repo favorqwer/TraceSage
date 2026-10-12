@@ -2,12 +2,13 @@
 # Builds and runs the deterministic investigation baseline.
 #
 # Usage:
-#   bash progql-local/baseline/run-baseline.sh [dbName] [outDir] [poi options...]
-#   dbName defaults to 1_Multi_Stage_Data_Exfiltration
-#   outDir defaults to output/baseline/<dbName>   (relative to the repo root)
-#   poi options (optional, default = scenario 1's POI) are forwarded to
+#   bash progql-local/baseline/run-baseline.sh <scenarioName> [outDir] [poi options...]
+#   scenarioName is required (e.g. 1_Web_Exploit_Ransomware; names in
+#   provenance-agent/config/scenarios.json) and is written into meta.scenario.
+#   outDir defaults to output/baseline/<scenarioName>   (relative to the repo root)
+#   POI options are required (no default) and are forwarded to
 #   baseline.BaselineRunner: --poi-srcip v --poi-srcport v --poi-dstip v
-#   --poi-dstport v --poi-optype v
+#   --poi-dstport v --poi-optype v, or --poi-file path
 #
 # The engine sources are compiled WITHOUT src/main/java/main/Main.java, which
 # still references the removed ProGQL parser. A stub main.Main (baseline/stub)
@@ -18,7 +19,7 @@ BASELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROGQL_DIR="$(cd "$BASELINE_DIR/.." && pwd)"
 ROOT_DIR="$(cd "$PROGQL_DIR/.." && pwd)"
 
-DB_NAME="${1:-1_Multi_Stage_Data_Exfiltration}"
+DB_NAME="${1:?用法: run-baseline.sh <场景名> [outDir] [POI 参数...]（POI 无默认值）}"
 OUT_DIR_ARG="${2:-output/baseline/${DB_NAME}}"
 shift 2 2>/dev/null || shift $#
 POI_ARGS=("$@")

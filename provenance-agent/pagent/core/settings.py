@@ -193,12 +193,13 @@ def llm_api_key() -> Optional[str]:
 
 
 # 第 1 层只有一个开关：输出期过滤（`output_filter_enabled`，默认开，只用于对照实验）。
-# 其余语义口径全部写死在 `l1_reach/` 里（方向约束、遍历期规则、无条数上限、
-# 同一主体子进程算上游、写入者时间界取读取结束时刻、进程状态上界取终点事件时刻、不设时间窗）；
-# 取数方式也固定：读本地顶点-时间索引快照，缺失或过期就重建（见 `l1_reach/snapshot.py`）。
-# 定成读索引的理由：直查数据库按行计价（实测每行约 27~39 微秒），三个大闭包场景（3/4/5）要
-# 取回几十万到上百万行，同一个闭包读索引只花几秒。代价是每个库第一次跑要先建索引
-# （一次性 7~37 秒、19~93 兆字节，放 `tmp/provenance-agent/l1-index/<库名>/`）。
+# 其余语义口径全部写死在 `l1_reach/` 里（方向约束、取边时不剔边、无条数上限、
+# 同一主体子进程算上游、写入者时间界取读取结束时刻、进程状态上界取终点事件时刻、不设时间窗、
+# 候选表剔掉「全部实例都是零字节读」的条目）；
+# 取数方式也固定：读本地顶点-时间索引快照，缺失或过期就重建（见 `l1_reach/graph_index.py`）。
+# 定成读索引的理由：直查数据库按行计价（实测每行 20~30 微秒），三个大闭包场景（3/4/5）要
+# 取回几十万行，同一个闭包读索引只花几秒（六场合计 4.15 秒 vs 直查 47.94 秒）。
+# 代价是每个库第一次跑要先建索引（一次性 7.3~37.7 秒、18~87 兆字节，放 `tmp/provenance-agent/l1-index/<库名>/`）。
 
 
 L1_INDEX_DIR = WORK_DIR / "l1-index"
@@ -212,9 +213,8 @@ def ensure_index_dir() -> None:
 # 每一项的“为什么是这个值”写在参数文件里；这里只写它管什么。取值都走 `_pick_*`：
 # 缺项、类型不对、超范围都回到默认值（默认值仅用于容错，日常改值请改参数文件）。
 
-# 第 1 层：输出期过滤（`layers/l1_reach/output_filter.py`）。
-# 它决定第二层能看到哪些候选边：折叠前先剔掉“属主进程不在终点事件那次执行范围内”的实例，
-# 再按剔除表的 output 段（`rules/filters.json`）剔掉整类例行活动。
+# 第 1 层：输出期过滤（`layers/l1_reach/candidates.py` 的 `filter_output_rows`）。
+# 它决定第二层能看到哪些候选边：折叠前先剔掉“属主进程不在终点事件那次执行范围内”的实例。
 def output_filter_enabled() -> bool:
     return _pick_bool("judge", "output_filter", True)
 
@@ -269,11 +269,6 @@ def via_max_chars() -> int:
     return _pick_int("render", "via_max_chars", 60, 1)
 
 
-def session_overview_lines() -> int:
-    """状态摘要里「服务会话一览」最多列几条有命令活动的会话。"""
-    return _pick_int("render", "session_overview_lines", 8, 1)
-
-
 def log_text_limit() -> int:
     """日志、审计文件、原始输出样本的统一截断长度（报告里判定理由的长度也是它）。"""
     return _pick_int("logging", "text_limit", 120, 1)
@@ -322,11 +317,3 @@ def llm_rate_limit_wait_max_seconds() -> float:
 def llm_format_retries() -> int:
     """模型输出不是合法结构时，把错误灌回去再要一次的次数。"""
     return _pick_int("llm", "format_retries", 2, 0)
-
-
-# --- 服务会话一览（第 1 层算、第 2 层摘要里渲染）---
-# 始终产出：把“每次连接：服务进程、命令活动条数、候选条数”写进调查状态摘要，
-# 让模型能比较同一服务进程的多次连接（命令活动 0 的那几次没有引出后续活动）。
-# 只增上下文，不参与收边、不过滤候选。
-# 会话命令活动口径见 `l1_reach/sessions.py`（零活动 = 这次会话除连接本身与自身的读写之外
-# 没有留下任何候选记录；没有阈值，判断仍由模型做）。

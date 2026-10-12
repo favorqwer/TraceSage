@@ -1,11 +1,7 @@
-"""进程静态属性（第 1 层内部）。
+"""进程静态属性（第 1 层）：判定层的进程身份摘要要用，缓存在内存里，一次运行内不变。
 
-判定上下文的分组单位就是**进程**（进程标识 = 编号 + 程序名）：没有"步骤 / 实例"这一层，
-边行直接带归属进程的标识，进程身份摘要由判定层在闭包行还在手上时生成。
-
-进程静态属性（可执行路径、命令行、工作目录）在一次运行内不变，缓存在内存里：
-索引快照来源（`sources.SnapshotReader`）直接灌缓存（零查询），数据库直查来源
-（`sources.DbSource`）按批查库后灌缓存。
+来源侧把属性灌进缓存（索引来源零查询），数据库直查来源（只给单测用的参照实现）按批查库后灌缓存。
+常驻服务进程的判定不在这里：那是判据表里的一组图上事实，求值在 `judgments.resident_processes`。
 """
 
 from __future__ import annotations
@@ -14,7 +10,6 @@ from typing import Any, Iterable
 
 from ...core.db import ReadOnlyGraph
 
-# 进程静态属性（进程身份摘要要用）：单个查询与批量查询共用同一批字段
 _PROCESS_INFO_RETURN = ("p.process_id AS process_id, p.pid AS pid, p.name AS name, "
                         "p.exepath AS exepath, p.args AS args, p.cwd AS cwd")
 _PROCESS_INFO_ONE = f"MATCH (p:Process {{process_id:$pid}}) RETURN {_PROCESS_INFO_RETURN}"
@@ -36,7 +31,7 @@ def process_info(graph: ReadOnlyGraph, process_id: str) -> dict[str, Any]:
 
 
 def cache_process_info(database: str, process_id: str, info: dict[str, Any]) -> None:
-    """把进程静态属性灌进内存缓存（索引快照来源用；零查询）。"""
+    """把进程静态属性灌进内存缓存（索引来源用；零查询）。"""
     _PROCESS_INFO_CACHE[(database, process_id)] = info
 
 

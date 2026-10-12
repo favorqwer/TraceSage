@@ -9,7 +9,7 @@ Usage:
 
     # 批量导入：--input-dir 下全部 *.jsonl 按文件名排序逐个导入；
     # 场景名取文件名 stem，每个场景写入独立数据库
-    # <prefix><stem 小写，_ 归一化为 ->（如 tracesage-1-multi-stage-data-exfiltration）
+    # <prefix><stem 小写，_ 归一化为 ->（如 attack-3-phishing-beacon-cryptomining）
     python main.py --input-dir <dir> --all [--dry-run] [--neo4j-database-prefix PREFIX]
 
 Neo4j 数据库选择优先级：--neo4j-database > 环境/.env 的 NEO4J_DATABASE > 默认 neo4j。
@@ -30,7 +30,7 @@ from typing import Dict, List, Optional
 
 from parsers import SysdigLogParser, load_dotenv
 
-DEFAULT_DB_PREFIX = "tracesage-"
+DEFAULT_DB_PREFIX = "attack-"
 
 
 def scenario_database_name(prefix: str, scenario: str) -> str:
@@ -38,8 +38,8 @@ def scenario_database_name(prefix: str, scenario: str) -> str:
 
     Neo4j 库名只允许字母/数字/点/横线且统一小写（Operations Manual
     "Naming rules for databases"），因此
-    tracesage- + 1_Multi_Stage_Data_Exfiltration
-      -> tracesage-1-multi-stage-data-exfiltration。
+    attack- + 3_Phishing_Beacon_Cryptomining
+      -> attack-3-phishing-beacon-cryptomining。
     """
     return (prefix + scenario).lower().replace("_", "-")
 

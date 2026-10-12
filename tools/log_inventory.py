@@ -30,8 +30,8 @@
 
 用法
 ----
-    python tools/log_inventory.py input/sysdig/1_Multi_Stage_Data_Exfiltration.jsonl \
-        -o output/inventory/1_Multi_Stage_Data_Exfiltration.log-inventory.json
+    python tools/log_inventory.py input/sysdig/3_Phishing_Beacon_Cryptomining.jsonl \
+        -o output/inventory/3_Phishing_Beacon_Cryptomining.log-inventory.json
     python tools/log_inventory.py <file> -o out.json --max-lines 2000000
 """
 

@@ -33,7 +33,7 @@ def main() -> int:
     reports = [json.loads(f.read_text(encoding="utf-8")) for f in files]
 
     out = Path(args.out) if args.out else Path(args.coverage_dir) / "SUMMARY.md"
-    L: List[str] = ["# 六场景覆盖度缺口汇总", ""]
+    L: List[str] = ["# 覆盖度缺口汇总", ""]
 
     # --- 总览 ---
     L += ["## 1. 总览", "",

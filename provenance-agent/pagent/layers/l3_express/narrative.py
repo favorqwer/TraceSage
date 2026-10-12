@@ -42,8 +42,7 @@ def render_narrative(edges: list[dict[str, Any]]) -> str:
     return "攻击链（按首次发生时间排序，确定性渲染）：\n" + "\n".join(lines)
 
 
-def build_reflection(stop_reason: str, phases: list[str], missing: list[str],
-                     expand_rounds: int) -> dict[str, Any]:
+def build_reflection(stop_reason: str, expand_rounds: int) -> dict[str, Any]:
     """规则推导的自审结论（**无置信度字段**）。
 
     旧版这里有一个名为 confidence 的"把握"，但它由"是否完整 + 是否缺相位"算出，
@@ -53,12 +52,8 @@ def build_reflection(stop_reason: str, phases: list[str], missing: list[str],
     sufficient = stop_reason == "frontier_exhausted"
     critique = ("前沿耗尽：所有未考察的候选顶点都已处理" if sufficient
                 else f"非正常收尾（{stop_reason}）：前沿可能未走完，结论不完整")
-    if sufficient and missing:
-        critique += f"；仍缺相位：{'、'.join(missing)}"
     return {
         "sufficient": sufficient,
-        "covered_phases": phases,
-        "missing_phases": missing,
         "critique": critique,
         "expand_rounds": expand_rounds,
         "derived_by": "rules",

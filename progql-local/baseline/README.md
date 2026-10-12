@@ -1,7 +1,7 @@
 # 调查流程基线（baseline runner）
 
-本目录包含对 `input/sysdig/1_Multi_Stage_Data_Exfiltration.query` 所描述的调查流程的
-**确定性复现工具**，以及它产出的回归对比基线。
+本目录包含对一条 ProGQL 调查流程的**确定性复现工具**（逐阶段复现查询语言层描述的
+调查流程），以及它产出的回归对比基线。
 
 ## 背景
 
@@ -26,26 +26,25 @@ ProGQL 查询语言层（语法/解析器/AST 构建器）已从本仓库删除�
 ## 运行
 
 ```bash
-bash progql-local/baseline/run-baseline.sh
-# 可选参数: run-baseline.sh [dbName] [outDir] [--poi-... / --entry-limit ...]
+bash progql-local/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
+  output/baseline/1_Web_Exploit_Ransomware --poi-file /srv/data/README_RESTORE.txt
+# 参数: run-baseline.sh <场景名> [outDir] [--poi-... / --poi-file <路径> / --entry-limit ...]
+# （POI 没有默认值，必须显式给；各场景的 POI 见 provenance-agent/config/scenarios.json）
 ```
 
 - 数据源：**Neo4j 服务器**（sysdig-parser 导入的溯源图；`bolt://localhost:7687/neo4j`，
   连接参数取自环境变量或仓库根 `.env` 的 `NEO4J_URI` / `NEO4J_USER` /
   `NEO4J_PASSWORD` / `NEO4J_DATABASE`，不硬编码）。`dbName` 参数仅作为场景名写入
   产物的 `meta.scenario`；图库本身由 `NEO4J_DATABASE` 决定。
-- POI 参数（缺省 = 场景 1）：`--poi-srcip/--poi-srcport/--poi-dstip/--poi-dstport/--poi-optype`
-  描述 Network POI（场景 1/2）；`--poi-file <绝对路径>` 切换为 File POI
-  （`(p:Process)-[st:FileEvent{optype:"..."}]->(f:File{name:"..."})`，场景 3-6），
-  `name` 经兼容层映射到 `File.path`。入口限额默认 5，
-  用 `--entry-limit N` 覆盖（场景 5 的 query 用 `LIMIT 10`）。各场景实际参数与
-  六场景实验数据见 `output/baseline/SUMMARY-six-scenarios.md`。
-- 场景范围：回归基线固定只针对第 1 个场景 `1_Multi_Stage_Data_Exfiltration`
-  （库 `tracesage-1-multi-stage-data-exfiltration`）。对其他场景（
-  `2_Masquerade_Data_Exfiltration` … `6_SQLite_Pipeline_Pollution`，各自独立库，
-  命名约定见根 AGENTS.md）运行同一调查流程时，用 `NEO4J_DATABASE` 指向对应场景库，
-  并用 `run-baseline.sh` 的第二个参数区分产物目录；流程与对比方法不变，但
-  不同场景的基线产物之间不可比。
+- POI 参数（没有默认值，必须显式给）：`--poi-srcip/--poi-srcport/--poi-dstip/--poi-dstport/--poi-optype`
+  描述 Network POI；`--poi-file <绝对路径>` 切换为 File POI
+  （`(p:Process)-[st:FileEvent{optype:"..."}]->(f:File{name:"..."})`），
+  `name` 经兼容层映射到 `File.path`。入口限额默认 5，用 `--entry-limit N` 覆盖。
+  各场景的 POI 见 `provenance-agent/config/scenarios.json`。
+- 场景范围：当前五场景各自一个独立库（前缀 `attack-`，命名约定见根 AGENTS.md），
+  跑某个场景时用 `NEO4J_DATABASE` 指向对应场景库，并用 `run-baseline.sh` 的场景名与
+  产物目录参数区分场景；产物落 `output/baseline/<场景>/`（`baseline.json` +
+  `groundtruth-eval.txt`）。流程与对比方法不变，但不同场景的基线产物之间不可比。
 - 顶点 id：Neo4j 图没有数字顶点 id，`Neo4jNodeRegistry` 在启动时按
   （标签, MERGE 键）升序枚举全部顶点分配 1..N，同一份库内容在任何机器上得到相同
   id，保证产物可复现。

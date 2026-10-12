@@ -49,12 +49,6 @@ def is_derivation(rel: str) -> bool:
     return rel == DERIVATION_REL
 
 
-def other_label_of(rel: str) -> str:
-    """"另一端"（非归属进程那一端）的标签：写对象的两类是目标端，其余是源端。"""
-    src_label, dst_label = labels_of(rel)
-    return dst_label if owner_is_source(rel) else src_label
-
-
 def content_triple_of(rel: str, syscall: str, owner: str, other: str,
                       ) -> tuple[str, str, str, str]:
     """(源内容, 操作名, 目标内容, 源标签)。

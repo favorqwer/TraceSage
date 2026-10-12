@@ -494,8 +494,8 @@ def _make_bind_action(ctx: ParserContext):
 
 # openat / openat2 / creat / open：指纹仍注册（避免 unmatched），但动作只延长
 # p2p，不建边——见 _make_open_link_extension_action。
-# open 是 open(2) 的事件名（同 send/recv 一样，glibc 会转成 openat，所以六场景
-# 日志里只有 openat/creat）；登记它使这类主机上不再计入 unmatched、且 p2p 活跃期
+# open 是 open(2) 的事件名（同 send/recv 一样，glibc 会转成 openat，所以日志里
+# 只有 openat/creat）；登记它使这类主机上不再计入 unmatched、且 p2p 活跃期
 # 语义与 openat 一致。
 _OPEN_NO_EDGE_EVENTS = ("open", "openat", "openat2", "creat")
 
@@ -718,16 +718,16 @@ def build_handlers(ctx: ParserContext) -> Dict[Fingerprint, SystemCall]:
         """fcntl 不进图（口径见 tools/coverage_spec.json 的 declared_no_edge_events）。
 
         fcntl 是 fd 记账调用（查状态 / 加锁 / 复制 fd），不搬数据、无 bytes，
-        边模型分不出 F_GETFL 与 F_SETLK，画出来全是噪声；实测六场景建边上限
-        ≈1.5 万条且新增加通性为 0，故已决策不建边。
+        边模型分不出 F_GETFL 与 F_SETLK，画出来全是噪声、新增连通性为 0，
+        故已决策不建边（口径与核验方式见 `tools/coverage_spec.json` 的
+        `declared_no_edge_events`）。
 
         handler 仍保留注册：① 事件不落入 `Unmatched fingerprint` 统计；
         ② fd 表记账（dup/clone 传播、close 失效）走 pipeline/fd_table.py 的
         observe_start/observe_end 钩子，与本 handler 无关，不受影响；
         ③ 保留“socket 注记但无完整四元组”的审计计数（与 accept 同一口径：
         只用 record_failed 判失败，不把“无 res= 字段”当失败）。
-        此前这里留着一条 n2p 建边分支，与口径声明不一致（本采集里该分支
-        从未命中，六库 0 条 fcntl 边），已删除。
+        此前这里留着一条 n2p 建边分支，与口径声明不一致（当时实测该分支从未命中、建边数为 0），已删除。
         """
         if record_failed(end_rec):
             return
