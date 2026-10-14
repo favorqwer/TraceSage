@@ -26,7 +26,8 @@ from pagent.core import scenarios, settings
 from pagent.core.llm import make_model, set_raw_log
 from pagent.core.trace import write_trace
 
-OUTPUT_DIR = settings.REPO_ROOT / "output" / "agent"
+# 每次运行的报告写 output/agent-runs/；成绩基线在 output/agent-baseline-current/，运行不写那里
+OUTPUT_DIR = settings.REPO_ROOT / "output" / "agent-runs"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

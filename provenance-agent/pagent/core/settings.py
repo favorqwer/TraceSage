@@ -192,10 +192,10 @@ def llm_api_key() -> Optional[str]:
 # 展开的终止条件只有一个：待考察清单（前沿）耗尽。
 
 
-# 第 1 层只有一个开关：输出期过滤（`output_filter_enabled`，默认开，只用于对照实验）。
+# 第 1 层没有任何开关，也没有尾部裁剪：闭包收到什么就折叠出什么（取边时会「少收」的只有
+# 取数/收边阶段的两处判据：非交付通道不往回找写入者、算不算交付）。
 # 其余语义口径全部写死在 `l1_reach/` 里（方向约束、取边时不剔边、无条数上限、
-# 同一主体子进程算上游、写入者时间界取读取结束时刻、进程状态上界取终点事件时刻、不设时间窗、
-# 候选表剔掉「全部实例都是零字节读」的条目）；
+# 同一主体子进程算上游、写入者时间界取读取结束时刻、进程状态上界取终点事件时刻、不设时间窗）；
 # 取数方式也固定：读本地顶点-时间索引快照，缺失或过期就重建（见 `l1_reach/graph_index.py`）。
 # 定成读索引的理由：直查数据库按行计价（实测每行 20~30 微秒），三个大闭包场景（3/4/5）要
 # 取回几十万行，同一个闭包读索引只花几秒（六场合计 4.15 秒 vs 直查 47.94 秒）。
@@ -213,19 +213,10 @@ def ensure_index_dir() -> None:
 # 每一项的“为什么是这个值”写在参数文件里；这里只写它管什么。取值都走 `_pick_*`：
 # 缺项、类型不对、超范围都回到默认值（默认值仅用于容错，日常改值请改参数文件）。
 
-# 第 1 层：输出期过滤（`layers/l1_reach/candidates.py` 的 `filter_output_rows`）。
-# 它决定第二层能看到哪些候选边：折叠前先剔掉“属主进程不在终点事件那次执行范围内”的实例。
-def output_filter_enabled() -> bool:
-    return _pick_bool("judge", "output_filter", True)
-
-
-def judge_batch() -> int:
-    """每批边数上限（波内切批）。"""
-    return _pick_int("judge", "batch", 70, 1)
-
+# 第 1 层：没有可选开关。
 
 def max_concurrency() -> int:
-    """同一波的批的并发上限。"""
+    """同一级的批的并发上限。"""
     return _pick_int("judge", "concurrency", 12, 1)
 
 
@@ -234,39 +225,81 @@ def thinking_enabled() -> bool:
     return _pick_bool("judge", "thinking", False)
 
 
-def wave_attempts() -> int:
-    """一批最多尝试几次（首次 + 失败后重发，不切割波）。"""
-    return _pick_int("judge", "wave_attempts", 2, 1)
+def batch_attempts() -> int:
+    """一批最多尝试几次（首次 + 失败后重发，不改批划分）。"""
+    return _pick_int("judge", "batch_attempts", 2, 1)
 
 
-def upstream_limit() -> int:
-    """每条边下面最多列几条「上层顶点上已判过的边」（第 1 层明细）。"""
-    return _pick_int("judge", "upstream_limit", 3, 0)
+# --- 束级判定与闸门（`bundle` 段；驱动在 `orchestration/judging.py`）---
+
+def bundle_batch() -> int:
+    """每批最多几个束。"""
+    return _pick_int("bundle", "batch", 40, 1)
 
 
-def state_chain_limit() -> int:
-    """状态摘要里「已确认链片段」最多列几条。"""
-    return _pick_int("judge", "state_chain_limit", 20, 1)
+def bundle_samples() -> int:
+    """每个束最多列几条成员样本（前向闸门同理）。"""
+    return _pick_int("bundle", "samples", 2, 1)
 
 
-def neighbor_per_side() -> int:
-    """同一对象上前侧、后侧各最多列几条时间邻居（0 = 不列这一项）。"""
-    return _pick_int("judge", "neighbor_per_side", 2, 0)
+def bundle_cap_calls() -> int:
+    """第一轮调用上限（超了的束按「未排除」保留）。"""
+    return _pick_int("bundle", "cap_calls", 60, 1)
 
 
-def overlap_neighbor_count() -> int:
-    """同一对象上前侧或后侧为空时，补几条时间重叠的邻居。"""
-    return _pick_int("render", "overlap_neighbor", 1, 0)
+def bundle_fanout_min() -> int:
+    """扇出闸门跳过的最大成员数（默认 1：只跳拆分产生的单条边子束）。"""
+    return _pick_int("bundle", "fanout_min", 1, 1)
 
+
+def risk_schedule_enabled() -> bool:
+    """第 1 级按风险分数排序（网络边、离锚点近、含写边优先）；关掉则按结构键排序。"""
+    return _pick_bool("bundle", "risk_schedule", True)
+
+
+def aggregate_enabled() -> bool:
+    """聚合共享表（批头列「同类规模」与「上一级束」两张表，只改渲染）。"""
+    return _pick_bool("bundle", "aggregate", True)
+
+
+def annotate_marks_enabled() -> bool:
+    """跨束痕迹：把已判相关的束留下的对象类别 / 程序痕迹标给后续批。"""
+    return _pick_bool("bundle", "annotate_marks", True)
+
+
+def fanout_guard_enabled() -> bool:
+    """扇出闸门：拆分产生的单条边子束不判、直接归未排除。"""
+    return _pick_bool("bundle", "fanout_guard", True)
+
+
+def vacuous_guard_enabled() -> bool:
+    """空拆闸门：子束与上一级成员相同时不重判、直接归未排除。"""
+    return _pick_bool("bundle", "vacuous_guard", True)
+
+
+def none_guard() -> str:
+    """类一致性闸门的档位（`hot` = 同类里已有束判相关时，同类判无关的降级为要拆）。"""
+    value = str(_raw("bundle", "none_guard") or "hot").strip().lower()
+    return value if value in ("off", "hot") else "hot"
+
+
+def warrant_guard_enabled() -> bool:
+    """凭证闸门：判「整束无关」必须过结构凭证，否则降级为要拆（须与空拆闸门同开）。"""
+    return _pick_bool("bundle", "warrant_guard", True)
+
+
+def warrant_rules() -> list[str]:
+    """启用的凭证名单（`deriv` = 束内全是派生边；`proc` = 同一进程已确认）。"""
+    raw = _raw("bundle", "warrant_rule")
+    items = [str(item).strip() for item in str(raw or "deriv,proc").split(",")]
+    return [item for item in items if item in ("deriv", "proc")]
+
+
+# --- 渲染（`render` 段）---
 
 def reason_max_chars() -> int:
     """判定理由长度：提示词按它要求模型，代码按同一个数截断渲染出来的理由。"""
     return _pick_int("render", "reason_max_chars", 40, 1)
-
-
-def via_max_chars() -> int:
-    """状态摘要里「上层顶点」文字的截断长度。"""
-    return _pick_int("render", "via_max_chars", 60, 1)
 
 
 def log_text_limit() -> int:

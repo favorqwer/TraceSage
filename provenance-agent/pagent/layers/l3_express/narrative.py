@@ -45,9 +45,8 @@ def render_narrative(edges: list[dict[str, Any]]) -> str:
 def build_reflection(stop_reason: str, expand_rounds: int) -> dict[str, Any]:
     """规则推导的自审结论（**无置信度字段**）。
 
-    旧版这里有一个名为 confidence 的"把握"，但它由"是否完整 + 是否缺相位"算出，
-    而完整度恒为真（停止原因只有一个）、相位基本总缺 Initial Access，那个数在六份报告里恒为 0.6。
-    常量的字段会让人误以为它是评估结果，故删除（2026-10-05）。
+    这里只输出规则推导出的结论。由“是否完整 + 是否缺相位”算出来的“把握”是个常数（停止原因只有
+    一个、相位基本总缺 Initial Access），拿来当评估结果会误导，所以本层不输出任何数值。
     """
     sufficient = stop_reason == "frontier_exhausted"
     critique = ("前沿耗尽：所有未考察的候选顶点都已处理" if sufficient

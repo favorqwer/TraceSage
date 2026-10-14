@@ -9,8 +9,7 @@
 1. **默认只读**：有副作用（写盘、改配置、动进程、花资源）先报备「做什么、多大代价、多久」，同意再动；「看一下 / 说明 / 分析」只输出文字。
 2. **不可逆先拿许可**：覆盖、删除、改名、对外提交、发布、花钱先问一句，催促不放宽；许可只对具体对象生效（先列清单），备份不算许可。
 3. **既定口径优先**：先把已明确的要求（命名、范围、起点、边界、口径）列成检查表；偏离先说明再动，不自创标准；答过的问题不重复问，必须问时一次一件并给默认值。
-4. **先认对象**：对象取当前话题，不凭动词断定；动手前一句话写出对象（定义 / 形式 / 数据 / 产物）放在最前面，关键词与对象冲突以对象为准；出现具体文件 / 目录 / 「落盘」才按改产物理解；全句要能安置、不自补理由，安置不上就问。
-5. **紧迫性不降标准**：可少讲过程、先给数字、分批交付；不许省确认、跳自检；越做越需要自编理由就停下核对前提。
+4. **紧迫性不降标准**：可少讲过程、先给数字、分批交付；不许省确认、跳自检；越做越需要自编理由就停下核对前提。
 
 **交付**
 
@@ -78,13 +77,13 @@ TraceSage/
 │       ├── app.py            # 装配（依赖容器 + 流程顺序）
 │       ├── contracts.py      # 层间数据结构与共享小助手
 │       ├── core/             # 横切：settings/scenarios/db/llm/record/prompts/rules/trace + graph_facts（边方向与端点标签真源）
-│       ├── prompts/          # 逐波判定提示词
-│       ├── rules/            # l1_judgments.json（第 1 层判据：对象角色 / 事件判定 / 常驻服务 / 条目剔除）
-│       ├── orchestration/    # intake / expand_closure / judging（含整批重试）/ register
+│       ├── prompts/          # 束级判定提示词（judge_bundle.md）与前向补链闸门提示词（forward_gate.md）
+│       ├── rules/            # l1_judgments.json（第 1 层判据：对象角色 / 事件判定）
+│       ├── orchestration/    # intake / expand_closure（含前向补链重跑）/ judging（束级驱动，含整批重试）/ forward_chain / register
 │       └── layers/           # 各层一包（只许下游读上游，包内按用途分文件）
-│           ├── l1_reach/     # graph_index 顶点-时间索引 / walk 闭包+取数 / table+judgments 判据表与唯一求值入口 / process_info 进程静态属性 / candidates 实例范围+折叠
-│           ├── l2_judge/     # context / batching / waves / first_pass / decide（后两项调模型）
-│           └── l3_express/   # report / narrative / evidence
+│           ├── l1_reach/     # graph_index 顶点-时间索引 / walk 闭包+取数（含前向取边）/ table+judgments 判据表与唯一求值入口 / process_info 进程静态属性 / candidates 折叠
+│           ├── l2_judge/     # bundles 束与五级细分 / context 进程身份摘要 / items+rendering 束条目与批头共享表 / judge 四值判定（调模型）/ guards 四道结构闸门 / state 滚动记忆 / outcome 来路
+│           └── l3_express/   # report（三段报告 + 机制类分栏）/ narrative / evidence
 ├── progql-local/             # 调查引擎（Java）：src/main/java 的 gql（GQL 求值）/ main（入口）/ model / neo4j / util
 │                             # / traversal（neo4jserver：Bolt 数据源 + 查询别名兼容层）；baseline/ 基线运行器
 │                             # （run-baseline.sh、BaselineRunner.java、progql-llm.properties 排名权重、stub 编译桩）
@@ -95,10 +94,13 @@ TraceSage/
 ```
 
 - **`output/` 只放产出结果**（会被文档引用、被后续运行复用或需跨机器保留的产物）：
-  - `inventory/` 日志/图清单；`coverage/` 缺口报告（`<场景>.coverage-gap.json/.md` + `SUMMARY.md` + `FULL-REPORT.md`）；
-  - `baseline/<场景>/` 引擎基线（`baseline.json` + `groundtruth-eval.txt`，见 `progql-local/baseline/README.md`）；
-  - `agent/<场景>.json` agent 报告（`--all` 另有 `SUMMARY.json`，`metrics.json` 为 GT 评分；字段见 `provenance-agent/README.md` 的 schema 一节）；
-  - 按日期命名的目录为历史归档。
+  - `agent-baseline-current/`：**当前版本的 agent 成绩基线**（5 个场景报告 + `OVERVIEW.md`；换代码 / 参数 / 数据后重测并整目录替换）；
+  - `agent-baseline-archive/`：**归档的 agent 成绩基线**（`OVERVIEW.md` + `BASELINE.md` + `metrics.json` + 历史报告，只读引用）；
+  - `engine-baseline/<场景>/`：**引擎基线**（`baseline.json` + `groundtruth-eval.txt`，见 `progql-local/baseline/README.md`；总览见其 `OVERVIEW.md`）；
+  - **三个基线目录各有一份 `OVERVIEW.md`**：同一张成绩总览表（场景 × 已确认召回 / 查准、未排除召回 / 查准、LLM 调用次数、token、判定耗时、LLM 累计调用耗时、运行墙钟），该基线没有记录的列留空——看这一份就知道数据如何；替换基线时连同它一起更新；
+  - `agent-runs/`：**agent 每次运行的输出**（`<场景>.json`；`--all` 另有 `SUMMARY.json`）。**新跑的结果一律写这里，不得写进 `agent-baseline-current/` 或 `agent-baseline-archive/`**——那两个是成绩基线，只在确认要替换基线时才整目录更新；
+  - `inventory/`、`coverage/`：日志 / 图清单与覆盖度缺口报告（由 `tools/` 下脚本生成）；
+  - 报告字段与评分口径见 `provenance-agent/README.md`。
 
 ## 3. 运行环境与依赖
 
@@ -196,7 +198,7 @@ python tools/coverage_gap.py --log output/inventory/2_SSH_Spray_Lateral_Exfiltra
 | `run_coverage.py` | 批量驱动：清单 → 图清单 → 缺口报告；已有清单默认复用（`--force` / `--only`）；GB 级日志慢 |
 | `l1_index.py` | 构建/重建第 1 层顶点-时间索引（缺失/过期自动重建；本命令为手工预建/强制重建） |
 | `evaluate_gt.py` | 引擎评分：`baseline.json` vs GT（顶点按内容、边按 `(src, syscall, dst)` 三元组；**召回按步骤**＝必须条目 + 可能集合规则，**查准按边**）；`--window` 模拟 POI 时间窗 |
-| `eval_agent_attack_path.py` | agent 报告 vs GT（同 `evaluate_gt.py` 口径、无豁免清单）；`--all`、`--json-out` |
+| `eval_agent_attack_path.py` | agent 报告 vs GT（同 `evaluate_gt.py` 口径、无豁免清单；只读报告里 `edges`，即三段里的已确认段）；`--all`、`--json-out` |
 | `rules_match.py` | 规则（可能集合）判定模块：端点条件、且/或/非组合、方向、边属性条件；供上面两个评分脚本调用（口径见 `docs/攻击路径评分口径.md`） |
 
 ## 8. 场景测试标准流程（provenance-agent）
@@ -209,14 +211,14 @@ python tools/coverage_gap.py --log output/inventory/2_SSH_Spray_Lateral_Exfiltra
 
 # 2. 立刻打分
 .venv/Scripts/python.exe tools/eval_agent_attack_path.py \
-  --report output/agent/<场景全名>.json --gt groundtruth/<场景全名>.groundtruth.json
+  --report output/agent-runs/<场景全名>.json --gt groundtruth/<场景全名>.groundtruth.json
 ```
 
-- 第一轮只报：召回（按步骤：必须条目 + 规则）/ 查准（按边）、引擎基线对照（`output/baseline/<场景>/`）、报告路径、停止原因、确认边数、LLM 调用数；漏报与多出边只列清单。**数字没报完不许做根因分析。**
+- 第一轮只报：召回（按步骤：必须条目 + 规则）/ 查准（按边）、三段数字（已确认 / 未排除 / 已排除及已排除里丢的相关边）、引擎基线对照（`output/engine-baseline/<场景>/`）、报告路径、停止原因、确认边数、LLM 调用数；漏报与多出边只列清单。**数字没报完不许做根因分析。**
 - 深挖（`tmp/provenance-agent/logs/` 的 trace / 查询日志 / 判定明细 / `llm-*.jsonl`、`state/record-*.json`）只在数字对完后做，且仅当用户要求或数字异常。
 - 场景名用 `provenance-agent/config/scenarios.json` 的**全名**（如 `1_Web_Exploit_Ransomware`），不接受简称；`--all` 跑配置里的全部场景（当前 5 个）。
 - 自写读库脚本先 `pagent.core.settings.load_dotenv()`（`.env` 只在 `main.py:main()` 加载）；凭据不硬编码。
-- 诊断产物写 `tmp/`；报告只写 `output/agent/<场景>.json`。
+- 诊断产物写 `tmp/`；报告只写 `output/agent-runs/<场景>.json`（**不写成绩基线目录**）。
 - 报错先归「库不存在 / POI 不存在 / 网关不可达」三类；只有这三类才回退环境排查。
 
 ## 9. 验证新方案 / 新机制 / 新功能的流程
@@ -225,7 +227,7 @@ python tools/coverage_gap.py --log output/inventory/2_SSH_Spray_Lateral_Exfiltra
 
 1. **动手前**：待测对象拆成组件清单并标注来源（新写 / 复用 / 只改参数 / 未实现）给用户看；一句话写清本次测量要回答的问题；把方法里禁止出现的东西写进方法说明。
 2. **未实现不许顶替**：关键组件尚未实现就先实现；替代品（规则、人工标注、现有代码输出、上限推算）不算数，超范围就说明「需先实现 X」并给估计，由用户决定。
-3. **对照只读已有产物**：`output/agent/`、`output/baseline/`（见 §2），**禁止重跑基线**；确需重跑必须先问用户，新数字不得与已有产物混表。
+3. **对照只读已有产物**：`output/agent-baseline-current/`、`output/agent-baseline-archive/`、`output/engine-baseline/`（见 §2），**禁止重跑基线**；确需重跑必须先问用户，新数字不得与已有产物混表。
 4. **过程**：先跑 1 个场景，逐阶段报输入 / 输出 / 砍掉条数及原因、抽 3~5 例核对，无误再跑其余；中间产物落盘 `tmp/`，每阶段能回答「进来多少、出去多少、为什么砍」；测错立即停（见「工作纪律」）。
 5. **汇报**：三类数字分表——实测（真跑出来的）/ 上限（标准答案推算）/ 对照（旧方法、基线）；对照分数注明来源产物与代码版本，耗时 / 模型调用数见报告 `stats`；主动交代测量局限。
 

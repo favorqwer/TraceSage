@@ -2,6 +2,9 @@
 
 `build_deps` 造依赖（图句柄 / 模型 / 记账 / 记录），`run_once` 按层顺序跑一次调查并把报告装配好；
 文件落盘（报告、轨迹、记录、打印）由入口 `main.py` 负责。新的入口（批处理、接口服务）复用这里。
+
+流程：起点定位（intake）→ 展开与折叠（第 1 层，来源保持打开供前向补链重跑）→ 判定（第 2 层，
+束级四值 + 四道闸门 + 前向两轮）→ 结算来路 → 报告（第 3 层，三段）。
 """
 
 from __future__ import annotations
@@ -50,21 +53,23 @@ def run_once(deps: Deps, *, dry_run: bool) -> dict[str, Any]:
     record = deps.record
     t0 = time.time()
     intake_mod.intake(deps)
-    expand = expand_closure_mod.expand_closure(deps)
-    deps.log(f"[expand] 展开结束：{expand['rounds']} 轮 / {len(record.process_context)} 个进程 / "
-             f"{len(record.edges)} 条折叠边；停止原因 {expand['stop_reason']}（{time.time() - t0:.1f}s）")
-
-    if dry_run:
-        judge_stats: dict[str, Any] = {}
-        stop_reason = "dry_run"
-    else:
-        judge_stats = judging_mod.judge_all(deps)
-        stop_reason = expand["stop_reason"]
+    prepared = expand_closure_mod.prepare(deps)
+    try:
+        if dry_run:
+            judge_stats: dict[str, Any] = {}
+            stop_reason = "dry_run"
+        else:
+            judge_stats = judging_mod.judge_all(deps, prepared)
+            stop_reason = "frontier_exhausted"
+        record.settle()
+    finally:
+        expand_closure_mod.finish(prepared)
     record.close_unclosed()
 
+    expand_stats = {"rounds": prepared.stats["rounds"], "fold": prepared.fold,
+                    "closure": prepared.stats}
     stats = {
-        "expand": {"rounds": expand["rounds"], "fold": expand["fold"],
-                   "scope": expand.get("scope") or {}},
+        "expand": {"rounds": prepared.stats["rounds"], "fold": prepared.fold},
         "judge": judge_stats,
         "llm": deps.budget.to_dict(),
         "queries": deps.graph.query_count,
@@ -72,7 +77,7 @@ def run_once(deps: Deps, *, dry_run: bool) -> dict[str, Any]:
         "wall_seconds": round(time.time() - t0, 1),
     }
     report = build_report(record, poi=deps.scenario.poi.as_dict(), stats=stats,
-                          stop_reason=stop_reason, expand_rounds=expand["rounds"])
+                          stop_reason=stop_reason, expand_rounds=prepared.stats["rounds"])
     if dry_run:
         report["edges"] = []
     report["scenario"] = deps.scenario.name
@@ -86,5 +91,5 @@ def run_once(deps: Deps, *, dry_run: bool) -> dict[str, Any]:
         report["event_id_unresolved"] = unresolved
 
     trace_event(deps.trace, "report", edges=len(report.get("edges") or []), stop_reason=stop_reason)
-    return {"report": report, "stats": stats, "expand": expand, "stop_reason": stop_reason,
-            "judge": judge_stats}
+    return {"report": report, "stats": stats, "stop_reason": stop_reason,
+            "judge": judge_stats, "prepared": prepared, "expand": expand_stats}

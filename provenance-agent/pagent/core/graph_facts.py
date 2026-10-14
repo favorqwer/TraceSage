@@ -35,7 +35,7 @@ DERIVATION_REL = "p2p"
 
 
 def labels_of(rel: str) -> tuple[str, str]:
-    """一条边的两端标签（源端, 目标端）。未知关系类型按 Process -> Process（与旧口径一致）。"""
+    """一条边的两端标签（源端, 目标端）。未知关系类型按 Process -> Process（兜底口径）。"""
     return RELATION_LABELS.get(rel, ("Process", "Process"))
 
 

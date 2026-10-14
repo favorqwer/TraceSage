@@ -104,7 +104,7 @@ public class BaselineRunner {
             + "[--poi-file path] [--entry-limit N]（POI 无默认值，必须显式给）");
       }
       String dbName = args[0];
-      String outDirArg = args.length > 1 ? args[1] : "output/baseline/" + dbName;
+      String outDirArg = args.length > 1 ? args[1] : "output/engine-baseline/" + dbName;
 
       // POI 参数（见类注释；无默认值）。
       for (int i = 2; i < args.length; i++) {

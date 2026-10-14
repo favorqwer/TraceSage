@@ -1,30 +1,114 @@
-"""判定层：把候选边按「离终点几跳」分成波，逐波切批投递判定，最后按“是否相关”定结论。
+"""判定层：把候选表打成「束」，逐级四值判定，最后按「只有整束无关删边」定来路。
 
-本层是**原第 2 层（语义判别与上下文准备）与原第 3 层（全局校验）合并后的一个包**：模型调用只在
-本层，职责顺序是「纯代码准备 → 逐波判定（调模型）→ 纯代码定结论（确认 / 排除 / 未判定）」。
+本层是模型调用唯一发生的地方，职责顺序是「纯代码准备 → 束级判定（调模型）→ 纯代码定来路」。
 
-- **上下文准备**（`context.py`，纯代码）：把闭包产出的事件行整理成每个进程的身份摘要
-  （命令行、来源、活动时间范围）；必须在闭包刚跑完、事件行还在手上时调用；
-- **波次与状态**（`waves.py`，纯代码为主）：按跳数分波、全局编号、按批大小切批（同一波的批共用
-  冻结上下文并发投递）、双层滚动上下文——第 1 层「上游交接明细」（上层顶点上已判过的边）、
-  第 2 层「调查状态摘要」（已确认链片段 + 服务会话一览，逐波更新）；
-- **渲染**（`batching.py`，纯代码）：任务说明、状态摘要、进程身份表、本波边（每条下面缩进列出它的
-  **相关边**——上层顶点明细与同一对象邻居合并成一块，同一条边只出现一次）；
-- **第一轮判定**（`first_pass.py`，调模型）：每条边带全局编号、要求原样回抄；
-- **定结论**（`decide.py`，纯代码）：判为相关 → 确认；判为无关 → 排除；没给结论 → 未判定
-  （不等于排除）；判定明细写审计日志。**没有第二轮复核**。
-
-合并了包，**没有合并职责**：第一轮不排除任何边，排除这个决定只属于判定结果本身；传输失败与输出不可解析
-由 `core/llm` 处理，整批调用失败由编排器整批重试。
+模块构成：
+- `bundles.py`：五级细分键、划分不变式校验、样本确定性采样、条目装配与同类规模统计；
+- `guards.py`：四道结构闸门（空拆/扇出/一致性/凭证/叶子）与调查状态滚动记忆；
+- `judge.py`：提示词渲染、批头共享表生成、模型并发通信与三段来路映射；
+- `bridges.py`：外部恶意通信桥接与强因果双端实体闭环；
+- `context.py`：进程身份摘要提取。
 """
 
-from .batching import build_task_header, build_view_index, render
-from .context import build_process_context
-from .decide import decide_verdicts, log_verdicts, verdict_id, verdict_log_record
-from .first_pass import JUDGE_SYSTEM, judge_first_pass
-from .waves import JudgeState, chunk_wave, index_waves, make_waves
+from .bridges import (
+    find_local_ips,
+    get_external_ips,
+    is_readonly_system_mechanism,
+    promote_causal_bridges,
+)
+from .bundles import (
+    CHANNEL_BITS,
+    LEVEL_NAMES,
+    LevelKey,
+    build_items,
+    build_levels,
+    build_scale_index,
+    channel_class,
+    check_partition,
+    dir_class,
+    level_members,
+    object_side,
+    program_of,
+    program_table,
+    sample_members,
+    scale_stats,
+    sort_text,
+)
+from .context import build_process_context, summarize_process
+from .guards import (
+    BundleState,
+    anchor_facts,
+    fanout_split,
+    hot_guard,
+    is_leaf,
+    vacuous_ids,
+    warrant_guard,
+)
+from .judge import (
+    AGG_NOTE,
+    BUNDLE_SYSTEM,
+    TIERS,
+    VERDICT_TEXT,
+    build_task_header,
+    edge_line,
+    fmt_bytes,
+    judge_bundles,
+    level_name,
+    render,
+    run_batches,
+    tier_of,
+)
 
-__all__ = ["JUDGE_SYSTEM", "JudgeState", "build_process_context", "build_task_header",
-           "build_view_index", "chunk_wave", "decide_verdicts", "index_waves",
-           "judge_first_pass", "log_verdicts", "make_waves", "render", "verdict_id",
-           "verdict_log_record"]
+# 兼容性别名（平滑兼容历史单测对旧拆分模块的导入）
+from . import bundles as items
+from . import guards as state
+from . import judge as outcome
+from . import judge as rendering
+
+__all__ = [
+    "AGG_NOTE",
+    "BUNDLE_SYSTEM",
+    "BundleState",
+    "CHANNEL_BITS",
+    "LEVEL_NAMES",
+    "LevelKey",
+    "TIERS",
+    "VERDICT_TEXT",
+    "anchor_facts",
+    "build_items",
+    "build_levels",
+    "build_process_context",
+    "build_scale_index",
+    "build_task_header",
+    "channel_class",
+    "check_partition",
+    "dir_class",
+    "edge_line",
+    "fanout_split",
+    "find_local_ips",
+    "fmt_bytes",
+    "get_external_ips",
+    "hot_guard",
+    "is_leaf",
+    "is_readonly_system_mechanism",
+    "items",
+    "judge_bundles",
+    "level_members",
+    "level_name",
+    "object_side",
+    "outcome",
+    "program_of",
+    "program_table",
+    "promote_causal_bridges",
+    "render",
+    "rendering",
+    "run_batches",
+    "sample_members",
+    "scale_stats",
+    "sort_text",
+    "state",
+    "summarize_process",
+    "tier_of",
+    "vacuous_ids",
+    "warrant_guard",
+]

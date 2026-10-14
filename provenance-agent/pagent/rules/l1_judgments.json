@@ -1,44 +1,22 @@
 {
   "format": 1,
-  "note": "第 1 层统一判据表：本层全部会改变结果的判据都在这里。一条判据 = 一条记录：输入类别、命中条件、后果、依据等级、理由、实测证据。后果只允许取 effects 段声明的五个词；命中条件只写数据（路径前缀/正则、关系与操作名、图上测试名），不写代码。文件条目按数组顺序先命中先赢；进程类取并集；条目类按数组顺序先命中先剔除。加载与校验在 layers/l1_reach/table.py，求值在 layers/l1_reach/judgments.py。",
+  "note": "第 1 层统一判据表：本层全部会改变结果的判据都在这里。一条判据 = 一条记录：输入类别、命中条件、后果、依据等级、理由、实测证据。后果只允许取 effects 段声明的词；命中条件只写数据（路径前缀/正则、关系与操作名、图上测试名），不写代码。文件条目按数组顺序先命中先赢。加载与校验在 layers/l1_reach/table.py，求值在 layers/l1_reach/judgments.py。",
   "effects": {
     "no_expand": {
       "label": "不展开对象",
       "where": "取数时（对象顶点）",
       "meaning": "从该对象读取的边照收进闭包，但不沿该对象往回找写入者。"
     },
-    "no_handoff": {
-      "label": "不追交接",
-      "where": "划实例范围时",
-      "meaning": "划「同一次执行」的范围时，不沿这个对象把它的写入者拉进范围。"
-    },
     "not_delivery": {
       "label": "不算交付",
       "where": "取数时（对象顶点）",
       "meaning": "这类事件不表示把内容写进对象，从对象侧取边时不取它；从进程侧取边时照取（它是同一进程的历史）。"
-    },
-    "drop_item": {
-      "label": "剔除条目",
-      "where": "折叠后",
-      "meaning": "把整条内容三元组从候选表里去掉。"
-    },
-    "session_boundary": {
-      "label": "会话边界",
-      "where": "划实例范围时",
-      "meaning": "划范围时遇到这个进程就停，不再往下加它的子进程。"
     }
-  },
-  "exemptions": {
-    "poi_instance": "终点事件的实例（按事件编号认定）不判、直接保留；与闭包种子同一口径。只对声明了它的判据生效（现在只有「全部实例都是零字节读」这一条）。",
-    "missing_owner": "查不出归属进程的行不判、直接保留（失败即保留）。",
-    "unresolved_pid": "进程号解析不全时，依赖进程号的条目判据整条不生效（失败即保留，不靠猜）。"
   },
   "stage_notes": {
     "source": "取数来源（读顶点-时间索引）执行对象类的 no_expand 与事件类的 not_delivery。",
     "closure": "闭包引擎收边时执行事件类的 no_expand（零字节读到的对象不再展开；边照收）。",
-    "scope": "划实例范围时执行对象类的 no_handoff 与进程类的 session_boundary；终点事件实例与查不出属主的行在这里豁免。",
-    "fold": "折叠只合并不删边，并把每条实例命中的事件判据记数（供条目类判据引用）。",
-    "item": "折叠之后按数组顺序执行条目类判据的 drop_item；先命中先剔除，后面的判据不再看这条。"
+    "fold": "折叠只合并不删边，并把各实例的入闭包通道按位合起来（判定层用作束的细分键）。"
   },
   "rules": [
     {
@@ -66,7 +44,7 @@
       "label": "内核按进程号现生成的伪文件（结构类）",
       "input": "object",
       "match": {"regexes": ["^/proc/[0-9]+/", "^/proc/(self|thread-self)/"]},
-      "effects": ["no_expand", "no_handoff"],
+      "effects": ["no_expand"],
       "basis": "structure",
       "why": "内容不是存在那里等着被读，而是读取那一刻由内核生成，因此「往回找写入者」在语义上没有对象。",
       "evidence": "结构依据：这类对象的内容由内核在读取那一刻生成，不存在“谁写在那里等着被读”；形态是 ps / ss / systemd 一次扫描读几百个进程号。这一条不走候选表、不影响召回；若要放开，需在每个数据集上重新核对。"
@@ -76,7 +54,7 @@
       "label": "内核现生成的伪文件（按名字）（结构类）",
       "input": "object",
       "match": {"prefixes": ["/proc/"]},
-      "effects": ["no_expand", "no_handoff"],
+      "effects": ["no_expand"],
       "basis": "structure",
       "why": "同上一类（按名字的兜底：/proc/cpuinfo、/proc/meminfo 这类）。",
       "evidence": "同上。"
@@ -86,7 +64,7 @@
       "label": "内核现生成的伪文件（/sys）（结构类）",
       "input": "object",
       "match": {"prefixes": ["/sys/"]},
-      "effects": ["no_expand", "no_handoff"],
+      "effects": ["no_expand"],
       "basis": "structure",
       "why": "sysfs 里的内容由内核在读取那一刻生成，不是谁交付的内容。",
       "evidence": "结构依据：这类路径的内容由内核现生成，不存在交付者，所以读边不往回找写入者。"
@@ -96,7 +74,7 @@
       "label": "设备节点（含终端）（分档类）",
       "input": "object",
       "match": {"prefixes": ["/dev/"]},
-      "effects": ["no_expand", "no_handoff"],
+      "effects": ["no_expand"],
       "basis": "distribution",
       "why": "设备节点确实能在进程之间传内容（块设备可搬运数据），判成非交付通道的依据是「这一类活动在攻击链上几乎总是例行操作」这种分布判断，不是结构事实。属按数据集启用、启用前要重新核对的可选项。",
       "evidence": "未在当前数据集上重测：把这一类放开（只换这一处判据）的代价与收益需要逐数据集重新量；本条 basis 是 distribution，属按数据集启用、启用前要重新核对的可选项。"
@@ -106,7 +84,7 @@
       "label": "系统运行目录（会话与服务的文件）（分档类）",
       "input": "object",
       "match": {"prefixes": ["/run/", "/var/run/", "/var/lock/"]},
-      "effects": ["no_expand", "no_handoff"],
+      "effects": ["no_expand"],
       "basis": "distribution",
       "why": "这些路径能在进程之间传内容（会话记录、锁文件、服务状态），判据同为分布判断，不是结构事实。",
       "evidence": "同上（三档合并放开的那次实测口径）。"
@@ -116,7 +94,7 @@
       "label": "系统级套接字路径（分档类）",
       "input": "object",
       "match": {"prefixes": ["unix:[/run/", "unix:[/var/run/"]},
-      "effects": ["no_expand", "no_handoff"],
+      "effects": ["no_expand"],
       "basis": "distribution",
       "why": "系统级套接字能在进程之间传内容（服务控制接口），判据同为分布判断。",
       "evidence": "同上（三档合并放开的那次实测口径）。"
@@ -126,10 +104,10 @@
       "label": "零字节的数据读取",
       "input": "event",
       "match": {"rels": ["f2p", "n2p"], "syscalls": ["read", "recvfrom"], "bytes_at_most": 0},
-      "effects": ["no_expand", "drop_item"],
+      "effects": ["no_expand"],
       "basis": "structure",
       "why": "这次调用没有从对象取到任何内容，因此不存在「内容经这个对象交付」的依赖；可能存在的只是状态依赖，那条由同进程那一支照常覆盖。数据流边只在退出记录带返回值时才建，所以 0 就是真的 0，不是字段缺失。",
-      "evidence": "结构依据（可证明无损）：零字节读没有从对象取到任何内容，因此不存在“内容经这个对象交付”的依赖；本判据只把「全部实例都是零字节读」的条目整条剔掉（终点事件的实例豁免）。当前五场景的剔除条数见 `docs/第一层形式化与召回上限对照.md` §5.3 第 6 条。"
+      "evidence": "结构依据（可证明无损）：零字节读没有从对象取到任何内容，因此不存在“内容经这个对象交付”的依赖。"
     },
     {
       "id": "evt.setup_not_delivery",
@@ -140,93 +118,6 @@
       "basis": "structure",
       "why": "这两类操作只把两端接起来、不往顶点里写数据，因此不算「往这个顶点交付了内容」；它们作为同一进程的历史，仍然会从进程侧被收进闭包。",
       "evidence": "单测 tests/unit/test_snapshot.py::test_connect_is_not_delivery。"
-    },
-    {
-      "id": "proc.resident.is_init",
-      "label": "1 号进程本身",
-      "input": "process",
-      "match": {"test": "is_init"},
-      "effects": ["session_boundary"],
-      "basis": "structure",
-      "why": "常驻服务是会话的边界：划实例范围时遇到它就不再往下加子进程，否则会把整台机器所有用户的会话都拉进范围。",
-      "evidence": "结构依据：1 号进程是常驻服务，实例范围收缩后它始终在范围内；收缩后的候选表规模与标注覆盖逐场景见 `docs/第一层形式化与召回上限对照.md` §5。"
-    },
-    {
-      "id": "proc.resident.parent_is_init",
-      "label": "父进程是 1 号进程",
-      "input": "process",
-      "match": {"test": "parent_is_init"},
-      "effects": ["session_boundary"],
-      "basis": "structure",
-      "why": "直接由 1 号进程启动的程序是服务（系统初始化进程起的常驻程序）。",
-      "evidence": "同上。"
-    },
-    {
-      "id": "proc.resident.listening_port",
-      "label": "有监听端口",
-      "input": "process",
-      "match": {"test": "listening_port"},
-      "effects": ["session_boundary"],
-      "basis": "structure",
-      "why": "绑定过非 0 本地端口的进程在等连接，是会话入口。",
-      "evidence": "同上。"
-    },
-    {
-      "id": "proc.resident.accepted",
-      "label": "接受过连接",
-      "input": "process",
-      "match": {"test": "accepted"},
-      "effects": ["session_boundary"],
-      "basis": "structure",
-      "why": "接受过进来的连接的进程是服务端。",
-      "evidence": "同上。"
-    },
-    {
-      "id": "proc.resident.preexisting_daemon",
-      "label": "无启动记录的系统守护程序目录程序",
-      "input": "process",
-      "match": {"test": "preexisting_daemon"},
-      "effects": ["session_boundary"],
-      "basis": "structure",
-      "why": "图上看不到它的启动记录、且可执行文件在系统守护程序目录下——本次采集开始之前就在跑的服务。",
-      "evidence": "同上。"
-    },
-    {
-      "id": "proc.resident.same_program",
-      "label": "与已判定服务同一个程序",
-      "input": "process",
-      "match": {"test": "same_program_as_resident"},
-      "effects": ["session_boundary"],
-      "basis": "structure",
-      "why": "一个程序一旦被判为服务，它的所有实例都算服务（服务进程常常每个连接派生一个自己）。",
-      "evidence": "同上；这条在图测试的第 2 阶段执行（其余五条在第 1 阶段）。"
-    },
-    {
-      "id": "item.proc_state_numeric_unlisted",
-      "label": "读无关进程的运行状态数值与属性文件",
-      "input": "item",
-      "match": {
-        "src_label": "File",
-        "rels": ["f2p"],
-        "src_regex": "^/proc/(\\d+)/(stat|status|current|comm|limits|attr/current)/?$",
-        "pid_not_in_chain": true
-      },
-      "effects": ["drop_item"],
-      "basis": "distribution",
-      "why": "两半：一半是结构事实（这六种文件是内核现生成的运行状态数值与安全上下文，不是谁交付的内容），另一半是启发式（那个进程不在链上就与本次追踪无关）。判据说的是「运行状态数值不是别人交付的内容 + 那个进程不在链上」，属按数据集启用、启用前要重新核对的可选项。",
-      "evidence": "按数据集启用（basis=distribution）：判据有两半，一半是数据事实（这些文件是内核现生成的运行状态数值，不是谁交付的内容），另一半是启发式（那个进程号不在候选表里就与本次跟踪无关），后一半可以举出反例。形态：ps / ss / systemd 一次扫描读几百个进程号、sudo / su / sshd 读 /proc/1/limits。当前五场景的剔除条数见 `docs/第一层形式化与召回上限对照.md` §5.3 第 6 条。不删能拿到命令行、控制组、环境变量、内存与内存布局的那些（cmdline / cgroup / environ / mem / maps / fd 等）。",
-      "exempt": []
-    },
-    {
-      "id": "item.all_instances_empty_read",
-      "label": "全部实例都是零字节读的内容三元组",
-      "input": "item",
-      "match": {"all_instances_of": "evt.empty_read"},
-      "effects": ["drop_item"],
-      "basis": "structure",
-      "why": "零字节读没有搬走任何内容，这类三元组不可能位于内容传递链上。判据说的是数据事实（零字节不搬运内容）；「人工标注里不会有这种读取步骤」不是数据事实。",
-      "evidence": "按数据集启用：判据说的是数据事实（零字节读没有搬走任何内容），但“人工标注不会把读到结尾算成链路步骤”不是数据事实，可能反例存在。典型例子：ps 读已消失进程的 /proc/<号>/cmdline、命令管道读到结尾、空文件被读；当前五场景的剔除条数见 `docs/第一层形式化与召回上限对照.md` §5.3 第 6 条。",
-      "exempt": ["poi_instance"]
     }
   ],
   "defaults": {

@@ -2,7 +2,7 @@
 
 本文件两个部分：上半部分是闭包引擎（`run_closure`）与事件结构（`Event`）；下半部分是取数来源
 （`SnapshotReader` / `open_source`）——从本地顶点-时间索引读边（`graph_index.py`），零数据库查询。
-数据库直查的实现已经搬出生产包，只给单测做参照（`tests/unit/db_source.py`）。
+生产包只用索引来源；数据库直查的实现只存在单测里（`tests/unit/db_source.py`），作参照实现。
 
 一条**事件**就是图上的一条边：两个端点（进程 / 文件 / 网络）、一个操作名、一个字节数、
 一个开始时刻、一个结束时刻。
@@ -28,9 +28,13 @@
 ## 输出与计数口径
 
 `run_closure` 返回折叠能直接吃的边行（`rows`）与计数（`stats`）；`with_events=True` 时
-另有事件集合（`events`，正式流程不用，单测要）。`stats` 只统计这一次调用；`rows_fetched`
+另有事件集合（`events`）。`stats` 只统计这一次调用；`rows_fetched`
 是**进判定**的行数，来源侧扫到的记录数 = `rows_fetched` + 来源的 `skipped_already_included`。
 判据、后果与生效阶段见 `pagent/rules/l1_judgments.json`。
+
+每条边还带一个**入闭包通道**位（`support`）：它是从哪一类顶点被收进闭包的（进程 / 文件 /
+网络 / 终点事件本身）。判定层按它把「同一程序、同一动作、同一系统调用」的边再细分——从不同
+通道进来的边在链条上的位置不同，混在一起判会把两类活动揉成一个束。它同样不参与收边判定。
 """
 
 from __future__ import annotations
@@ -51,7 +55,15 @@ _KIND_ORDER = ("File", "Network", "Process")
 # 索引记录里的关系编号：只取写入侧（读不会把内容送回顶点）
 _PRODUCER_CODES = frozenset(code for code, rel in snap.REL_BY_CODE.items()
                             if rel in graph_facts.PRODUCER_RELS)
+# 读取侧（对象 -> 进程）：前向补链用（写下的对象后来被谁读走）
+_CONSUMER_CODES = frozenset(code for code, rel in snap.REL_BY_CODE.items()
+                            if rel in graph_facts.CONSUMER_RELS)
 _CHUNK_RECORDS = 4096
+
+# 入闭包通道的位（`Event.support`）：这条边是从哪一类顶点被收进闭包的。
+# 终点事件本身算「种子」；同一条边被多类顶点找到时按位或（去重后只留跳数最少的那一份）。
+CHANNEL_BITS = {"Process": 1, "File": 2, "Network": 4, "seed": 8}
+_SEED_BIT = CHANNEL_BITS["seed"]
 
 
 class Event:
@@ -63,11 +75,11 @@ class Event:
 
     __slots__ = ("event_id", "rel", "syscall", "bytes", "start", "end", "pid", "owner",
                  "other", "other_label", "other_process_id",
-                 "dist", "via_kind", "via_key")
+                 "dist", "via_kind", "via_key", "support")
 
     def __init__(self, event_id: int, rel: str, syscall: str, bytes: int, start: int, end: int,
                  pid: str, owner: str, other: str, other_label: str, other_process_id: str = "",
-                 dist: int = 0, via_kind: str = "", via_key: str = "") -> None:
+                 dist: int = 0, via_kind: str = "", via_key: str = "", support: int = 0) -> None:
         self.event_id = event_id
         self.rel = rel
         self.syscall = syscall
@@ -79,11 +91,13 @@ class Event:
         self.other = other
         self.other_label = other_label
         self.other_process_id = other_process_id
-        # 结构上下文（只用于判定时的渲染，不参与收边判定）：离终点事件最少几跳（种子 = 0），
-        # 以及这条边是从哪个顶点被回推出来的（`via_kind` 为空 = 终点事件本身）
+        # 结构上下文（只用于判定时的渲染与束的细分，不参与收边判定）：离终点事件最少几跳
+        # （种子 = 0）、这条边是从哪个顶点被回推出来的（`via_kind` 为空 = 终点事件本身）、
+        # 以及入闭包通道的位掩码（见 `CHANNEL_BITS`）。
         self.dist = dist
         self.via_kind = via_kind
         self.via_key = via_key
+        self.support = support
 
 
 class GraphSource(Protocol):
@@ -104,12 +118,14 @@ class GraphSource(Protocol):
                       seen: Optional[Any] = None) -> list[Event]:
         """文件 / 网络顶点：只取写入侧（开始时刻落在 (lo, hi]）——读不会把内容送回顶点。"""
 
+    def reads_after(self, key: str, kind: str, lo: int, hi: int) -> list[Event]:
+        """某个文件 / 网络顶点在 (lo, hi] 里被读走的事件（前向补链用）。"""
+
     def process_info_many(self, pids: list[str]) -> None:
         """把进程静态属性灌进内存缓存（进程身份摘要要用，不算业务查询）。"""
 
-    def process_numbers(self) -> dict[str, str]:
-        """进程标识 -> 进程号（图顶点上的 `pid` 属性）。进程标识是「进程号 + 程序名」拼起来的，
-        靠字符串拆在程序名以数字开头时会拆错，所以范围划分要这张表。"""
+    def network_protocols(self) -> dict[str, str]:
+        """网络端点标识 -> 传输层协议。"""
 
     def close(self) -> None:
         """释放句柄（索引来源为空实现）。"""
@@ -201,17 +217,20 @@ def run_closure(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
         这三个字段只用于上下文渲染，**不参与收边判定**。
         """
         dist = 0 if from_dist < 0 else int(from_dist) + 1
+        mask = _SEED_BIT if from_dist < 0 else CHANNEL_BITS.get(via_kind, 0)
         prev = included.get(ev.event_id)
         if prev is not None:
             # 同一条边可能从多个顶点被找到：留跳数最少的那一份（跳数相同则保留先到的）
             if dist < prev.dist:
                 prev.dist = dist
                 prev.via_kind, prev.via_key = via_kind, via_key
+            prev.support |= mask
             return False
         # 判据在这里第一次生效：命中 no_expand 的读事件（当前只有零字节读）边照收，但不展开对象
         no_expand = "no_expand" in J.event_ruling(ev.rel, ev.syscall, ev.bytes).effects
         ev.dist = dist
         ev.via_kind, ev.via_key = via_kind, via_key
+        ev.support = mask
         included[ev.event_id] = ev
         stats.events_included += 1
         if no_expand:
@@ -313,9 +332,9 @@ def _to_rows(events: list[Event]) -> list[dict[str, Any]]:
     "另一端进程标识"往上找父进程的命令行（非派生边为空串），因此带出来；
     它不参与收边、分组与折叠。
 
-    边行里多带 `dist` / `via_kind` / `via_key` 三样（结构上下文）：它们是**边上图事实的派生值**
-    （这条边离终点最少几跳、展开时是从哪个顶点看到它的），判定时渲染给模型看，用于让模型知道
-    这条边在链条上的位置；不参与任何收边判定，也不进报告。
+    边行里多带 `dist` / `via_kind` / `via_key` / `support` 四样（结构上下文）：它们是**边上图事实的
+    派生值**（这条边离终点最少几跳、展开时是从哪个顶点看到它的、从哪一类顶点被收进闭包的），
+    判定时用于渲染给模型看、并作为束的细分键；不参与任何收边判定，也不进报告。
     """
     rows: list[dict[str, Any]] = []
     for ev in events:
@@ -324,10 +343,88 @@ def _to_rows(events: list[Event]) -> list[dict[str, Any]]:
             "event_id": ev.event_id,
             "starttime": ev.start, "endtime": ev.end, "syscall": ev.syscall, "bytes": ev.bytes,
             "dist": ev.dist, "via_kind": ev.via_kind, "via_key": ev.via_key,
+            "support": ev.support,
             "other_process_id": ev.other_process_id,
             "process_id": ev.pid,
         })
     return rows
+
+
+def find_forward_seeds(source: Any, rows: list[dict[str, Any]], closed_processes: set[str],
+                       poi_t0: int) -> list[Event]:
+    """受限前向补链：闭包内写入的常规数据载体文件在写入后被闭包外进程读取。"""
+    written_files: dict[str, int] = {}
+    for r in rows:
+        if (str(r.get("rel") or "") == "p2f"
+                and str(r.get("other_label") or "") == "File"
+                and int(r.get("bytes") or 0) > 0):
+            path = str(r.get("other") or "")
+            if not J.is_forward_carrier(path):
+                continue
+            start = int(r.get("starttime") or 0)
+            if path not in written_files or start < written_files[path]:
+                written_files[path] = start
+
+    forward_seeds: list[Event] = []
+    for path, t0 in written_files.items():
+        reads = source.reads_after(path, "File", t0, poi_t0)
+        external = [evt for evt in reads if str(evt.pid) not in closed_processes]
+        if not external:
+            continue
+        pids = {str(evt.pid) for evt in external}
+        if len(pids) <= 10:
+            forward_seeds.extend(external)
+        else:
+            for evt in external:
+                evts_p = source.expand_process([(evt.pid, evt.start, poi_t0)])
+                has_sensitive = any(
+                    e.rel in graph_facts.PRODUCER_RELS or graph_facts.is_derivation(e.rel)
+                    for e in evts_p
+                )
+                if has_sensitive:
+                    forward_seeds.append(evt)
+    return forward_seeds
+
+
+def run_causal_closure(source: Any, seeds: list[Event], *, poi_t0: int = 0,
+                       forward_chain: bool = True, log: Optional[Callable[[str], None]] = None,
+                       with_events: bool = False) -> dict[str, Any]:
+    """计算因果闭包：反向闭包 +（可选）受限前向补链。
+
+    统一执行：
+    1. 沿时序因果规则回溯反向因果闭包；
+    2. 基于常规数据载体文件，向前探测外部读者并补充因果种子；
+    3. 预热灌入闭包涉及进程的静态身份缓存。
+    """
+    res = run_closure(source, seeds, poi_t0=poi_t0, log=log, with_events=with_events)
+    rows = res["rows"]
+    stats = dict(res["stats"])
+    closed_processes = {str(r.get("process_id") or "") for r in rows} - {""}
+    forward_seeds: list[Event] = []
+    all_seeds = list(seeds)
+
+    if forward_chain:
+        forward_seeds = find_forward_seeds(source, rows, closed_processes, poi_t0)
+        if forward_seeds:
+            if log:
+                log(f"[causal_closure] 前向补链：常规磁盘文件发现 {len(forward_seeds)} 条外部读取种子，重跑闭包")
+            all_seeds = all_seeds + forward_seeds
+            res = run_closure(source, all_seeds, poi_t0=poi_t0, log=log, with_events=with_events)
+            rows = res["rows"]
+            stats = dict(res["stats"])
+            closed_processes = {str(r.get("process_id") or "") for r in rows} - {""}
+
+    source.process_info_many(sorted(closed_processes))
+    out: dict[str, Any] = {
+        "rows": rows,
+        "stats": stats,
+        "closed_processes": closed_processes,
+        "seeds": all_seeds,
+        "forward_seeds": forward_seeds,
+    }
+    if with_events and "events" in res:
+        out["events"] = res["events"]
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -462,6 +559,24 @@ class SnapshotReader:
                 out.append(self._event(rec))
         return out
 
+    def reads_after(self, key: str, kind: str, lo: int, hi: int) -> list[Event]:
+        """某个文件 / 网络顶点在 (lo, hi] 里**被读走**的事件（前向补链用：写下的东西后来被谁读走）。
+
+        `lo` 一般是该对象被写入的最早时刻、`hi` 是锚点时刻。只取读取侧（对象 -> 进程）。
+        这里不套用对象侧的交付判据：那些判据（非交付通道、不算交付的操作）管的是「往回找写入者」，
+        与「往前找读者」是两件事；前向补链展开见 `orchestration/expand_closure.py`。
+        """
+        out: list[Event] = []
+        vid = self._id_of.get((kind, key))
+        if vid is None:
+            return out
+        for rec in self._iter_block(vid, lo, hi):
+            if rec[2] not in _CONSUMER_CODES:
+                continue
+            self.rows += 1
+            out.append(self._event(rec))
+        return out
+
     def process_info_many(self, pids: list[str]) -> None:
         for pid in pids:
             vid = self._id_of.get(("Process", pid))
@@ -472,17 +587,6 @@ class SnapshotReader:
                 "process_id": pid, "pid": vertex.get("pid"), "name": vertex.get("name"),
                 "exepath": vertex.get("exepath"), "args": vertex.get("args"), "cwd": vertex.get("cwd"),
             })
-
-    def process_numbers(self) -> dict[str, str]:
-        """进程标识 -> 进程号（顶点属性；进程标识是拼接串，名字以数字开头时拆不出来）。"""
-        out: dict[str, str] = {}
-        for vertex in self.vertices:
-            if vertex.get("kind") != "Process":
-                continue
-            pid = vertex.get("pid")
-            if pid is not None:
-                out[str(vertex.get("key") or "")] = str(pid)
-        return out
 
     def network_protocols(self) -> dict[str, str]:
         """网络端点标识 -> 传输层协议（索引顶点表里有的才收录；空值不写）。"""

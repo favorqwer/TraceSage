@@ -1,10 +1,13 @@
-"""调查记录（内存版，替代原 SQLite 状态图）。
+"""调查记录（内存版）。
 
-旧实现把"实体 / 假设 / 缺口 + 支持·反驳·属于·由…推出"四类边写进 SQLite，为此需要连接、锁、
-批量提交、失败重试、以及"登记必须排在预算熔断之前"这条顺序约束。架构精简后**结论本来就在内存里**
-（主循环的已确认/已排除字典），所以记录改成普通字典，收尾时一次性落盘成 JSON 供审计。
+记录是运行期内存里的普通字典：实体 / 假设 / 缺口与“支持·反驳·由…推出”三类边就地维护，
+不需要数据库连接、锁、批量提交或重试；收尾时一次性落盘成 JSON 供审计。
 
-保留的硬约束（与旧版一致，只是不再依赖数据库）：
+判定单位是**束**（一批边），所以这里存两样东西：`origin`（每条候选边的来路：已确认 / 未排除 /
+已排除）与结算后的三段字典（`confirmed` / `kept` / `excluded`）。**只有「整束无关」会把来路写成
+已排除**；其余（含没轮到的）一律未排除。
+
+保留的硬约束：
 - 缺口必须带 `next_action`（"下次该怎么查"），否则直接报错；
 - 假设不得以 `tracing` 状态收场（`close_unclosed()` 在出报告前强制收尾）。
 """
@@ -14,7 +17,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 ENTITY_STATUSES = ("unexplored", "tracing", "confirmed", "excluded")
 RELS = ("supports", "refutes", "derived-from")
@@ -57,14 +60,39 @@ class Investigation:
     process_context: dict[str, dict[str, Any]] = field(default_factory=dict)
     # 折叠后的边（三元组 -> 记录），供判定与报告使用
     edges: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
+    # 每条候选边的来路（判定层写）：confirmed（判整束相关）/ kept（未排除）/ excluded（判整束无关）
+    origin: dict[tuple[str, str, str], str] = field(default_factory=dict)
+    # 结算后的三段（`settle()` 填）：已确认 / 未排除但未确认 / 已排除
     confirmed: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
+    kept: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
     excluded: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
-    unjudged: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
     # 记录表（内存）：节点 + 边
     entities: dict[str, dict[str, Any]] = field(default_factory=dict)
     links: list[tuple[str, str, str, str]] = field(default_factory=list)
     gaps: list[dict[str, Any]] = field(default_factory=list)
     hypotheses: list[dict[str, Any]] = field(default_factory=list)
+
+    # --- 判定结论的来路 ---
+    def mark(self, keys: Iterable[tuple[str, str, str]], origin: str) -> None:
+        """给一批候选边记来路（`confirmed` / `kept` / `excluded`）。"""
+        if origin not in ("confirmed", "kept", "excluded"):
+            raise ValueError(f"未知来路 {origin!r}")
+        for key in keys:
+            self.origin[key] = origin
+
+    def settle(self) -> None:
+        """把来路落成三段：已确认 / 未排除但未确认 / 已排除（候选表之外的边不进任何一段）。"""
+        self.confirmed = {}
+        self.kept = {}
+        self.excluded = {}
+        for key, edge in self.edges.items():
+            origin = self.origin.get(key, "kept")
+            bucket = {"confirmed": self.confirmed, "excluded": self.excluded}.get(origin, self.kept)
+            bucket[key] = edge
+
+    def unexcluded(self) -> dict[tuple[str, str, str], dict[str, Any]]:
+        """未排除集 = 已确认 + 未排除但未确认（报告里“覆盖可证明”的那一段）。"""
+        return {**self.confirmed, **self.kept}
 
     # --- 写 ---
     def add_entity(self, etype: str, content: str, *, status: str = "tracing") -> str:
@@ -136,6 +164,9 @@ class Investigation:
         for node in list(self.entities.values()) + self.hypotheses + self.gaps:
             by_kind[node["kind"]] = by_kind.get(node["kind"], 0) + 1
             by_status[node["status"]] = by_status.get(node["status"], 0) + 1
+        by_origin: dict[str, int] = {}
+        for origin in self.origin.values():
+            by_origin[origin] = by_origin.get(origin, 0) + 1
         return {
             "nodes": len(self.entities) + len(self.hypotheses) + len(self.gaps),
             "by_kind": by_kind,
@@ -143,6 +174,7 @@ class Investigation:
             "edges": len(self.links),
             "unclosed_hypotheses": len(self.unclosed()),
             "open_gaps": sum(1 for g in self.gaps if g["status"] == "open"),
+            "origin": by_origin,
         }
 
     def dump(self, path: Optional[Path] = None) -> Optional[Path]:

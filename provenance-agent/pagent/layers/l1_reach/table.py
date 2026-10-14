@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 from ...core import rules
 
-INPUTS = ("object", "event", "process", "item")
+INPUTS = ("object", "event")
 BASES = ("structure", "distribution", "mixed")
 _REQUIRED = ("id", "label", "input", "match", "effects", "basis", "why")
 
@@ -100,12 +100,6 @@ def _shape_problems(rule: Rule) -> list[str]:
     elif rule.input == "event":
         if not (m.get("rels") and m.get("syscalls")):
             return [f"{rule.id} 是事件判据，但缺 rels 或 syscalls"]
-    elif rule.input == "process":
-        if not m.get("test"):
-            return [f"{rule.id} 是进程判据，但缺 match.test"]
-    elif rule.input == "item":
-        if not (m.get("test") or m.get("src_regex") or m.get("all_instances_of")):
-            return [f"{rule.id} 是条目判据，但缺 match.test / src_regex / all_instances_of"]
     return []
 
 

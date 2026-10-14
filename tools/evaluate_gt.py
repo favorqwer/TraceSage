@@ -2,7 +2,7 @@
 """GT (ground truth) 召回/查准评估工具。
 
 用法:
-    python tools/evaluate_gt.py output/baseline/<场景>/baseline.json \
+    python tools/evaluate_gt.py output/engine-baseline/<场景>/baseline.json \
         --gt groundtruth/<场景>.groundtruth.json [--window SECONDS]
 
 输入:

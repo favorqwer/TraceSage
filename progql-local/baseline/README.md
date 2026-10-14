@@ -27,7 +27,7 @@ ProGQL 查询语言层（语法/解析器/AST 构建器）已从本仓库删除�
 
 ```bash
 bash progql-local/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
-  output/baseline/1_Web_Exploit_Ransomware --poi-file /srv/data/README_RESTORE.txt
+  output/engine-baseline/1_Web_Exploit_Ransomware --poi-file /srv/data/README_RESTORE.txt
 # 参数: run-baseline.sh <场景名> [outDir] [--poi-... / --poi-file <路径> / --entry-limit ...]
 # （POI 没有默认值，必须显式给；各场景的 POI 见 provenance-agent/config/scenarios.json）
 ```
@@ -43,7 +43,7 @@ bash progql-local/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
   各场景的 POI 见 `provenance-agent/config/scenarios.json`。
 - 场景范围：当前五场景各自一个独立库（前缀 `attack-`，命名约定见根 AGENTS.md），
   跑某个场景时用 `NEO4J_DATABASE` 指向对应场景库，并用 `run-baseline.sh` 的场景名与
-  产物目录参数区分场景；产物落 `output/baseline/<场景>/`（`baseline.json` +
+  产物目录参数区分场景；产物落 `output/engine-baseline/<场景>/`（`baseline.json` +
   `groundtruth-eval.txt`）。流程与对比方法不变，但不同场景的基线产物之间不可比。
 - 顶点 id：Neo4j 图没有数字顶点 id，`Neo4jNodeRegistry` 在启动时按
   （标签, MERGE 键）升序枚举全部顶点分配 1..N，同一份库内容在任何机器上得到相同
@@ -53,7 +53,7 @@ bash progql-local/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
   Network 顶点的 ip 属性（lip/lport/rip/rport）不带 `/32` cidr 后缀，匹配时自动剥离。
 - 入口排名权重通过 `-Dprogql.llm.config` 指向 `baseline/progql-llm.properties`
   （impact 0.55 / time 0.45）固定，与运行目录无关；这是全项目约定，见 AGENTS.md 第 7 节。
-- 产物：`output/baseline/<outDir>/baseline.json`（该目录被 `.gitignore` 忽略，
+- 产物：`output/engine-baseline/<outDir>/baseline.json`（该目录被 `.gitignore` 忽略，
   不随仓库版本化，跨机器需手动保留）。
 - 依赖：JDK 17+ 与本机 `~/.m2/repository` 中的依赖 jar（清单见脚本内 `CP`；
   Bolt 驱动 neo4j-java-driver 4.1.1 必须排在嵌入式 neo4j-3.5.11 jar 之前，

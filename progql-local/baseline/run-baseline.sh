@@ -5,7 +5,7 @@
 #   bash progql-local/baseline/run-baseline.sh <scenarioName> [outDir] [poi options...]
 #   scenarioName is required (e.g. 1_Web_Exploit_Ransomware; names in
 #   provenance-agent/config/scenarios.json) and is written into meta.scenario.
-#   outDir defaults to output/baseline/<scenarioName>   (relative to the repo root)
+#   outDir defaults to output/engine-baseline/<scenarioName>   (relative to the repo root)
 #   POI options are required (no default) and are forwarded to
 #   baseline.BaselineRunner: --poi-srcip v --poi-srcport v --poi-dstip v
 #   --poi-dstport v --poi-optype v, or --poi-file path
@@ -20,7 +20,7 @@ PROGQL_DIR="$(cd "$BASELINE_DIR/.." && pwd)"
 ROOT_DIR="$(cd "$PROGQL_DIR/.." && pwd)"
 
 DB_NAME="${1:?用法: run-baseline.sh <场景名> [outDir] [POI 参数...]（POI 无默认值）}"
-OUT_DIR_ARG="${2:-output/baseline/${DB_NAME}}"
+OUT_DIR_ARG="${2:-output/engine-baseline/${DB_NAME}}"
 shift 2 2>/dev/null || shift $#
 POI_ARGS=("$@")
 if [[ "$OUT_DIR_ARG" != /* && "$OUT_DIR_ARG" != [A-Za-z]:* ]]; then
