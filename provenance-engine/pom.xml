@@ -9,8 +9,8 @@
     <version>1.0-SNAPSHOT</version>
   </parent>
 
-  <artifactId>progql-local</artifactId>
-  <name>progql-local</name>
+  <artifactId>provenance-engine</artifactId>
+  <name>provenance-engine</name>
 
   <dependencies>
     <dependency>

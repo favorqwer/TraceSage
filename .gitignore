@@ -3,7 +3,6 @@ __pycache__/
 .env
 input/
 output/
-sysdig.wiki/
 paper/
 groundtruth/
 tmp/

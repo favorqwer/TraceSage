@@ -599,7 +599,7 @@ public class Main {
 
    private static void printUsage() {
       System.err.println(
-         "Usage: java -jar progql-local.jar -file <queryFile> -db <postgres/<dbName>|neo4j path|neo4jpostgres/<dbName>> [-output <name>] [-depth <n>]"
+         "Usage: java -jar provenance-engine.jar -file <queryFile> -db <postgres/<dbName>|neo4j path|neo4jpostgres/<dbName>> [-output <name>] [-depth <n>]"
       );
    }
 

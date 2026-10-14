@@ -27,6 +27,27 @@
 | 编排 | 起点定位 → 展开与折叠 → 判定驱动（含整批重试）→ 前向补链 → 登记 | `pagent/orchestration/` |
 | 装配 / 横切 | 依赖容器与流程顺序 / 配置、场景、只读图访问、模型、记录、提示词与规则加载、轨迹 | `pagent/app.py` / `pagent/core/` |
 
+### 模块目录结构
+
+```
+provenance-agent/
+├── main.py               # 入口：命令行 + 文件落盘
+├── config/agent.toml     # 全部参数（唯一真源）
+├── config/scenarios.json # POI 唯一来源（库名 + POI；新场景附入口定义）
+├── tests/                # dry_run.py（整链路干跑）、l1_ablation.py / l2_repeat.py（测量）、unit/（单测）
+└── pagent/               # 核心包
+    ├── app.py            # 装配（依赖容器 + 流程顺序）
+    ├── contracts.py      # 层间数据结构与共享小助手
+    ├── core/             # 横切：settings/scenarios/db/llm/record/prompts/rules/trace + graph_facts
+    ├── prompts/          # 束级判定提示词（judge_bundle.md）与前向补链闸门提示词（forward_gate.md）
+    ├── rules/            # l1_judgments.json（第 1 层判据：对象角色 / 事件判定）
+    ├── orchestration/    # intake / expand_closure / judging / forward_chain / register
+    └── layers/           # 各层一包（只许下游读上游，包内按用途分文件）
+        ├── l1_reach/     # graph_index / walk / table+judgments / process_info / candidates
+        ├── l2_judge/     # bundles / context / items+rendering / judge / guards / state / outcome
+        └── l3_express/   # report / narrative / evidence
+```
+
 ### 第 1 层：结构可达与折叠（`layers/l1_reach/`）
 
 包内六个文件各管一件事：`graph_index.py`（顶点-时间索引，唯一的取数方式）、`walk.py`（闭包引擎

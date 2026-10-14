@@ -2,7 +2,7 @@
 # Builds and runs the deterministic investigation baseline.
 #
 # Usage:
-#   bash progql-local/baseline/run-baseline.sh <scenarioName> [outDir] [poi options...]
+#   bash provenance-engine/baseline/run-baseline.sh <scenarioName> [outDir] [poi options...]
 #   scenarioName is required (e.g. 1_Web_Exploit_Ransomware; names in
 #   provenance-agent/config/scenarios.json) and is written into meta.scenario.
 #   outDir defaults to output/engine-baseline/<scenarioName>   (relative to the repo root)

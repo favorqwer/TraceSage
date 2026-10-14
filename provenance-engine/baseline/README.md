@@ -26,7 +26,7 @@ ProGQL 查询语言层（语法/解析器/AST 构建器）已从本仓库删除�
 ## 运行
 
 ```bash
-bash progql-local/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
+bash provenance-engine/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
   output/engine-baseline/1_Web_Exploit_Ransomware --poi-file /srv/data/README_RESTORE.txt
 # 参数: run-baseline.sh <场景名> [outDir] [--poi-... / --poi-file <路径> / --entry-limit ...]
 # （POI 没有默认值，必须显式给；各场景的 POI 见 provenance-agent/config/scenarios.json）
