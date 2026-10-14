@@ -38,7 +38,6 @@
 
 ### 讲解与沟通约定
 - 默认用户没看过代码、看不懂代码、公式、数学符号及缩写：提到文件、函数、变量先用自然语言说清它是干什么的；专业术语首次出现当场定义（是什么、取值、用途），全文同名；通用行业词（如召回率、查准率、候选集）可直接用。
-- 回复内容中绝对不使用代码块、数学公式与特殊符号，不用英文缩写代指术语；数字带明确单位与口径；运行机制按步骤讲解；方案改动按「现状与实测数字 → 存在的问题 → 修改方案 → 验证结果」呈现。
 
 ## 第三部分：项目目标与核心边界
 
@@ -58,14 +57,14 @@ TraceSage/
 ├── groundtruth/              # 5 个攻击场景人工标注标准答案
 ├── output/                   # 产出结果（严格分类，不可混淆）
 │   ├── agent-baseline-current/   # 智能体当前基线报告与 OVERVIEW.md
-│   ├── router-baseline/          # 神经符号路由器盲测基线报告与 OVERVIEW.md
+│   ├── navigator-baseline/       # 神经符号因果导航基线报告与 OVERVIEW.md
 │   ├── engine-baseline/          # 调查引擎基线与 OVERVIEW.md
 │   └── agent-runs/               # 每次运行临时产出（不进基线）
 ├── tmp/                      # 临时文件与诊断数据区（随时可清）
 ├── tools/                    # 评测与检查工具（如 eval_agent_attack_path.py）
 ├── sysdig-parser/            # 系统调用日志解析与图构建入库
 ├── provenance-agent/         # 基于大语言模型的多阶段迭代图调查智能体
-├── provenance-router/        # 神经符号因果拓扑与离线蒸馏双向因果路由系统
+├── provenance-navigator/     # 神经符号因果拓扑与离线蒸馏双向因果导航系统
 └── provenance-engine/        # 调查引擎（基于 Neo4j 与 GQL 的纯图路径遍历）
 ```
 
@@ -94,7 +93,7 @@ TraceSage/
 ### 场景测试标准流程
 - 用户触发测试时，直接在项目虚拟环境下运行对应系统的入口脚本：
   - 智能体调查：`provenance-agent/main.py --scenario <场景全名>`
-  - 路由器评测：`provenance-router/main.py --scenario <场景全名>` 或 `provenance-router/run_five_fold.py`
+  - 导航器评测：`provenance-navigator/main.py --scenario <场景全名>` 或 `provenance-navigator/run_five_fold.py`
   - 引擎测试：`provenance-engine/baseline/run-baseline.sh`
 - 执行完毕后立即调用评测脚本：`tools/eval_agent_attack_path.py --report <输出路径> --gt groundtruth/<场景全名>.groundtruth.json`。
 - 第一段直接给出实测数据结果（召回率、查准率、确认边数、耗时与模型调用次数）。

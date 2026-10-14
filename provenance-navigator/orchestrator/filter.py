@@ -1,12 +1,21 @@
+"""混合调度编排中枢：因果初筛器（CausalFilter）
+
+职责：
+利用双向因果拓扑事实，毫秒级剥离无前序污染、无外部交付的自闭环系统读取。
+"""
+from typing import Any, Dict, List, Tuple
+from closure.facts import TopologyFacts
+
+
 class CausalFilter:
     """
     第一级初筛器：
     利用双向因果拓扑事实，毫秒级剥离无前序污染、无外部交付的自闭环系统读取。
     """
-    def __init__(self, topology_facts):
+    def __init__(self, topology_facts: TopologyFacts):
         self.tf = topology_facts
 
-    def filter(self, edges):
+    def filter(self, edges: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         kept = []
         pruned = []
 

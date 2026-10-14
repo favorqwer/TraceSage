@@ -1,5 +1,5 @@
-"""
-慢速语义通道：基于大语言模型的歧义候选边判定仲裁器（LlmJudge）。
+"""慢速语义通道：基于大语言模型的歧义候选边判定仲裁器（LlmJudge / LlmJudgeClient）。
+
 与 provenance-agent 判定层完全同口径、同提示词、同数据结构，实现无缝复用与路由适配。
 """
 import sys
@@ -7,19 +7,22 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT / "provenance-agent") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "provenance-agent"))
 
-from pagent.layers import l2_judge as l2
-from pagent.orchestration.judging import _judge_pass, _confirm_anchor_poi
+from pagent.core import settings
 from pagent.core.llm import make_model
+from pagent.layers import l2_judge as l2
+from pagent.orchestration.judging import _judge_pass
 
 
 class LlmJudge:
-    def __init__(self, deps=None, max_calls=20):
+    """大语言模型候选边语义仲裁客户端。"""
+    def __init__(self, deps=None, max_calls=None):
         self.deps = deps
-        self.max_calls = max_calls
+        settings.load_dotenv()
+        self.max_calls = max_calls if max_calls is not None else settings.bundle_cap_calls()
         if self.deps is not None and self.deps.model is None:
             self.deps.model = make_model()
 
@@ -30,15 +33,18 @@ class LlmJudge:
         inv = self.deps.record
         t0 = time.time()
 
-        # 1. 提取歧义候选边的三元组集合
+        # 1. 提取歧义候选边的三元组集合（不在候选清单里的边原样保留，绝不静默丢弃）
         triples_to_judge = set()
+        missing_edges = []
         for e in ambiguous_candidates:
             key = (e.get("src"), e.get("syscall"), e.get("dst"))
             if key in inv.edges:
                 triples_to_judge.add(key)
+            else:
+                missing_edges.append(e)
 
         if not triples_to_judge:
-            return {"confirmed": [], "excluded": [], "kept": ambiguous_candidates, "calls": 0, "seconds": 0.0}
+            return {"confirmed": [], "excluded": [], "kept": list(ambiguous_candidates), "calls": 0, "seconds": 0.0}
 
         # 2. 装配与 Agent 完全一致的判定上下文与状态
         program_of = l2.program_table(inv.process_context)
@@ -84,7 +90,11 @@ class LlmJudge:
         return {
             "confirmed": confirmed_edges,
             "excluded": excluded_edges,
-            "kept": kept_edges,
+            "kept": kept_edges + missing_edges,
             "calls": pass_res.get("calls", 0),
             "seconds": elapsed,
         }
+
+
+# 提供别名
+LlmJudgeClient = LlmJudge

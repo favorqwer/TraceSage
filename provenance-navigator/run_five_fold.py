@@ -9,52 +9,71 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
-from prouter.layers.l1_reach import extract_raw_closure
-from prouter.layers.l2_router.router import HybridRouter
-from prouter.layers.l2_router.llm_judge import LlmJudge
-from prouter.layers.l3_express.report import build_report, save_report
-from prouter.offline.distiller import OfflineDistiller
-
-ALL_SCENARIOS = [
-    "1_Web_Exploit_Ransomware",
-    "2_SSH_Spray_Lateral_Exfiltration",
-    "3_Phishing_Beacon_Cryptomining",
-    "4_Repo_Poisoning_Backdoor",
-    "5_Exposed_Service_Pivot",
-]
+from closure import extract_raw_closure, list_scenarios
+from judge import LlmJudge
+from orchestrator import RouterOrchestrator, build_report, save_report
+from rules import OfflineDistiller
 
 
-def run_single_fold(test_sc: str, train_scs: list, tmp_dir: Path, use_llm: bool = False) -> dict:
+def make_pool_provider():
+    """训练候选池提供器：同一运行期内每个场景只现算一次轻量闭包（绝不使用历史运行产物）。"""
+    cache = {}
+
+    def provider(sc):
+        if sc not in cache:
+            t0 = time.time()
+            edges, _stats = extract_raw_closure(sc, light=True)
+            cache[sc] = edges
+            print(f"    [训练池] {sc}: 候选边 {len(edges)} 条 (闭包耗时 {time.time() - t0:.2f}s)")
+        return cache[sc]
+
+    return provider
+
+
+def run_single_fold(test_sc: str, train_scs: list, tmp_dir: Path, pool_provider, mode: str = "hybrid") -> dict:
     start_time = time.time()
     gt_path = f"groundtruth/{test_sc}.groundtruth.json"
 
     if not os.path.exists(gt_path):
         raise FileNotFoundError(f"未找到真值标准文件: {gt_path}")
 
-    # 1. 自主连接 Neo4j 展开反向因果闭包
+    need_deps = mode in ("hybrid", "llm-only")
+
+    # 1. 自主连接 Neo4j 展开反向因果闭包（含 POI 锚点三元组）
     t_closure_0 = time.time()
     deps = None
-    if use_llm:
+    if need_deps:
         raw_edges, closure_stats, deps = extract_raw_closure(test_sc, return_deps=True)
     else:
         raw_edges, closure_stats = extract_raw_closure(test_sc, return_deps=False)
     t_closure = time.time() - t_closure_0
+    anchor_triples = [tuple(t) for t in closure_stats.get("anchor_triples") or []]
 
     confirmed_edges = []
     unexcluded_edges = raw_edges
     excluded_edges = []
 
-    # 2. 离线抽象图模式提炼（留一原则）
-    distiller = OfflineDistiller()
-    patterns = distiller.distill(train_scs)
+    # 2. 离线统计蒸馏（仅在 rules 和 hybrid 模式下执行；llm-only 旁路跳过）
+    patterns = []
+    pool_sizes = {}
+    if mode in ("rules", "hybrid"):
+        distiller = OfflineDistiller()
+        patterns = distiller.distill(train_scs, pool_provider=pool_provider)
+        distill_audit = tmp_dir / f"distill_fold_{test_sc}.json"
+        audit_payload = dict(distiller.last_report)
+        audit_payload["test_scenario"] = test_sc
+        with open(distill_audit, "w", encoding="utf-8") as f:
+            json.dump(audit_payload, f, indent=2, ensure_ascii=False)
+        pool_sizes = distiller.last_report.get("pool_sizes", {})
 
-    # 3. 神经符号混合路由
+    # 3. 神经符号混合路由（含 POI 锚点强制确认）
     t_route_0 = time.time()
-    llm_judge = LlmJudge(deps=deps) if (use_llm and deps is not None) else None
-    router = HybridRouter(patterns, llm_judge=llm_judge)
-    route_result = router.route(confirmed_edges, unexcluded_edges)
+    llm_judge = LlmJudge(deps=deps) if (need_deps and deps is not None) else None
+    router = RouterOrchestrator(patterns, llm_judge=llm_judge, mode=mode)
+    route_result = router.route(confirmed_edges, unexcluded_edges, anchor_triples=anchor_triples)
     t_route = time.time() - t_route_0
     elapsed = time.time() - start_time
+    llm_calls = (deps.budget.calls if (deps and deps.budget) else 0)
 
     # 4. 构造三段式报告并落盘
     report = build_report(
@@ -65,14 +84,18 @@ def run_single_fold(test_sc: str, train_scs: list, tmp_dir: Path, use_llm: bool 
         pruned_count=route_result["pruned_count"],
         promoted_count=route_result["promoted_count"],
         elapsed_seconds=elapsed,
+        llm_calls=llm_calls,
+        llm_enabled=need_deps,
+        anchor_confirmed_count=route_result["anchor_confirmed_count"],
+        promoted_by_motif=route_result["promoted_by_motif"],
+        mode=mode,
     )
 
-    mode_prefix = "hybrid" if use_llm else "rules"
-    report_out = tmp_dir / f"{mode_prefix}_{test_sc}.json"
+    report_out = tmp_dir / f"{mode}_{test_sc}.json"
     save_report(report, str(report_out))
 
     # 5. 执行官方工具评测打分
-    eval_out = tmp_dir / f"eval_{mode_prefix}_{test_sc}.json"
+    eval_out = tmp_dir / f"eval_{mode}_{test_sc}.json"
     cmd = [
         sys.executable,
         "tools/eval_agent_attack_path.py",
@@ -85,12 +108,14 @@ def run_single_fold(test_sc: str, train_scs: list, tmp_dir: Path, use_llm: bool 
     with open(eval_out, "r", encoding="utf-8") as f:
         eval_data = json.load(f)["scenarios"][0]
 
-    llm_calls = (deps.budget.calls if (deps and deps.budget) else 0)
-
     return {
         "scenario": test_sc,
         "train_scenarios": train_scs,
         "raw_closure_edges": len(raw_edges),
+        "anchor_confirmed": route_result["anchor_confirmed_count"],
+        "distilled_motifs": [m["id"] for m in patterns],
+        "promoted_by_motif": route_result["promoted_by_motif"],
+        "distill_pool_sizes": pool_sizes,
         "pruned_noise": route_result["pruned_count"],
         "promoted_rules": route_result["promoted_count"],
         "llm_confirmed": route_result["llm_confirmed_count"],
@@ -112,29 +137,47 @@ def run_single_fold(test_sc: str, train_scs: list, tmp_dir: Path, use_llm: bool 
 
 def main():
     parser = argparse.ArgumentParser(description="五折留一交叉评测运行器")
-    parser.add_argument("--use-llm", action="store_true", help="启用大语言模型慢速语义通道（智能路由模式）")
+    parser.add_argument("--mode", choices=["rules", "hybrid", "llm-only"], default=None,
+                        help="评测模式：rules (纯规则), hybrid (智能路由), llm-only (纯大模型)")
+    parser.add_argument("--use-llm", action="store_true", help="兼容参数：等价于 --mode hybrid")
     args = parser.parse_args()
 
-    mode_name = "智能路由模式（神经符号协同）" if args.use_llm else "纯蒸馏规则模式（0次大模型调用）"
+    mode = args.mode
+    if mode is None:
+        mode = "hybrid" if args.use_llm else "rules"
+
+    mode_name_map = {
+        "rules": "纯蒸馏规则模式（0次大模型调用）",
+        "hybrid": "智能导航模式（神经符号协同）",
+        "llm-only": "纯大语言模型模式（旁路规则截流）",
+    }
+    mode_name = mode_name_map[mode]
+
     tmp_dir = Path("tmp/provenance_router_runs")
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
+    all_scenarios = list_scenarios()
+    pool_provider = make_pool_provider()
+
     print("==========================================================================================")
-    print(f"       Provenance-Router 评测：{mode_name}")
+    print(f"       Provenance-Navigator 评测：{mode_name} [mode={mode}]")
+    print(f"       五折留一：每折训练集 = 其余 {len(all_scenarios) - 1} 个场景；训练候选池运行期内现算")
     print("==========================================================================================")
 
     results = []
-    for i, test_sc in enumerate(ALL_SCENARIOS):
-        train_scs = [s for j, s in enumerate(ALL_SCENARIOS) if j != i]
-        print(f"[{i+1}/5] 正在测试场景: {test_sc} ...")
-        res = run_single_fold(test_sc, train_scs, tmp_dir, use_llm=args.use_llm)
+    for i, test_sc in enumerate(all_scenarios):
+        train_scs = [s for s in all_scenarios if s != test_sc]
+        print(f"[{i+1}/{len(all_scenarios)}] 正在测试场景: {test_sc} ...")
+        res = run_single_fold(test_sc, train_scs, tmp_dir, pool_provider, mode=mode)
         results.append(res)
-        print(f"  -> 原生候选: {res['raw_closure_edges']} | 初筛剥离: {res['pruned_noise']} | "
+        print(f"  -> 原生候选: {res['raw_closure_edges']} | 锚点: {res['anchor_confirmed']} | "
+              f"初筛剥离: {res['pruned_noise']} | "
               f"规则确认: {res['promoted_rules']} | 模型确认: {res['llm_confirmed']} (调用: {res['llm_calls']}次) | "
               f"确认边: {res['confirmed_edges']} | "
               f"召回: {res['hit']}/{res['total']} ({res['recall']*100:.1f}%) | "
               f"查准: {res['correct']}/{res['reported']} ({res['precision']*100:.1f}%) | "
               f"耗时: {res['elapsed']:.2f}s")
+        print(f"     入选基模: {', '.join(res['distilled_motifs']) or '无'}")
 
     print("\n" + "="*115)
     print(f"{'场景':<35} | {'召回 (步骤)':<18} | {'查准 (边)':<16} | {'确认边':<8} | {'模型调用':<8} | {'耗时':<8}")
@@ -164,10 +207,12 @@ def main():
           f"{tot_elapsed:.2f}s")
     print("="*115)
 
-    summary_file = tmp_dir / f"summary_{'hybrid' if args.use_llm else 'rules'}.json"
+    summary_file = tmp_dir / f"summary_{mode}.json"
     with open(summary_file, "w", encoding="utf-8") as f:
         json.dump({
             "mode": mode_name,
+            "mode_key": mode,
+            "protocol": "五折留一：训练集 = 其余场景；训练候选池运行期内现算轻量闭包；锚点强制确认已启用",
             "results": results,
             "micro": {
                 "hit": tot_hit,
