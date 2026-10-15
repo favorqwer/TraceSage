@@ -71,7 +71,7 @@ class RouterOrchestrator:
         # 4. 通道二（规则分流与因果桥接）：仅在 rules 和 hybrid 模式下执行；llm-only 模式旁路跳过
         if self.mode in ("rules", "hybrid"):
             matcher = PatternMatcher(tf, self.patterns)
-            matched = matcher.match(clean_unexcluded)
+            matched = matcher.match(clean_unexcluded, confirmed_seeds=final_confirmed_map)
 
             for e in clean_unexcluded:
                 key = _key(e)
@@ -89,7 +89,7 @@ class RouterOrchestrator:
 
             # 4.5 神经符号拓扑会话桥接与强因果实体诱导闭环（纯图拓扑，0 次大模型调用）
             bridge = CausalBridge()
-            bridged_map = bridge.bridge(clean_unexcluded, final_confirmed_map)
+            bridged_map = bridge.bridge(clean_unexcluded, final_confirmed_map, high_conf_pids=matcher.high_conf_pids)
             for key, e_bridged in bridged_map.items():
                 final_confirmed_map[key] = e_bridged
                 rule_promoted.append(e_bridged)

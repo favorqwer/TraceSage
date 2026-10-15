@@ -9,40 +9,30 @@ if str(REPO_ROOT / "tools") not in sys.path:
 
 import rules_match as rm
 from closure.facts import TopologyFacts
-from rules.motifs import CANDIDATE_MOTIFS, check_entity_role, match_motif
 from orchestrator.filter import CausalFilter
-
-MIN_SUPPORT_SCENARIOS = 2
-MIN_TRAIN_PRECISION = 0.25
+from rules.miner import FrequentSubgraphMiner
+from rules.matcher import PatternMatcher, _key
+from rules.motifs import abstract_node_role, evaluate_node_behavioral_role
 
 
 class OfflineDistiller:
     """
-    离线知识蒸馏器（数据驱动因果拓扑基模统计筛选引擎）：
+    离线知识蒸馏器（基于全自动频繁子图挖掘与全背景对抗剪枝）：
 
     核心机制：
-    1. 候选因果基模库定义：涵盖入站派生、载荷执行、网络工具、提权工具、系统探测、凭据修改、持久化等图拓扑；
-    2. 实体角色去字面化抽象：剥离具体文件名与网络地址，映射为客观系统拓扑角色；
-    3. 判别式统计双轨打分：在给定的训练场景集上，逐个候选基模统计正样本命中数、
-       背景负样本触发数与跨场景支持度；
-    4. 自动剪枝：通用基模考察多场景通用性，深度基模考察高纯度与良性隔离度。
-
-    训练候选池与在线初筛口径保持严格对齐，绝不静默读取历史运行产物。
+    1. 彻底淘汰人工硬编码的工具字典与先验基模列表；
+    2. 自动从训练场景 Ground Truth 中挖掘跨场景 1-跳与 2-跳高频因果子图拓扑骨架 (min_support=1，废除人为数据集强绑定)；
+    3. 在全量训练场景的真实候选闭包（经初筛后的干净候选池）中，逐个基模检验全背景信噪比 (Adversarial Signal-to-Noise Ratio)；
+    4. 纯信噪比判别准入：
+       - 敏感认证与持久化等特权模式：全背景对抗查准率 >= 0.50 且 误报 <= 5；
+       - 通用系统因果模式：全背景对抗查准率 >= 0.30 且 误报 < 300；
+    5. 严格保留审计流水与指标，保证闭环独立可复现。
     """
 
-    CANDIDATE_MOTIFS = CANDIDATE_MOTIFS
-
-    def __init__(self, candidate_motifs: List[Dict[str, Any]] = None):
-        self.candidate_motifs = candidate_motifs or list(self.CANDIDATE_MOTIFS)
+    def __init__(self, min_support: int = 1):
+        self.min_support = min_support
+        self.candidate_motifs: List[Dict[str, Any]] = []
         self.last_report: Dict[str, Any] = {}
-
-    @staticmethod
-    def check_entity_role(role: str, val: str, tf: TopologyFacts) -> bool:
-        return check_entity_role(role, val, tf)
-
-    @classmethod
-    def match_motif(cls, motif: Dict[str, Any], e: Dict[str, Any], tf: TopologyFacts) -> bool:
-        return match_motif(motif, e, tf)
 
     @staticmethod
     def _load_train_positive(scenario: str) -> Tuple[set, list, Any]:
@@ -77,16 +67,16 @@ class OfflineDistiller:
     def distill(self, train_scenarios: List[str],
                 pool_provider: Optional[Callable[[str], List[Dict[str, Any]]]] = None
                 ) -> List[Dict[str, Any]]:
-        """根据给定训练场景集执行统计筛选，返回入选基模清单。
-
-        双轨制准入要求：
-        - 横向通用基模：正样本命中 >= 1 且 跨场景支持度 >= 2 且 训练期微平均查准率 >= 0.25；
-        - 纵向专属基模：正样本命中 >= 1 且 主战场场景查准率 >= 0.50 且 无关场景误报数 <= 2。
-        """
+        """根据给定训练场景集执行自动挖掘与统计对抗剪枝，返回入选基模清单。"""
         if not train_scenarios:
-            raise ValueError("离线蒸馏必须提供训练场景（禁止空训练集静默放行全量候选基模）")
+            raise ValueError("离线蒸馏必须提供训练场景（禁止空训练集静默放行）")
 
-        # 1. 载入训练场景的正样本与经初筛清洗后的候选池
+        # 1. 全自动因果子图拓扑挖掘
+        miner = FrequentSubgraphMiner(min_support=self.min_support)
+        candidate_motifs = miner.mine(train_scenarios)
+        self.candidate_motifs = candidate_motifs
+
+        # 2. 载入训练场景的正样本与经初筛清洗后的候选池
         train_data = []
         for sc in train_scenarios:
             pos_set, rules, kinds = self._load_train_positive(sc)
@@ -109,10 +99,11 @@ class OfflineDistiller:
                 return True
             return any(rm.rule_matches(r, t[0], t[1], t[2], kinds=item["kinds"]) for _, r in item["rules"])
 
-        # 2. 逐候选基模计算打分
+        # 3. 逐候选基模计算全背景对抗信噪比
         distilled_motifs: List[Dict[str, Any]] = []
         considered: List[Dict[str, Any]] = []
-        for motif in self.candidate_motifs:
+
+        for motif in candidate_motifs:
             tot_pos = 0
             tot_neg = 0
             sc_hits = 0
@@ -122,16 +113,19 @@ class OfflineDistiller:
             for item in train_data:
                 sc = item["scenario"]
                 tf = item["tf"]
-                p_hit = 0
-                n_hit = 0
+                clean_cands = item["cands"]
 
-                for e in item["cands"]:
-                    if self.match_motif(motif, e, tf):
+                # 使用严谨匹配器在该场景的全背景中进行检验
+                matcher = PatternMatcher(tf, [motif], min_conf=0.0)
+                matched_dict = matcher.match(clean_cands)
+
+                p_hit = 0
+                for e in clean_cands:
+                    if _key(e) in matched_dict:
                         if is_pos(e, item):
                             p_hit += 1
-                        else:
-                            n_hit += 1
 
+                n_hit = len(matched_dict) - p_hit
                 if p_hit > 0:
                     sc_hits += 1
                 tot_pos += p_hit
@@ -141,24 +135,16 @@ class OfflineDistiller:
 
             precision = tot_pos / (tot_pos + tot_neg) if (tot_pos + tot_neg) > 0 else 0.0
 
-            # 双轨制准入判断
-            passed = False
-            scope = motif.get("scope", "horizontal")
-            if scope == "horizontal":
-                passed = (tot_pos >= 1 and sc_hits >= MIN_SUPPORT_SCENARIOS and precision >= MIN_TRAIN_PRECISION)
-            else: # vertical
-                if sc_hits >= 1:
-                    target_scs = [sc for sc in train_scenarios if per_sc_pos[sc] > 0]
-                    target_p = sum(per_sc_pos[sc] for sc in target_scs)
-                    target_n = sum(per_sc_neg[sc] for sc in target_scs)
-                    target_prec = target_p / (target_p + target_n) if (target_p + target_n) > 0 else 0.0
-                    other_n = sum(per_sc_neg[sc] for sc in train_scenarios if per_sc_pos[sc] == 0)
-                    passed = (target_prec >= 0.50 and other_n <= 2)
+            # 纯对抗信噪比剪枝准入
+            is_priv = any(k in motif.get("name", "") for k in ["SENSITIVE_AUTH", "PERSISTENCE"])
+            if is_priv:
+                passed = (tot_pos >= 1 and precision >= 0.50 and tot_neg <= 5)
+            else:
+                passed = (tot_pos >= 1 and precision >= 0.30 and tot_neg < 300)
 
             considered.append({
                 "id": motif["id"],
                 "name": motif.get("name", ""),
-                "scope": scope,
                 "positive_hits": tot_pos,
                 "negative_alarms": tot_neg,
                 "support_scenarios": sc_hits,
@@ -174,15 +160,19 @@ class OfflineDistiller:
                 distilled["train_precision"] = precision
                 distilled_motifs.append(distilled)
 
-        # 3. 审计信息沉淀
+        # 4. 审计信息沉淀
         self.last_report = {
             "train_scenarios": list(train_scenarios),
             "pool_source": "provided_in_run" if pool_provider is not None else "fresh_closure_per_scenario",
             "thresholds": {
-                "min_positive_hits": 1,
-                "min_support_scenarios": MIN_SUPPORT_SCENARIOS,
-                "min_train_precision": MIN_TRAIN_PRECISION,
+                "min_support": self.min_support,
+                "priv_min_precision": 0.50,
+                "priv_max_neg": 5,
+                "general_min_precision": 0.30,
+                "general_max_neg": 300,
             },
+            "mined_raw_count": len(candidate_motifs),
+            "distilled_count": len(distilled_motifs),
             "pool_sizes": {item["scenario"]: len(item["cands"]) for item in train_data},
             "positive_sizes": {item["scenario"]: len(item["pos_set"]) for item in train_data},
             "considered": considered,
