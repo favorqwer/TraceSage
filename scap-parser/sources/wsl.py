@@ -9,6 +9,9 @@ from typing import Iterator, Optional, Union
 from .base import DEFAULT_SYSDIG_FORMAT, ScapSource, stream_process_batches
 
 
+import tempfile
+
+
 class WslScapSource(ScapSource):
     """Streams sysdig execution inside Windows Subsystem for Linux (WSL2)."""
 
@@ -22,6 +25,7 @@ class WslScapSource(ScapSource):
         super().__init__(scap_path, format_string, max_events)
         self.distribution = distribution
         self._proc: Optional[subprocess.Popen] = None
+        self._stderr_file: Optional[object] = None
 
     @classmethod
     def is_available(cls, distribution: Optional[str] = None) -> bool:
@@ -63,15 +67,21 @@ class WslScapSource(ScapSource):
         if self.max_events is not None and self.max_events > 0:
             cmd.extend(["-n", str(self.max_events)])
 
+        self._stderr_file = tempfile.TemporaryFile()
         self._proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=self._stderr_file,
             bufsize=2 * 1024 * 1024,
         )
 
         try:
-            yield from stream_process_batches(self._proc, queue_size=100, batch_size=1000)
+            yield from stream_process_batches(
+                self._proc,
+                queue_size=100,
+                batch_size=1000,
+                stderr_file=self._stderr_file,
+            )
         finally:
             self.close()
 
@@ -84,4 +94,11 @@ class WslScapSource(ScapSource):
                 except subprocess.TimeoutExpired:
                     self._proc.kill()
             self._proc = None
+        if getattr(self, "_stderr_file", None) is not None:
+            try:
+                self._stderr_file.close()
+            except Exception:
+                pass
+            self._stderr_file = None
         self._closed = True
+

@@ -12,6 +12,7 @@
 
 from .config import load_dotenv
 from .pipeline.parser import SysdigLogParser
-from .storage.neo4j_writer import Neo4jWriter
+from .storage.neo4j_writer import AsyncNeo4jWriter, Neo4jWriter
 
-__all__ = ["SysdigLogParser", "Neo4jWriter", "load_dotenv"]
+__all__ = ["SysdigLogParser", "Neo4jWriter", "AsyncNeo4jWriter", "load_dotenv"]
+

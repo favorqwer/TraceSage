@@ -26,7 +26,7 @@ from ..jsonl.record import parse_jsonl_entry, validate_parsed_entry
 from ..model.entities import Entity
 from ..model.event_edge import EventEdge
 from ..reporting import ProgressReporter, SkipLineLogger, format_bytes, format_duration
-from ..storage.neo4j_writer import Neo4jWriter
+from ..storage.neo4j_writer import AsyncNeo4jWriter
 from .edge_queue import EdgeQueues
 from .entity_registry import EntityRegistry
 from .pairing import PairingBuffer
@@ -54,7 +54,7 @@ class SysdigLogParser:
         self._neo4j_database = neo4j_database
         # db target: 仅支持 Neo4j，构造时立刻校验以便快速失败
         self._validate_db_target(db_str)
-        self._neo4j_writer = None  # lazy-created on first flush
+        self._async_writer: Optional[AsyncNeo4jWriter] = None  # lazy-created on first flush
 
         # dry_run: 只统计不写库（验证/观察用），flush 阶段跳过 DB
         self._dry_run = dry_run or resolve_dry_run()
@@ -242,9 +242,9 @@ class SysdigLogParser:
         if parse_failure:
             # 失败路径不做最终 flush（避免写入半份数据），但仍要关闭驱动：
             # 批量导入 fail-fast 时不能把连接句柄泄漏给后续场景。
-            if self._neo4j_writer is not None:
-                self._neo4j_writer.close()
-                self._neo4j_writer = None
+            if self._async_writer is not None:
+                self._async_writer.close_on_error()
+                self._async_writer = None
             raise parse_failure
 
         try:
@@ -301,12 +301,11 @@ class SysdigLogParser:
             self._skip_logger.print_summary()
             self._flush_buffered_records(True)
         finally:
-            # 无论成功还是中途异常，都要输出 writer 统计并关闭驱动，
+            # 无论成功还是中途异常，都要等待后台写入完成、输出 writer 统计并关闭驱动，
             # 避免连接句柄泄漏到进程退出。
-            if self._neo4j_writer is not None:
-                self._neo4j_writer.print_summary()
-                self._neo4j_writer.close()
-                self._neo4j_writer = None
+            if self._async_writer is not None:
+                self._async_writer.flush_and_close()
+                self._async_writer = None
 
         end_date = datetime.now()
         print(f"Log parse end::::::::::::::::{end_date}")
@@ -402,16 +401,13 @@ class SysdigLogParser:
     def _flush_neo4j(self, include_process_events: bool) -> None:
         """Write the current buffers into Neo4j (vertices first, then edges).
 
-        The writer is created lazily so dry-run runs never touch Neo4j.
-        Vertices are MERGEd idempotently; edges are MERGEd on (event_id) so a
-        repeated run does not create duplicates. Buffers are cleared afterwards
-        so the next flush round starts empty.
+        Uses AsyncNeo4jWriter to asynchronously submit batches to a background
+        worker thread, eliminating Stop-the-World pauses on the main parsing thread.
+        Buffers are snapshotted and detached immediately, allowing the main thread
+        to continue parsing while the background thread handles Neo4j Bolt I/O.
         """
-        if self._neo4j_writer is None:
-            self._neo4j_writer = Neo4jWriter(database=self._neo4j_database)
-            self._neo4j_writer.create_schema()
-
-        writer = self._neo4j_writer
+        if self._async_writer is None:
+            self._async_writer = AsyncNeo4jWriter(database=self._neo4j_database, queue_size=2)
 
         used = self._edge_vertex_keys
         processes = [
@@ -426,11 +422,6 @@ class SysdigLogParser:
             n for k, n in self._registry.pending_networks.items()
             if k in used["network"]
         ]
-
-        flush_start = int(time.time() * 1000)
-        writer.insert_processes(processes)
-        writer.insert_files(files)
-        writer.insert_networks(networks)
 
         if include_process_events:
             # 终轮之后再无 flush：仍未被任何边引用的 pending 顶点确定不会
@@ -452,18 +443,25 @@ class SysdigLogParser:
                 f"networks={skipped_networks}"
             )
 
-        if include_process_events:
-            writer.insert_edges(self._edge_queues.edges("p2p"), "p2p")
-        writer.insert_edges(self._edge_queues.edges("p2f"), "p2f")
-        writer.insert_edges(self._edge_queues.edges("f2p"), "f2p")
-        writer.insert_edges(self._edge_queues.edges("p2n"), "p2n")
-        writer.insert_edges(self._edge_queues.edges("n2p"), "n2p")
+        edges_dict = {
+            "p2p": list(self._edge_queues.edges("p2p")) if include_process_events else [],
+            "p2f": list(self._edge_queues.edges("p2f")),
+            "f2p": list(self._edge_queues.edges("f2p")),
+            "p2n": list(self._edge_queues.edges("p2n")),
+            "n2p": list(self._edge_queues.edges("n2p")),
+        }
 
         self._registry.clear_pending()
         self._edge_queues.clear(include_process_events)
 
-        elapsed = int(time.time() * 1000) - flush_start
-        print(f"Flush #{self._flush_rounds} [neo4j] completed in {format_duration(elapsed)}.")
+        self._async_writer.submit_batch(
+            processes=processes,
+            files=files,
+            networks=networks,
+            edges_dict=edges_dict,
+            include_process_events=include_process_events,
+            round_num=self._flush_rounds,
+        )
 
     # ==================================================================
     # Progress reporting

@@ -19,11 +19,13 @@ def stream_process_batches(
     proc: subprocess.Popen,
     queue_size: int = 100,
     batch_size: int = 1000,
+    stderr_file: Optional[object] = None,
 ) -> Iterator[Union[str, bytes]]:
     """Producer-consumer reader queue for high-throughput pipe streaming (Optimization 3).
     
     Reads lines from proc.stdout in a background I/O thread in batches of `batch_size`,
     feeding a bounded queue to decouple I/O transmission from CPU parsing.
+    Validates process exit code on completion to fail-fast on pipe errors.
     """
     q: queue.Queue = queue.Queue(maxsize=queue_size)
     sentinel = object()
@@ -59,6 +61,27 @@ def stream_process_batches(
 
     if reader_exc:
         raise reader_exc[0]
+
+    rc = proc.poll()
+    if rc is None:
+        try:
+            rc = proc.wait(timeout=5)
+        except Exception:
+            rc = proc.poll()
+    if rc is not None and rc != 0:
+        err_msg = ""
+        if stderr_file is not None and hasattr(stderr_file, "seek") and hasattr(stderr_file, "read"):
+            try:
+                stderr_file.seek(0)
+                raw_err = stderr_file.read()
+                if isinstance(raw_err, bytes):
+                    err_msg = raw_err.decode("utf-8", "replace").strip()
+                else:
+                    err_msg = str(raw_err).strip()
+            except Exception:
+                pass
+        raise RuntimeError(f"Streaming process exited with non-zero exit code {rc}: {err_msg}")
+
 
 
 class ScapSource(ABC):

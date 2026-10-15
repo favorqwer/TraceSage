@@ -20,11 +20,16 @@ Performance notes:
 """
 
 import os
+import queue
+import sys
+import threading
+import time
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from ..config import load_dotenv, resolve_batch_size
 from ..model.entities import FileEntity, NetworkEntity, Process
 from ..model.event_edge import EventEdge
+from ..reporting import format_duration
 
 try:
     from neo4j import GraphDatabase
@@ -369,3 +374,119 @@ class Neo4jWriter:
             f"batches={s['batches']} batchErrors={s['batch_errors']} "
             f"skippedMissing={s['skipped_missing']}"
         )
+
+
+class AsyncNeo4jWriter:
+    """Asynchronous double-buffered batch writer for Neo4j.
+
+    Offloads Cypher transaction execution to a dedicated background worker thread,
+    allowing the parser main thread to continue parsing without Stop-the-World pauses.
+    Provides backpressure via a bounded queue and strict fail-fast error propagation.
+    """
+
+    def __init__(self, database: str, queue_size: int = 2) -> None:
+        self._database = database
+        self._queue: queue.Queue = queue.Queue(maxsize=queue_size)
+        self._writer: Optional[Neo4jWriter] = None
+        self._error: Optional[Exception] = None
+        self._closed = False
+        self._worker = threading.Thread(
+            target=self._worker_loop, daemon=True, name="AsyncNeo4jWriterWorker"
+        )
+        self._worker.start()
+
+    def _worker_loop(self) -> None:
+        try:
+            self._writer = Neo4jWriter(database=self._database)
+            self._writer.create_schema()
+            while True:
+                item = self._queue.get()
+                if item is None:
+                    self._queue.task_done()
+                    break
+                processes, files, networks, edges_dict, include_process_events, round_num = item
+                flush_start = int(time.time() * 1000)
+                self._writer.insert_processes(processes)
+                self._writer.insert_files(files)
+                self._writer.insert_networks(networks)
+                if include_process_events:
+                    self._writer.insert_edges(edges_dict.get("p2p", []), "p2p")
+                self._writer.insert_edges(edges_dict.get("p2f", []), "p2f")
+                self._writer.insert_edges(edges_dict.get("f2p", []), "f2p")
+                self._writer.insert_edges(edges_dict.get("p2n", []), "p2n")
+                self._writer.insert_edges(edges_dict.get("n2p", []), "n2p")
+                elapsed = int(time.time() * 1000) - flush_start
+                print(
+                    f"Flush #{round_num} [neo4j] committed in {format_duration(elapsed)}."
+                )
+                self._queue.task_done()
+        except Exception as exc:
+            self._error = exc
+            print(f"[AsyncNeo4jWriter] Background write failed: {exc}", file=sys.stderr)
+            while not self._queue.empty():
+                try:
+                    self._queue.get_nowait()
+                    self._queue.task_done()
+                except Exception:
+                    break
+
+    def submit_batch(
+        self,
+        processes: List[Process],
+        files: List[FileEntity],
+        networks: List[NetworkEntity],
+        edges_dict: Dict[str, List[EventEdge]],
+        include_process_events: bool,
+        round_num: int,
+    ) -> None:
+        if self._error is not None:
+            raise self._error
+        while True:
+            if self._error is not None:
+                raise self._error
+            try:
+                self._queue.put(
+                    (processes, files, networks, edges_dict, include_process_events, round_num),
+                    timeout=0.5,
+                )
+                break
+            except queue.Full:
+                if self._error is not None:
+                    raise self._error
+
+    def flush_and_close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            if self._error is None:
+                self._queue.put(None)
+                self._worker.join()
+            if self._writer is not None:
+                if self._error is None:
+                    self._writer.print_summary()
+                self._writer.close()
+        finally:
+            if self._error is not None:
+                raise self._error
+
+    def close_on_error(self) -> None:
+        """Emergency cleanup on upstream failure; aborts pending writes and closes driver."""
+        if self._closed:
+            return
+        self._closed = True
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+                self._queue.task_done()
+            except Exception:
+                break
+        try:
+            self._queue.put_nowait(None)
+        except Exception:
+            pass
+        self._worker.join(timeout=2)
+        if self._writer is not None:
+            self._writer.close()
+
+
