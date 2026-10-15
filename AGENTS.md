@@ -41,7 +41,7 @@
 
 ## 第三部分：项目目标与核心边界
 
-TraceSage 使用 Sysdig 生成的主机系统调用 JSONL 日志构建溯源图并存入 Neo4j 图数据库：
+TraceSage 使用 Sysdig 生成的主机系统调用事件流（SCAP 二进制文件直接流式解析）构建溯源图并存入 Neo4j 图数据库：
 - 实体顶点：进程（Process）、文件（File）、网络连接（Network）。
 - 关系边：五种带方向与时间戳的系统调用事件边。
 - 核心边界：仅限单主机单系统日志溯源；未经明确提出，不引入跨主机、多主机或分布式关联概念。字段规范见 `docs/字段与数据模型详细设计.md`。
@@ -53,7 +53,8 @@ TraceSage/
 ├── AGENTS.md                 # 项目最高工程法则与操作约定
 ├── requirements.txt          # Python 依赖清单
 ├── .env                      # 数据库连接环境配置
-├── input/sysdig/             # 5 个攻击场景原始 JSONL 日志
+├── attack/data/              # 各攻击场景 capture.scap 原始二进制捕获
+├── input/sysdig/             # 历史场景 JSONL 日志备份
 ├── groundtruth/              # 5 个攻击场景人工标注标准答案
 ├── output/                   # 产出结果（严格分类，不可混淆）
 │   ├── agent-baseline-current/   # 智能体当前基线报告与 OVERVIEW.md
@@ -62,7 +63,7 @@ TraceSage/
 │   └── agent-runs/               # 每次运行临时产出（不进基线）
 ├── tmp/                      # 临时文件与诊断数据区（随时可清）
 ├── tools/                    # 评测与检查工具（如 eval_agent_attack_path.py）
-├── sysdig-parser/            # 系统调用日志解析与图构建入库
+├── scap-parser/              # SCAP 捕获流式解析与 Neo4j 溯源图构建入库
 ├── provenance-agent/         # 基于大语言模型的多阶段迭代图调查智能体
 ├── provenance-navigator/     # 神经符号因果拓扑与离线蒸馏双向因果导航系统
 └── provenance-engine/        # 调查引擎（基于 Neo4j 与 GQL 的纯图路径遍历）
@@ -72,13 +73,13 @@ TraceSage/
 
 ### 数据库命名规范
 每个场景对应独立的 Neo4j 数据库（小写字母与连字符，前缀统一为 `attack-`）：
-| 场景 | JSONL 日志 | Neo4j 数据库 |
+| 场景 | SCAP 文件 / 日志 | Neo4j 数据库 |
 |---|---|---|
-| `1_Web_Exploit_Ransomware` | `1_Web_Exploit_Ransomware.jsonl` | `attack-1-web-exploit-ransomware` |
-| `2_SSH_Spray_Lateral_Exfiltration` | `2_SSH_Spray_Lateral_Exfiltration.jsonl` | `attack-2-ssh-spray-lateral-exfiltration` |
-| `3_Phishing_Beacon_Cryptomining` | `3_Phishing_Beacon_Cryptomining.jsonl` | `attack-3-phishing-beacon-cryptomining` |
-| `4_Repo_Poisoning_Backdoor` | `4_Repo_Poisoning_Backdoor.jsonl` | `attack-4-repo-poisoning-backdoor` |
-| `5_Exposed_Service_Pivot` | `5_Exposed_Service_Pivot.jsonl` | `attack-5-exposed-service-pivot` |
+| `1_Web_Exploit_Ransomware` | `attack/data/1/capture.scap` | `attack-1-web-exploit-ransomware` |
+| `2_SSH_Spray_Lateral_Exfiltration` | `attack/data/2/capture.scap` | `attack-2-ssh-spray-lateral-exfiltration` |
+| `3_Phishing_Beacon_Cryptomining` | `attack/data/3/capture.scap` | `attack-3-phishing-beacon-cryptomining` |
+| `4_Repo_Poisoning_Backdoor` | `attack/data/4/capture.scap` | `attack-4-repo-poisoning-backdoor` |
+| `5_Exposed_Service_Pivot` | `attack/data/5/capture.scap` | `attack-5-exposed-service-pivot` |
 
 - 数据库操作严格使用官方驱动与参数化 Cypher，禁止字符串拼接构造 Cypher。
 
@@ -92,9 +93,11 @@ TraceSage/
 
 ### 场景测试标准流程
 - 用户触发测试时，直接在项目虚拟环境下运行对应系统的入口脚本：
+  - 图数据流式导入：`python scap-parser/main.py --scap attack/data/<场景>/capture.scap --scenario <场景全名>`
   - 智能体调查：`provenance-agent/main.py --scenario <场景全名>`
   - 导航器评测：`provenance-navigator/main.py --scenario <场景全名>` 或 `provenance-navigator/run_five_fold.py`
   - 引擎测试：`provenance-engine/baseline/run-baseline.sh`
 - 执行完毕后立即调用评测脚本：`tools/eval_agent_attack_path.py --report <输出路径> --gt groundtruth/<场景全名>.groundtruth.json`。
 - 第一段直接给出实测数据结果（召回率、查准率、确认边数、耗时与模型调用次数）。
 - 若遇到关键前置依赖未就绪或测试环境异常，坚决执行「阻断诚实法则」，第一时间停止并汇报真实阻断原因，严禁使用非自主的下游数据伪造流程。
+

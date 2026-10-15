@@ -32,7 +32,7 @@ bash provenance-engine/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
 # （POI 没有默认值，必须显式给；各场景的 POI 见 provenance-agent/config/scenarios.json）
 ```
 
-- 数据源：**Neo4j 服务器**（sysdig-parser 导入的溯源图；`bolt://localhost:7687/neo4j`，
+- 数据源：**Neo4j 服务器**（scap-parser 导入的溯源图；`bolt://localhost:7687/neo4j`，
   连接参数取自环境变量或仓库根 `.env` 的 `NEO4J_URI` / `NEO4J_USER` /
   `NEO4J_PASSWORD` / `NEO4J_DATABASE`，不硬编码）。`dbName` 参数仅作为场景名写入
   产物的 `meta.scenario`；图库本身由 `NEO4J_DATABASE` 决定。

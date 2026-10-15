@@ -1,6 +1,6 @@
 # provenance-agent — 基于溯源图的反向追踪 agent
 
-在 `sysdig-parser` 导入的 Neo4j 溯源图上，从 POI 出发**反向追踪**攻击因果链，产出可被
+在 `scap-parser` 导入的 Neo4j 溯源图上，从 POI 出发**反向追踪**攻击因果链，产出可被
 `tools/eval_agent_attack_path.py` 评分（与引擎 `tools/evaluate_gt.py` 同口径）的溯源报告。
 
 ## 2. 架构
