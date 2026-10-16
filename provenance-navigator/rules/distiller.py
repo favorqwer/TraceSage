@@ -17,20 +17,23 @@ from rules.motifs import abstract_node_role, evaluate_node_behavioral_role
 
 class OfflineDistiller:
     """
-    离线知识蒸馏器（基于全自动频繁子图挖掘与全背景对抗剪枝）：
+    离线知识蒸馏器（基于全自动频繁子图挖掘与贝叶斯经验提升度检验 Bayesian Empirical Lift）：
 
     核心机制：
     1. 彻底淘汰人工硬编码的工具字典与先验基模列表；
     2. 自动从训练场景 Ground Truth 中挖掘跨场景 1-跳与 2-跳高频因果子图拓扑骨架 (min_support=1，废除人为数据集强绑定)；
-    3. 在全量训练场景的真实候选闭包（经初筛后的干净候选池）中，逐个基模检验全背景信噪比 (Adversarial Signal-to-Noise Ratio)；
-    4. 纯信噪比判别准入：
-       - 敏感认证与持久化等特权模式：全背景对抗查准率 >= 0.50 且 误报 <= 5；
-       - 通用系统因果模式：全背景对抗查准率 >= 0.30 且 误报 < 300；
+    3. 在全量训练场景的真实候选闭包（经初筛后的干净候选池）中，逐个基模检验全背景贝叶斯经验提升度 (Bayesian Empirical Lift)；
+    4. 尺度不变性准入判定：
+       - 全局背景先验概率 pi = sum(|GT|) / sum(|GT| + |CleanPool|)；
+       - 贝叶斯后验平滑精度 P_Bayes = (TP + m0 * pi) / (TP + FP + m0) (默认 m0 = 2.0)；
+       - 经验提升度 Lift = P_Bayes / pi >= 3.0 且 TP >= 1；
     5. 严格保留审计流水与指标，保证闭环独立可复现。
     """
 
-    def __init__(self, min_support: int = 1):
+    def __init__(self, min_support: int = 1, min_lift: float = 3.0, m0: float = 2.0):
         self.min_support = min_support
+        self.min_lift = min_lift
+        self.m0 = m0
         self.candidate_motifs: List[Dict[str, Any]] = []
         self.last_report: Dict[str, Any] = {}
 
@@ -99,7 +102,12 @@ class OfflineDistiller:
                 return True
             return any(rm.rule_matches(r, t[0], t[1], t[2], kinds=item["kinds"]) for _, r in item["rules"])
 
-        # 3. 逐候选基模计算全背景对抗信噪比
+        # 3. 计算训练期全局先验概率 pi 与贝叶斯经验提升度检验
+        tot_gt_all = sum(len(item["pos_set"]) for item in train_data)
+        tot_cands_all = sum(len(item["cands"]) for item in train_data)
+        pi = tot_gt_all / (tot_gt_all + tot_cands_all) if (tot_gt_all + tot_cands_all) > 0 else 0.005
+        m0 = self.m0
+
         distilled_motifs: List[Dict[str, Any]] = []
         considered: List[Dict[str, Any]] = []
 
@@ -135,12 +143,15 @@ class OfflineDistiller:
 
             precision = tot_pos / (tot_pos + tot_neg) if (tot_pos + tot_neg) > 0 else 0.0
 
-            # 纯对抗信噪比剪枝准入
-            is_priv = any(k in motif.get("name", "") for k in ["SENSITIVE_AUTH", "PERSISTENCE"])
-            if is_priv:
-                passed = (tot_pos >= 1 and precision >= 0.50 and tot_neg <= 5)
+            # 贝叶斯经验提升度 (Bayesian Empirical Lift) 检验
+            if tot_pos >= 1:
+                p_bayes = (tot_pos + m0 * pi) / (tot_pos + tot_neg + m0)
+                lift = p_bayes / pi
             else:
-                passed = (tot_pos >= 1 and precision >= 0.30 and tot_neg < 300)
+                p_bayes = (m0 * pi) / (tot_neg + m0)
+                lift = p_bayes / pi
+
+            passed = (tot_pos >= 1 and lift >= self.min_lift)
 
             considered.append({
                 "id": motif["id"],
@@ -149,6 +160,8 @@ class OfflineDistiller:
                 "negative_alarms": tot_neg,
                 "support_scenarios": sc_hits,
                 "train_precision": round(precision, 6),
+                "bayes_precision": round(p_bayes, 6),
+                "bayes_lift": round(lift, 4),
                 "passed": passed,
             })
 
@@ -158,6 +171,8 @@ class OfflineDistiller:
                 distilled["train_positive_hits"] = tot_pos
                 distilled["train_negative_alarms"] = tot_neg
                 distilled["train_precision"] = precision
+                distilled["bayes_precision"] = p_bayes
+                distilled["lift"] = lift
                 distilled_motifs.append(distilled)
 
         # 4. 审计信息沉淀
@@ -166,10 +181,10 @@ class OfflineDistiller:
             "pool_source": "provided_in_run" if pool_provider is not None else "fresh_closure_per_scenario",
             "thresholds": {
                 "min_support": self.min_support,
-                "priv_min_precision": 0.50,
-                "priv_max_neg": 5,
-                "general_min_precision": 0.30,
-                "general_max_neg": 300,
+                "m0_smoothing": self.m0,
+                "prior_pi": round(pi, 6),
+                "min_lift": self.min_lift,
+                "min_tp": 1,
             },
             "mined_raw_count": len(candidate_motifs),
             "distilled_count": len(distilled_motifs),

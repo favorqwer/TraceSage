@@ -124,6 +124,12 @@ class PatternMatcher:
                     if get_role(dst_node) != r3:
                         continue
 
+                    # 物理时间因果序单调性校验：第一跳起因发生时间不得晚于第二跳结果的结束时间
+                    t0_1 = e1.get("t0") or 0
+                    t1_2 = e2.get("t1") or 0
+                    if t0_1 > 0 and t1_2 > 0 and t0_1 > t1_2:
+                        continue
+
                     k1, k2 = _key(e1), _key(e2)
                     if conf >= self.min_conf:
                         matched[k1] = m
