@@ -43,45 +43,54 @@ CDM 20 规范中定义了 9 类核心实体对象（Subject, FileObject, NetFlow
 ### 1. 独立建模的 4 类核心图节点
 
 #### (1) `:Process` 顶点（承载 CDM `Subject`）
-*   **概念定义**：操作系统中执行计算任务的唯一动态活动主体（包含进程与内核线程）。
-*   **复合主键**：`{host_id}:{pid}:{start_time_ns}`。该复合键确保了系统在长时间跨度、PID 循环复用以及多主机环境下的全局唯一性。
+*   **概念定义**：操作系统中执行计算任务的唯一动态活动主体（包含进程与主线程）。
+*   **复合主键**：`{host_id}:{pid}:{phase_start_time}`。
+    *   *Execve 镜像突变分裂原则*：以 `fork` 或 `execve` 发生的时刻作为阶段起点。当进程调用 `execve` 载入全新二进制镜像时，物理上封闭旧阶段节点，分裂出全新的进程节点，并建立 `[:p2p {syscall: "execve"}]` 因果边相连，彻底杜绝主体人格重塑造成的因果混淆。
 *   **核心图属性**：
-    *   `host_id` (string): 所属主机唯一标识符。
+    *   `process_id` (string): 节点唯一主键属性，值为 `{host_id}:{pid}:{phase_start_time}`。
+    *   `host_id` (string): 所属主机唯一标识符（多机隔离与横向移动边界）。
     *   `pid` (int): 操作系统分配的进程 ID。
-    *   `ppid` (int): 父进程 ID。
+    *   `ppid` (int): 父进程 ID（解决日志截断前已启动的常驻父进程因果断层，识别非预期非法派生）。
     *   `name` (string): 进程短名称（comm，例如 `bash`, `powershell.exe`）。
-    *   `exe_path` (string): 二进制映像文件的绝对规范路径。
-    *   `cmdline` (string): 进程启动时的完整命令行参数。
-    *   `start_time_ns` (long): 进程创建的纳秒级时间戳。
-    *   `end_time_ns` (long, optional): 进程退出时间戳。
+    *   `exe_path` (string): 二进制映像文件的绝对规范路径（L2 束聚合第一主键）。
+    *   `cmdline` (string): 进程启动时的完整命令行参数（大模型战术载荷分析核心）。
+    *   `cwd` (string): 进程当前工作目录（相对路径转绝对路径前置必要参数，识别攻击暂存落地目录）。
+    *   `user` (string): 运行用户身份（Linux UID/EUID、Windows SID/用户名、Android App UID，识别权限提升）。
+    *   `start_time` (long): 进程本阶段启动的纳秒级时间戳。
+    *   `end_time` (long, optional): 进程退出时间戳（划定 $[T_{start}, T_{end}]$ 生命周期窗口，未退出则为 null）。
 
 #### (2) `:File` 顶点（承载 CDM `FileObject`）
 *   **概念定义**：持久化文件、目录、特殊设备节点以及一切遵循操作系统 VFS「一切皆文件」抽象的客体。
-*   **复合主键**：`{host_id}:{normalized_path}`（Linux 环境辅以 `device_id:inode` 处理重命名追溯）。
+*   **复合主键**：`{host_id}:{path}`（规范化绝对路径，跨平台 100% 具备）。
 *   **核心图属性**：
+    *   `file_id` (string): 节点唯一主键属性，值为 `{host_id}:{path}`。
     *   `host_id` (string): 所属主机标识。
-    *   `path` (string): 文件的绝对规范化路径（已解析软链接与 `.` / `..`）。
-    *   `file_type` (string): `regular` / `directory` / `pipe` / `socket` / `char` / `block`。
-    *   `epoch` (int, optional): 文件内容被截断（`O_TRUNC`）时递增的生命周期代数，防止因果时光倒流。
+    *   `path` (string): 文件的绝对规范化路径（已解析软链接与 `.` / `..`，统一路径分隔符 `/`）。
+    *   `file_type` (string): `regular` (普通文件) / `directory` (目录) / `pipe` (管道) / `socket` (本地套接字)。
 
 #### (3) `:Network` 顶点（承载 CDM `NetFlowObject`）
 *   **概念定义**：网络通信端点与会话流对象。
-*   **复合主键**：`{proto}:{lower_ip}:{lower_port}<->{upper_ip}:{upper_port}`。
-    *   *规范化升序规则*：为保证通信双方（无论谁先发起）都能唯一收敛至同一节点，IP 与端口按自然序排列，并在边上记录真实的发起方向与数据流向。
+*   **复合主键**：`{proto}:{ip_a}:{port_a}<->{ip_b}:{port_b}`。
+    *   *自然升序对齐规则*：为保证通信双方（无论客户端还是服务端先发起）都能唯一收敛至同一节点，IP 与端口按字典自然序排列（`ip_a <= ip_b`），端点采用对称中立命名，真实的发起方向与数据流向完全由边方向与系统调用（`connect` vs `accept`）表达。
 *   **核心图属性**：
-    *   `protocol` (string): `tcp` / `udp` / `icmp`。
-    *   `src_ip` / `src_port` (string/int): 本地通信端点。
-    *   `dst_ip` / `dst_port` (string/int): 远程通信端点。
-    *   `is_loopback` (boolean): 是否为本机 127.0.0.1 环回通信。
+    *   `network_id` (string): 节点唯一主键属性，值为 `{proto}:{ip_a}:{port_a}<->{ip_b}:{port_b}`。
+    *   `protocol` (string): `tcp` / `udp`。
+    *   `ip_a` / `port_a` (string/int): 升序对端 A 的 IP 与端口。
+    *   `ip_b` / `port_b` (string/int): 升序对端 B 的 IP 与端口。
+    *   ★ **公共 DNS 53 防超节点规约**：凡是目标端口为 `53` 的标准 DNS 探测，**不上图建独立 `:Network` 顶点**；解析器将其作为属性直接吸收在发起调用的 `:Process` 或出站边属性中（`edge.dns_query = "c2.attacker.com"`），从物理源头绝杀百万入度的公共 DNS 超节点。
 
 #### (4) `:Registry` 顶点（承载 CDM `RegistryKeyObject`）
-*   **概念定义**：Windows 操作系统专有的分层配置数据库项与值。
-*   **复合主键**：`{host_id}:{hive}\{normalized_key_path}`。
+*   **概念定义**：Windows 操作系统专有的配置项，颗粒度精确下沉至 Key-Value 原子项。
+*   **复合主键**：`{host_id}:{hive}\{normalized_key_path}\{value_name}`。
+    *   *原子化键值规约*：每个具体的值项独立建模为顶点（若操作键本身则 `value_name` 填 `(Default)`），彻底杜绝合法程序与后门写入同一注册表键（如 `Run`）引发的配置读写交叉污染与超节点。
 *   **核心图属性**：
+    *   `reg_id` (string): 节点唯一主键属性，值为 `{host_id}:{hive}\{normalized_key_path}\{value_name}`。
     *   `host_id` (string): 所属主机标识。
     *   `hive` (string): 配置单元根，如 `HKLM`, `HKCU`, `HKCR`, `HKU`。
     *   `key_path` (string): 注册表键路径，如 `Software\Microsoft\Windows\CurrentVersion\Run`。
-    *   `value_name` (string): 具体注册表项名称。
+    *   `value_name` (string): 具体注册表项名称（如 `Backdoor`）。
+    *   `data` (string): 写入或读取的具体配置内容/载荷数据（大模型判定持久化武器的核心依据）。
+    *   `data_type` (string): `REG_SZ`, `REG_DWORD`, `REG_BINARY` 等。
 
 ---
 
@@ -233,7 +242,22 @@ CDM 20 规范中定义了 9 类核心实体对象（Subject, FileObject, NetFlow
 
 ---
 
-### 3. 28 类核心因果边全景表（Neo4j 物理持久化）
+### 3. 因果边通用物理属性定义（全系统 100% 存在或推导）
+
+为满足因果图偏序遍历、防依赖爆炸剪枝与大模型细粒度语义理解，所有 7 类有向边强制统一搭载以下 **6 个物理属性**：
+
+| 属性名称 | 物理类型 | 算法作用（拓扑与剪枝） | LLM 理解作用（战术与意图） | 全平台通用性与推导规约 |
+|---|---|---|---|---|
+| **`event_id`** | `String` / `Long` | **边唯一主键**：Neo4j `MERGE` 唯一约束去重与幂等导入，索引快照排序与失效判据。 | 追踪事件底层单行审计日志源头。 | **100% 具备**：日志全局事件号，或对三元组+时间戳生成确定性哈希。 |
+| **`starttime`** | `Long` (ns/ms) | **因果单调性偏序硬检查**（$T_{cause} \le T_{effect}$）：绝对防止时光倒流形成因果伪环。 | 建立攻击链前后叙事线。 | **100% 具备**：Unix 纳秒/微秒 Epoch 时间戳。 |
+| **`endtime`** | `Long` (ns/ms) | 流式读写场景的时序门限提升（允许边读边写）。 | 分析网络连接或执行持续时长。 | **推导方案**：Sysdig/OpenBSM 原生提供；**Sysmon 等单点事件推导为 `endtime = starttime`**。 |
+| **`syscall`** | `String` | 内容三元组 `(src, syscall, dst)` 比对与规则匹配核心要素。 | 判定攻击动作具体手段。 | **100% 具备**：统一归一化为小写标准操作名（如 `read`, `write`, `execve`, `connect`）。 |
+| **`bytes`** | `Long` | **空读剪枝硬闸门**：阻断 0 字节读引发的虚假连通。 | 识别大流量数据外泄（Exfiltration）。 | **三态推导**：`>0` 为实测值；`==0` 触发空读不回溯；**Sysmon 缺失时赋 `-1`（未知），算法自动跳过字节剪枝**。 |
+| **`status`** | `Integer` | **阻断未遂攻击污点扩散**（只有成功才传污点，失败阻断）。 | 区分“黑客成功”还是“被系统拦截阻断”。 | **推导方案**：Linux/FreeBSD/Android 填真实系统调用退出错误码（0为成功）；**Windows Sysmon 默认填 `0`（成功）**。 |
+
+---
+
+### 4. 28 类核心因果边全景表（Neo4j 物理持久化）
 
 在 4 类实体顶点之间，这 28 类事件映射为上述 7 类物理有向边（`p2p`, `p2f`, `f2p`, `p2n`, `n2p`, `p2r`, `r2p`）：
 
@@ -270,7 +294,7 @@ CDM 20 规范中定义了 9 类核心实体对象（Subject, FileObject, NetFlow
 
 ---
 
-### 4. 28 类纯粹非边事件的分级特殊处理策略
+### 5. 28 类纯粹非边事件的分级特殊处理策略
 
 对于绝对不上图持久化为独立边的 28 类事件，`scap-parser` 采用以下 6 种严谨工程策略：
 
@@ -362,7 +386,7 @@ CDM 20 规范中定义了 9 类核心实体对象（Subject, FileObject, NetFlow
 
 ---
 
-### 5. 全量 56 种事件工程判决速查总表
+### 6. 全量 56 种事件工程判决速查总表
 
 | 序号 | CDM 官方事件名称 | 图中是否建边？ | 归属边类型 / 特殊处理手段 | 核心原因与设计判定 |
 |:---:|---|:---:|:---:|---|
@@ -439,11 +463,11 @@ $$\text{Content Triple} = \langle \text{Source Entity String}, \text{Normalized 
 
 | 操作系统与攻击场景 | 物理图中的节点与边 | 投影输出的标准三元组 (Upper Layer Triple) |
 |---|---|---|
-| **Linux 勒索文件加密** | `(p:ransomware)-[:p2f {action: 'EVENT_WRITE'}]->(f:/data.enc)` | `(p:ransomware, write, f:/data.enc)` |
-| **Linux 命名管道通信** | `(p:cat)-[:p2f]->(f:pipe:[1234])`, `(f:pipe:[1234])-[:f2p]->(p:grep)` | `(p:cat, write, f:pipe:[1234])`<br>`(f:pipe:[1234], read, p:grep)` |
-| **Windows 注册表自启动**| `(p:cmd.exe)-[:p2r {action: 'RegSetValue'}]->(r:HKLM\...\Run)` | `(p:cmd.exe, reg_set_value, r:HKLM\...\Run)` |
-| **Windows 跨进程内存注入**| `(p:mimikatz)-[:p2p {action: 'EVENT_CREATE_THREAD'}]->(p:lsass)` | `(p:mimikatz, remote_inject, p:lsass)` |
-| **跨主机横向移动 (A $\to$ B)** | **主机 A 端**：`(p:ssh)-[:p2n {action: 'EVENT_CONNECT'}]->(n:10.0.0.2:22)`<br>**主机 B 端**：`(n:10.0.0.2:22)-[:n2p {action: 'EVENT_ACCEPT'}]->(p:sshd)` | `(p:ssh, connect, n:10.0.0.2:22)`<br>`(n:10.0.0.2:22, accept, p:sshd)` |
+| **Linux 勒索文件加密** | `(p:ransomware)-[:p2f {syscall: 'write'}]->(f:/data.enc)` | `(p:ransomware, write, f:/data.enc)` |
+| **Linux 命名管道通信** | `(p:cat)-[:p2f {syscall: 'write'}]->(f:pipe:[1234])`, `(f:pipe:[1234])-[:f2p {syscall: 'read'}]->(p:grep)` | `(p:cat, write, f:pipe:[1234])`<br>`(f:pipe:[1234], read, p:grep)` |
+| **Windows 注册表自启动**| `(p:cmd.exe)-[:p2r {syscall: 'reg_set_value'}]->(r:HKLM\...\Run\Backdoor)` | `(p:cmd.exe, reg_set_value, r:HKLM\...\Run\Backdoor)` |
+| **Windows 跨进程内存注入**| `(p:mimikatz)-[:p2p {syscall: 'create_thread'}]->(p:lsass)` | `(p:mimikatz, create_thread, p:lsass)` |
+| **跨主机横向移动 (A $\to$ B)** | **主机 A 端**：`(p:ssh)-[:p2n {syscall: 'connect'}]->(n:10.0.0.2:22)`<br>**主机 B 端**：`(n:10.0.0.2:22)-[:n2p {syscall: 'accept'}]->(p:sshd)` | `(p:ssh, connect, n:10.0.0.2:22)`<br>`(n:10.0.0.2:22, accept, p:sshd)` |
 
 ### 2. 既有代码适配改动清单（改动行数 $\le 5$ 行）
 
@@ -481,3 +505,36 @@ $$\text{Content Triple} = \langle \text{Source Entity String}, \text{Normalized 
     将 `MemoryObject` 扁平化意味着系统只能观察到跨进程的系统调用动作（如 `process_vm_writev`）或权限修改（`mprotect`）。对于单个进程内部的 ROP 链拼接、堆喷射布局等纯用户态内存行为，主机内核系统调用审计图在物理上依然不可见。
 3.  **孤立文件系统离线篡改因果断裂**：
     所有因果边均依附于运行态进程的主动行为。如果攻击者通过物理拔盘或操作系统关机状态下修改磁盘文件，由于缺少内核系统调用事件，因果链路必然发生物理阻断，系统只能如实报告无法回溯。
+
+---
+
+## 七、 四类操作系统日志源保真度与推导核对矩阵（Fidelity Matrix）
+
+为保证全平台图数据模型在工程落地时严格遵循《声明边界法则》与《阻断诚实法则》，杜绝任何不可落地的私有假设，下表对 **Linux (Sysdig/Auditd)、FreeBSD (OpenBSM)、Windows (Sysmon/ETW)、Android (ClearScope)** 四大类日志源的全部属性存在性与推导规约进行穷举核定：
+
+| 实体分类 | 属性名称 | Linux (Sysdig/Auditd) | FreeBSD (OpenBSM) | Windows (Sysmon/ETW) | Android (ClearScope) | 跨平台推导与保真度规约 |
+|---|---|---|---|---|---|---|
+| **:Process** | `process_id` | 原生具备 (`host:pid:start`) | 原生具备 (`host:pid:start`) | 原生具备 (`ProcessGuid`) | 原生具备 (`host:pid:start`) | 复合键全局唯一，execve 发生时执行分裂 |
+| | `host_id` | 解析层注入 | 解析层注入 | 解析层注入 | 解析层注入 | 全局命名空间属性，界定多主机边界 |
+| | `pid` | 原生具备 | 原生具备 | 原生具备 | 原生具备 | 操作系统原生数字进程号 |
+| | `ppid` | 原生具备 (`proc.ppid`) | 原生具备 (Subject Token) | 原生具备 (`ParentProcessId`) | 原生具备 | 解决常驻前置父进程断层，识别非法派生 |
+| | `name` | 原生具备 (`comm`) | 原生具备 | 原生具备 (`Image` 文件名) | 原生具备 | 快速程序短名索引 |
+| | `exe_path` | 原生具备 (绝对规范路径) | 原生具备 | 原生具备 (`Image` 全路径) | 原生具备 | L2 束聚类第一主键 |
+| | `cmdline` | 原生具备 (`args`) | 原生具备 (`exec_args`) | 原生具备 (`CommandLine`) | 原生具备 | 大模型战术意图与载荷分析核心线索 |
+| | `cwd` | 原生具备 (`proc.cwd`) | 原生具备 (Audit Context) | 原生具备 (`CurrentDirectory`) | 原生具备 | 相对路径转绝对路径前置参数，识别暂存落地点 |
+| | `user` | 原生具备 (`uid/euid`) | 原生具备 (`ruid/euid`) | 原生具备 (`User` SID/Name) | 原生具备 (`App UID`) | 统一格式化为身份字符串，识别提权 |
+| | `start_time` | 原生纳秒级时间戳 | 原生纳秒级时间戳 | 原生 UTC 时间戳 (100ns) | 原生时间戳 | 统一转换为 Unix Epoch 时间戳 |
+| | `end_time` | 原生退出时间戳 | 原生退出时间戳 | 原生 Event 5 退出时间戳 | 原生退出时间戳 | 划定 $[T_{start}, T_{end}]$ 生命周期窗口，未退出填 null |
+| **:File** | `file_id` / `path` | 原生规范绝对路径 | 原生规范绝对路径 | 原生规范绝对路径 | 原生规范绝对路径 | 统一格式化为绝对路径，保持路径主键 |
+| | `file_type` | 原生具备 (`file/pipe/sock`) | 原生具备 (Vnode Type) | 推导 (普通文件/`\pipe\`) | 原生具备 | 区分存储文件与本地 IPC 管道 |
+| **:Network** | `network_id` | 原生五元组 | 原生 Socket Token | 原生 Event 3 四元组 | 原生网络四元组 | 升序算法归一化：`proto:ip_a:port_a<->ip_b:port_b` |
+| | `ip_a/b`, `port_a/b` | 原生具备 | 原生具备 | 原生具备 | 原生具备 | 自然升序对齐端点，对称中立命名 |
+| | `protocol` | 原生具备 (`tcp/udp`) | 原生具备 | 原生具备 | 原生具备 | 传输层协议 |
+| **:Registry** | `reg_id` / `data` | 不适用 (NULL) | 不适用 (NULL) | 原生 Event 12/13/14 | 不适用 (NULL) | Windows 专属原子项，直接搭载载荷数据 |
+| **因果边** | `event_id` | 原生全局事件序号 | 原生 Audit 序列号 | 原生 Record ID / 哈希 | 原生事件序号 | Neo4j 唯一约束去重与幂等导入 |
+| | `starttime` | 原生纳秒时间戳 | 原生纳秒时间戳 | 原生 UTC 时间戳 (100ns) | 原生时间戳 | 因果偏序单调性检查硬判据 ($T_1 \le T_2$) |
+| | `endtime` | 原生退出时间戳 | 原生退出时间戳 | **推导: 赋值等于 starttime** | 原生退出时间戳 | Sysmon 等单点事件安全折叠为点事件 |
+| | `syscall` | 原生系统调用名 | 原生 BSM 操作名 | 原生 Sysmon 动作名 | 原生操作名 | 字典映射为统一小写标准动作名 |
+| | `bytes` | 原生 I/O 字节数 | 原生 Return Token 字节 | **推导: 赋值 -1 (未知)** | 原生 I/O 字节数 | 三态吞吐：>0 实测，==0 空读剪枝，-1 跳过剪枝 |
+| | `status` | 原生返回值 (0/>0) | 原生错误码 (0/>0) | **推导: 默认赋值 0 (成功)** | 原生返回值 (0/>0) | 只有成功边传递数据流污点，失败边阻断扩散 |
+
