@@ -16,8 +16,8 @@
    - **官方规范文件**：Apache Avro JSON Schema 格式的 CDM 顶层定义（版本：CDM 20）。
    - **定义内容**：包含完整的 16 个核心 Record 记录类型、枚举值及字段定义。
 
-3. **`CDM_GRAPH_MODEL_DESIGN.md`**：
-   - TraceSage 系统针对 CDM 的**「4 类实体顶点 + 7 类因果边」**属性图落地详细架构设计规范。
+3. **`MULTI_OS_LOG_PARSER_DESIGN.md`**：
+   - TraceSage 系统针对跨平台日志与 CDM 的**「4 类实体顶点 + 7 类因果边」**属性图落地详细主规范。
 
 ---
 
@@ -90,4 +90,4 @@ $$\text{Subject} \xrightarrow{\text{Event}} \text{PredicateObject}$$
 > - **28 类因果边事件**：代表真实信息流、控制流以及关键攻击步骤（包含进程控制、文件读写/管道零拷贝、权限属主变更 `chmod`、服务端点监听 `bind` 等），在 Neo4j 中建立物理边；
 > - **28 类纯粹非边事件**：包含内存 FD 句柄绑定与纯记账（如 OPEN, LSEEK, DUP, FCNTL）、状态审计（BOOT, LOGIN）、属性微调与框架标记，在解析器内存句柄表维护或转化为节点属性，严禁作为独立图边入库，从数学上杜绝依赖爆炸。
 > 
-> 详细映射与工程处理策略请参阅 [`CDM_GRAPH_MODEL_DESIGN.md`](./CDM_GRAPH_MODEL_DESIGN.md)。
+> 详细映射与工程处理策略请参阅 [`MULTI_OS_LOG_PARSER_DESIGN.md`](./MULTI_OS_LOG_PARSER_DESIGN.md)。

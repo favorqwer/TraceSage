@@ -1,11 +1,15 @@
 # 溯源图建模物理公理与工程规矩手册 (Provenance Graph Modeling Axioms & Principles)
 
-> **文档定位**：本手册系统化梳理了系统级因果溯源图（System-level Provenance Graph）在跨平台日志解析、图建模、内核状态机维护与图数据库工程落地中的 **十六项核心物理公理与工程规矩**。本手册是 TraceSage 全系统（解析器、图模型设计、智能体调查引擎与因果导航器）的最高因果与物理正确性约束准则。
+> **文档定位**：本手册系统化梳理了系统级因果溯源图（System-level Provenance Graph）在跨平台日志解析、图建模、内核状态机维护与图数据库工程落地中的 **三大因果判决元公理与十六项物理工程规矩**。本手册是 TraceSage 全系统（解析器、图模型设计、智能体调查引擎与因果导航器）的最高因果与物理正确性约束准则。
 
 ---
 
 ## 目录
 
+- [总纲：三大因果判决元公理 (Three Meta-Axioms for Causal Decision)](#总纲三大因果判决元公理-three-meta-axioms-for-causal-decision)
+  - [元公理一：直接信息流与控制流传递公理 (Direct Flow Axiom)](#元公理一直接信息流与控制流传递公理-direct-flow-axiom)
+  - [元公理二：因果可达性不灭与拓扑等价公理 (Causal Reachability Preservation Axiom)](#元公理二因果可达性不灭与拓扑等价公理-causal-reachability-preservation-axiom)
+  - [元公理三：依赖爆炸阻断与局部状态收敛公理 (Dependency Explosion Prevention & Locality Axiom)](#元公理三依赖爆炸阻断与局部状态收敛公理-dependency-explosion-prevention--locality-axiom)
 - [第一部分：实体与标识公理 (Entity & Identity)](#第一部分实体与标识公理-entity--identity)
   - [公理一：进程生命周期复合唯一性公理 (Lifecycle Uniqueness & PID Wraparound)](#公理一进程生命周期复合唯一性公理-lifecycle-uniqueness--pid-wraparound)
   - [公理二：映像重载裂变原则 (Process Versioning & Split on Execve)](#公理二映像重载裂变原则-process-versioning--split-on-execve)
@@ -31,6 +35,70 @@
 - [第七部分：权威参考学术文献 (References)](#第七部分权威参考学术文献-references)
 
 ---
+
+# 总纲：三大因果判决元公理 (Three Meta-Axioms for Causal Decision)
+
+在面对每秒数万条操作系统底层系统调用事件流时，为了让系统拥有一套客观、可复现、不可动摇的建边判决标准，TraceSage 确立了**三大因果判决元公理**。任何事件在进入图数据库之前，必须依次通过这三道安检门的判定：
+
+```text
+       操作系统产生 CDM 56 类事件流 (每秒数万条系统调用)
+                               │
+                               ▼
+       ┌───────────────────────────────────────────────┐
+       │ 第一道安检门：直接流传递公理 (有无实质搬运？) │
+       └───────────────────────┬───────────────────────┘
+                               │ 只有直接搬运数据或交接控制权，才具准入资格
+                               ▼
+       ┌───────────────────────────────────────────────┐
+       │ 第二道安检门：因果可达不灭公理 (删它断不断案？)│
+       └───────────────────────┬───────────────────────┘
+                               │ 确保攻击证据链绝对完整，去除前置冗余连线
+                               ▼
+       ┌───────────────────────────────────────────────┐
+       │ 第三道安检门：依赖爆炸阻断公理 (防不防图撑爆？)│
+       └───────────────────────┬───────────────────────┘
+                               │ 内部状态变属性，高频探测直接过滤
+                               ▼
+           ┌───────────────────┴───────────────────┐
+           ▼                                       ▼
+     【28 类核心因果边】                     【28 类非边特殊处理】
+  (在 Neo4j 中建立物理边)                 (内存句柄维护/节点属性打标/过滤)
+```
+
+### 元公理一：直接信息流与控制流传递公理 (Direct Flow Axiom —— 边的准入资格)
+*   **公理定义**：只有当两个物理实体顶点之间发生了实质的数据载荷物理交换（Data Flow，如字节级读写、网络报文收发、共享内存交换），或者存在确切的进程控制权转移（Control Flow，如派生子进程、跨进程注入线程、异步中断信号）时，才具备在图数据库中构建有向边的物理资格。
+*   **学术源流**：
+    *   **格信息流模型与 Biba 完整性模型**（Dorothy Denning 1976 [16], Kenneth Biba 1977 [17]）：安全模型的因果判定前提是客体发生了 `Read` 或 `Write` 产生状态转换；
+    *   **动态污点分析理论 DIFT**（Newsome & Song, NDSS 2005 [18]）：只有存在物理数据搬运时污点标签才发生传播；
+    *   **DARPA TC CDM 规范**（BBN Technologies, TaPP 2020 [3]）：`Event` 记录的是主体（Subject）与客体（PredicateObject）之间明确的数据交互或控制。
+*   **判决体现**：
+    *   `EVENT_WRITE`（数据写盘）、`EVENT_RECVFROM`（接收网络包）、`EVENT_CLONE`（创建线程）符合元公理一，**准予建边**；
+    *   `EVENT_LSEEK`（文件指针偏移寻道，传输数据严格为 0 字节）、`EVENT_DUP`（文件描述符别名复制，数据 0 字节）、`EVENT_READ_SOCKET_PARAMS`（获取套接字参数，数据 0 字节）属于进程内部指针计算，不符合元公理一，**严禁上图建边**。
+
+### 元公理二：因果可达性不灭与拓扑等价公理 (Causal Reachability Preservation Axiom —— 证据链判据)
+*   **公理定义**：溯源图的核心功能是图遍历算法（前向追踪 Forward Tracking 与后向根因分析 Backward Provenance）。边的去留判据在于：**删除该边是否会破坏从攻击源头（Entrypoint）到受害靶标（Victim）的有向因果路径可达性（Reachability）**。
+    *   若删除该动作会导致攻击因果链断裂（例如丢失了权限变更赋权执行步骤），则该动作必须物理建边；
+    *   若该动作在拓扑上已经由更底层、更精细的物理边所涵盖，或者仅属于句柄准备阶段、后续必然由真实读写闭环，则剔除或递延该边不会破坏源头到终点的拓扑可达性，无需建立多余的虚假边。
+*   **学术源流**：
+    *   **溯源图回溯开山之作 BackTracker**（King & Chen, SOSP 2003 [14]）：因果图是依赖有向无环图（DAG），攻击回溯是在 DAG 上搜索从靶标到根因的传递闭包；
+    *   **溯源语义规范与传递缩约**（James Cheney 等, PODS 2007, TODS 2009 [19]; W3C PROV-DM）：因果图遵循传递等价性（Transitive Reduction），去除因果等价的冗余前置边不改变拓扑可达性。
+*   **判决体现**：
+    *   `EVENT_MODIFY_FILE_ATTRIBUTES`（`chmod +x` 赋予脚本执行权）与 `EVENT_BIND`（绑定后门监听端口）：若删除则破坏攻击推理链，**必须建物理边**；
+    *   `EVENT_OPEN`（打开文件）：打开操作仅分配虚拟文件描述符（FD），传输数据严格为 0 字节。黑客后续窃取数据必然触发 `EVENT_READ`，写入恶意载荷必然触发 `EVENT_WRITE`，文件创建必然触发 `EVENT_CREATE_OBJECT`。因果链完全由后续读写边维持，因此 `open` **无需建边，因果严格递延至后续事件**；
+    *   `EVENT_INIT_MODULE`（加载内核驱动）：驱动 `.ko` 文件此前必然已通过 `f2p`（`read` 或 `mmap`）建立因果边，可达性已被底层边覆盖，无需重复建边。
+
+### 元公理三：依赖爆炸阻断与局部状态收敛公理 (Dependency Explosion Prevention & Locality Axiom —— 性能护城河)
+*   **公理定义**：凡是不向外传递新信息流的操作，如果是实体内部状态或元数据的单向调整，一律**收敛为节点自身属性（Attribute Absorption）**；如果是高频且无害的只读探测与测试框架插桩标记，一律**在解析分发层直接过滤丢弃（Telemetry Pruning）**。严禁将微观探测与自身状态微调强行建边，从数学源头杜绝「超级节点爆炸」与「虚假图连通」。
+*   **学术源流**：
+    *   **依赖爆炸问题提出与单元分割 BEEP**（Lee 等, NDSS 2013 [20]）：首次从理论上剖析了长周期进程频繁读写公共文件导致整图虚假连通的“Dependency Explosion”灾难；
+    *   **事件因果与状态转换解耦理论 ProTracer**（Ma 等, NDSS 2016 [4]）：证明了必须区分“事件驱动因果（建边）”与“状态驱动转换（内部消化或属性化）”，明确要求 `stat` 等高频事件不上图；
+    *   **因果图减枝理论 PrioTracker & NodeMerge**（USENIX Security 2018 [7], ACM CCS 2018 [8]）：证明了高频非因果事件会导致图平均度数幂律激增，使图遍历算法时间复杂度退化为不可接受的指数级。
+*   **判决体现**：
+    *   `EVENT_CHANGE_PRINCIPAL`（提权 `setuid`）与 `EVENT_LOGCLEAR`（清空日志）：转化为 `:Process` 节点的内部属性 `p.euid = 0` 与标签 `p.suspicious_tags += 'log_clear'`，**不建自环边**；
+    *   `EVENT_CHECK_FILE_ATTRIBUTES`（`stat/fstat` 元数据探测，日常数百万次）：**直接丢弃**，防止系统公共库被刺成百万度超级节点。
+
+---
+
 
 # 第一部分：实体与标识公理 (Entity & Identity)
 
@@ -479,3 +547,9 @@ $$t(e_1) \le t(e_2) \le t(e_3)$$
 13. **[ACM TOCS 2017]** Pasquier, T., et al. *"Practical Whole-System Provenance Capture."* ACM Transactions on Computer Systems (TOCS), 35(3), 2017. (CamFlow 系统)
 14. **[SOSP 2003]** King, S. T., and Chen, P. M. *"Backtracking Intrusions."* In Proceedings of the 19th ACM Symposium on Operating Systems Principles (SOSP '03), 2003. (溯源图奠基之作)
 15. **[ACM CCS 2021]** Alsaheel, A., et al. *"ALCHEMIST: Fusing Network and Host Logs for High-Fidelity Provenance Analysis."* In Proceedings of the 2021 ACM SIGSAC Conference on Computer and Communications Security (CCS '21), 2021.
+16. **[CACM 1976]** Denning, D. E. *"A Lattice Model of Secure Information Flow."* Communications of the ACM, 19(5), 1976. (格信息流模型奠基之作)
+17. **[ESD-TR 1977]** Biba, K. J. *"Integrity Considerations for Secure Computer Systems."* Electronic Systems Division, Technical Report ESD-TR-76-372, 1977. (Biba 完整性模型)
+18. **[NDSS 2005]** Newsome, J., and Song, D. *"Dynamic Taint Analysis for Automatic Detection, Identification, and Signature Generation of Exploits on Commodity Software."* In Proceedings of the 12th Network and Distributed System Security Symposium (NDSS '05), 2005. (DIFT 动态污点分析开山之作)
+19. **[PODS 2007]** Cheney, J., et al. *"Provenance in Databases: Why, How, and Where?"* In Foundations and Trends in Databases, 2009 / ACM PODS 2007. (数据与因果溯源传递缩约)
+20. **[NDSS 2013]** Lee, K. H., et al. *"High Accuracy Attack Provenance via Bounded Execution Partitioning."* In Network and Distributed System Security Symposium (NDSS '13), 2013. (BEEP 细粒度执行单元分割与依赖爆炸阻断)
+
