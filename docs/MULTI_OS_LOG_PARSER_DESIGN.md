@@ -187,66 +187,54 @@ CDM 20 规范中定义了 9 类核心实体对象（Subject, FileObject, NetFlow
 *   **复合主键（唯一标识）**：`{host_id}:{pid}:{start_time_ns}`。
     *   *未捕获启动时间口径*：若进程在日志捕获前已在系统常驻运行（中途接入），`start_time_ns` 严格固定为 `0`，禁止填充随机数。
     *   *Execve 镜像突变分裂原则*：以 `fork` 或 `execve` 发生的时刻作为阶段起点。当进程调用 `execve` 载入全新二进制镜像时，物理上封闭旧阶段节点，分裂出全新的进程节点，并建立 `[:p2p {syscall: "execve"}]` 因果边相连，彻底杜绝主体人格重塑造成的因果混淆。
-*   **属性字典与约束**：
+*   **通用强约束属性字典**：
     *   `process_id` (string, 必须): 节点唯一主键属性，值为 `{host_id}:{pid}:{start_time_ns}`。
     *   `host_id` (string, 必须): 所在物理机/虚拟机唯一标识。
     *   `pid` (int/long, 必须): 操作系统分配的进程 ID。
-    *   `ppid` (int, 可选): 父进程 ID（解决常驻父进程因果断层，识别非预期非法派生）。
     *   `name` (string, 必须): 进程可执行文件短名称（例如 `bash`, `cmd.exe`）。
     *   `exe_path` (string, 必须): 二进制映像文件的绝对规范路径（L2 束聚合第一主键）。
     *   `cmdline` (string, 必须): 进程启动时的完整命令行参数（大模型战术载荷分析核心）；若无参数则存为空字符串 `""`。
-    *   `cwd` (string, 可选): 进程当前工作目录路径（相对路径转绝对路径前置必要参数）。
+    *   `cwd` (string, 必须): 进程当前工作目录路径（相对路径转绝对路径前置必要参数）。
     *   `start_time_ns` (long, 必须): 进程本阶段启动的 Unix 纳秒时间戳（未捕获填 `0`）。
     *   `end_time_ns` (long, 可选): 进程退出时的纳秒时间戳（划定生命周期窗口，未退出则为 null）。
-    *   `principal_id` (string, 可选): 规范化用户身份凭据标识。Linux 格式为 `uid:<id>`（如 `uid:0`）；Windows 格式为 `SID:<sid>`（如 `SID:S-1-5-18`）。
-    *   `euid` (int, 可选): Linux 特有有效用户 ID（用于监控 `setuid` 提权）。
-    *   `integrity_level` (string, 可选): Windows 特有完整性级别（`Low`, `Medium`, `High`, `System`）。
-    *   `is_in_flight` (boolean, 可选): 标记该进程是否为日志中途接入的在途存量进程。
-    *   `failed_probes` (list of string, 可选): 该进程执行失败的敏感操作清单。
+
 
 #### (2) `:File` 顶点（承载 CDM `FileObject`，持久化客体与 IPC 通道）
 *   **概念定义**：持久化文件、目录、特殊设备节点、管道以及遵循 VFS（虚拟文件系统）抽象的一切数据存储/流转客体。
 *   **复合主键（唯一标识）**：`{host_id}:{path}`（规范化绝对路径，跨平台 100% 具备）。
-*   **属性字典与约束**：
+*   **通用强约束属性字典**：
     *   `file_id` (string, 必须): 节点唯一主键属性，值为 `{host_id}:{path}`。
     *   `host_id` (string, 必须): 所在主机唯一标识。
     *   `path` (string, 必须): 规范化绝对路径。路径分隔符统一强制使用正斜杠 `/`；Windows 盘符必须小写化（例如 `c:/windows/system32/kernel32.dll`），杜绝大小写分裂。
-    *   `file_type` (string, 必须): 实体子类型枚举，取值范围：`regular`（普通文件）、`directory`（目录）、`pipe`（匿名/命名管道）、`socket`（UNIX 域套接字文件）、`char`（字符设备）、`block`（块设备）、`android_resource`（Android 专有资源）。
+    *   `file_type` (string, 必须): ★ **唯一新增文件通用实体子类型**，取值范围：`regular`（普通文件）、`directory`（目录）、`pipe`（匿名/命名管道）、`socket`（UNIX 域套接字文件）、`char`（字符设备）、`block`（块设备）、`android_resource`（Android 专有资源）。
         *   *IPC 管道命名收敛规约*：Linux/BSD 匿名管道统一命名为 `pipe:[<inode>]`；Windows 命名管道统一命名为 `//./pipe/<name>`。
         *   *Android 专有客体 (`SrcSinkObject`) 收敛规约*：Android 平台特有的硬件传感器（GPS、陀螺仪、摄像头、麦克风等）与系统组件资源（Binder 进程间通信、剪贴板、SMS 短信），统一无损收敛为 `:File` 顶点：
             - 底层设备节点统一命名为 `/dev/binder`, `/dev/sensors/<type>`, `/dev/video*`；
             - 框架层服务汇统一命名为 `android://service/<name>`（如 `android://service/clipboard`, `android://sensor/gps`）；
             - 读写传感器或发起 Binder 调用，天然对应 `p2f` 与 `f2p` 边，无需膨胀出额外实体。
-    *   `epoch` (int, 可选): 文件生命周期代数。初次创建为 0，当文件被截断清空（`O_TRUNC`）时递增，防止因果时光倒流。
-    *   `permissions` (string, 可选): POSIX 权限八进制文本（如 `0755`）。
 
 #### (3) `:Network` 顶点（承载 CDM `NetFlowObject`，网络通信会话）
 *   **概念定义**：网络通信端点与会话流对象。
 *   **复合主键（唯一标识）**：`{protocol}:{lower_ip}:{lower_port}<->{upper_ip}:{upper_port}`。
     *   *升序自然序对齐算法*：为保证通信双方（无论客户端还是服务端先发起）都能唯一收敛至同一节点，IP 与端口按自然字典序升序排列（`lower <= upper`），端点采用对称中立命名，真实的发起方向与数据流向完全由边方向与系统调用（`connect` vs `accept`）表达。
-    *   ★ **公共 DNS 53 防超节点规约**：凡是目标端口为 `53` 的标准 DNS 探测，**不上图建独立 `:Network` 顶点**；解析器将其作为属性直接吸收在发起调用的 `:Process` 或出站边属性中（`edge.dns_query = "c2.attacker.com"`），从物理源头绝杀百万入度的公共 DNS 超节点。
-*   **属性字典与约束**：
+*   **通用强约束属性字典**：
     *   `network_id` (string, 必须): 节点唯一主键属性，值为 `{protocol}:{lower_ip}:{lower_port}<->{upper_ip}:{upper_port}`。
     *   `protocol` (string, 必须): 传输层协议，取值：`tcp`, `udp`。
-    *   `src_ip` (string, 必须): 升序对齐较小端 IP 地址。
+    *   `src_address` (string, 必须): 升序对齐较小端 IP 地址。
     *   `src_port` (int, 必须): 升序对齐较小端端口号。
-    *   `dst_ip` (string, 必须): 升序对齐较大端 IP 地址。
+    *   `dst_address` (string, 必须): 升序对齐较大端 IP 地址。
     *   `dst_port` (int, 必须): 升序对齐较大端端口号。
-    *   `is_loopback` (boolean, 必须): 是否为本机 127.0.0.1 环回通信。
-    *   `ip_family` (string, 可选): `ipv4` 或 `ipv6`。
 
 #### (4) `:Registry` 顶点（承载 CDM `RegistryKeyObject`，Windows 专有配置项）
 *   **概念定义**：Windows 操作系统专有的配置项，颗粒度精确下沉至 Key-Value 原子项（非 Windows 系统数量自然为 0）。
-*   **复合主键（唯一标识）**：`{host_id}:{hive}\{normalized_key_path}\{value_name}`。
+*   **复合主键（唯一标识）**：`{host_id}:{key_path}\{value_name}`。
     *   *原子化键值规约*：每个具体的值项独立建模为顶点（若操作键本身则 `value_name` 填 `(Default)`），彻底杜绝合法程序与后门写入同一注册表键（如 `Run`）引发的配置读写交叉污染与超节点。
-*   **属性字典与约束**：
-    *   `reg_id` (string, 必须): 节点唯一主键属性，值为 `{host_id}:{hive}\{normalized_key_path}\{value_name}`。
+*   **属性字典与约束（Windows 专属节点）**：
+    *   `reg_id` (string, 必须): 节点唯一主键属性，值为 `{host_id}:{key_path}\{value_name}`。
     *   `host_id` (string, 必须): 所在主机唯一标识。
-    *   `hive` (string, 必须): 注册表配置单元根，强制统一大写缩写：`HKLM`, `HKCU`, `HKCR`, `HKU`。
     *   `key_path` (string, 必须): 注册表子键路径，层级使用反斜杠 `\` 分隔（如 `Software\Microsoft\Windows\CurrentVersion\Run`）。
-    *   `value_name` (string, 可选): 具体注册表项名称（如 `Backdoor`）。
+    *   `value_name` (string, 必须): 具体注册表项名称（如 `Backdoor`）。
     *   `data` (string, 可选): 写入或读取的具体配置内容/载荷数据（大模型判定持久化武器的核心依据）。
-    *   `data_type` (string, 可选): `REG_SZ`, `REG_DWORD`, `REG_BINARY` 等。
 
 ---
 
@@ -259,26 +247,29 @@ CDM 20 规范中定义了 9 类核心实体对象（Subject, FileObject, NetFlow
 | **:Process** | `process_id` | 原生具备 (`host:pid:start`) | 原生具备 (`host:pid:start`) | 原生具备 (`ProcessGuid`) | 原生具备 (`host:pid:start`) | 复合键全局唯一，execve 发生时执行分裂 |
 | | `host_id` | 解析层注入 | 解析层注入 | 解析层注入 | 解析层注入 | 全局命名空间属性，界定多主机边界 |
 | | `pid` | 原生具备 | 原生具备 | 原生具备 | 原生具备 | 操作系统原生数字进程号 |
-| | `ppid` | 原生具备 (`proc.ppid`) | 原生具备 (Subject Token) | 原生具备 (`ParentProcessId`) | 原生具备 | 解决常驻前置父进程断层，识别非法派生 |
 | | `name` | 原生具备 (`comm`) | 原生具备 | 原生具备 (`Image` 文件名) | 原生具备 | 快速程序短名索引 |
 | | `exe_path` | 原生具备 (绝对规范路径) | 原生具备 | 原生具备 (`Image` 全路径) | 原生具备 | L2 束聚类第一主键 |
 | | `cmdline` | 原生具备 (`args`) | 原生具备 (`exec_args`) | 原生具备 (`CommandLine`) | 原生具备 | 大模型战术意图与载荷分析核心线索 |
 | | `cwd` | 原生具备 (`proc.cwd`) | 原生具备 (Audit Context) | 原生具备 (`CurrentDirectory`) | 原生具备 | 相对路径转绝对路径前置参数，识别暂存落地点 |
-| | `user` | 原生具备 (`uid/euid`) | 原生具备 (`ruid/euid`) | 原生具备 (`User` SID/Name) | 原生具备 (`App UID`) | 统一格式化为身份字符串，识别提权 |
-| | `start_time` | 原生纳秒级时间戳 | 原生纳秒级时间戳 | 原生 UTC 时间戳 (100ns) | 原生时间戳 | 统一转换为 Unix Epoch 时间戳 |
-| | `end_time` | 原生退出时间戳 | 原生退出时间戳 | 原生 Event 5 退出时间戳 | 原生退出时间戳 | 划定生命周期窗口，未退出填 null |
+| | `start_time_ns` | 原生纳秒级时间戳 | 原生纳秒级时间戳 | 原生 UTC 时间戳 (100ns) | 原生时间戳 | 统一转换为 Unix Epoch 纳秒时间戳 |
+| | `end_time_ns` | 原生退出时间戳 | 原生退出时间戳 | 原生 Event 5 退出时间戳 | 原生退出时间戳 | 划定生命周期窗口，未退出填 null |
 | **:File** | `file_id` / `path` | 原生规范绝对路径 | 原生规范绝对路径 | 原生规范绝对路径 | 原生规范绝对路径 | 统一格式化为绝对路径，保持路径主键 |
 | | `file_type` | 原生具备 (`file/pipe/sock`) | 原生具备 (Vnode Type) | 推导 (普通文件/`\pipe\`) | 原生具备 | 区分存储文件与本地 IPC 管道 |
 | **:Network** | `network_id` | 原生五元组 | 原生 Socket Token | 原生 Event 3 四元组 | 原生网络四元组 | 升序算法归一化：`proto:lower<->upper` |
-| | `ip_a/b`, `port_a/b` | 原生具备 | 原生具备 | 原生具备 | 原生具备 | 自然升序对齐端点，对称中立命名 |
 | | `protocol` | 原生具备 (`tcp/udp`) | 原生具备 | 原生具备 | 原生具备 | 传输层协议 |
-| **:Registry** | `reg_id` / `data` | 不适用 (NULL) | 不适用 (NULL) | 原生 Event 12/13/14 | 不适用 (NULL) | Windows 专属原子项，直接搭载载荷数据 |
+| | `src_address`, `src_port` | 原生具备 | 原生具备 | 原生具备 | 原生具备 | 自然升序对齐较小端点，对称中立命名 |
+| | `dst_address`, `dst_port` | 原生具备 | 原生具备 | 原生具备 | 原生具备 | 自然升序对齐较大端点，对称中立命名 |
+| **:Registry** | `reg_id` / `key_path` / `value_name` / `data` | 不适用 (NULL) | 不适用 (NULL) | 原生 Event 12/13/14 | 不适用 (NULL) | Windows 专属原子项，直接搭载载荷数据 |
 | **因果边** | `event_id` | 原生全局事件序号 | 原生 Audit 序列号 | 原生 Record ID / 哈希 | 原生事件序号 | Neo4j 唯一约束去重与幂等导入 |
-| | `starttime` | 原生纳秒时间戳 | 原生纳秒时间戳 | 原生 UTC 时间戳 (100ns) | 原生时间戳 | 因果偏序单调性检查硬判据 ($T_1 \le T_2$) |
-| | `endtime` | 原生退出时间戳 | 原生退出时间戳 | **推导: 赋值等于 starttime** | 原生退出时间戳 | Sysmon 等单点事件安全折叠为点事件 |
+| | `action` | 映射标准枚举名 | 映射标准枚举名 | 映射标准枚举名 | 映射标准枚举名 | 对齐 CDM 28 类因果动作标准大写枚举 |
 | | `syscall` | 原生系统调用名 | 原生 BSM 操作名 | 原生 Sysmon 动作名 | 原生操作名 | 字典映射为统一小写标准动作名 |
+| | `start_time_ns` | 原生纳秒时间戳 | 原生纳秒时间戳 | 原生 UTC 时间戳 (100ns) | 原生时间戳 | 因果偏序单调性检查硬判据 ($T_1 \le T_2$) |
+| | `end_time_ns` | 原生退出时间戳 | 原生退出时间戳 | **推导: 赋值等于 start_time_ns** | 原生退出时间戳 | Sysmon 等单点事件安全折叠为点事件 |
 | | `bytes` | 原生 I/O 字节数 | 原生 Return Token 字节 | **推导: 赋值 -1 (未知)** | 原生 I/O 字节数 | 三态吞吐：>0 实测，==0 空读剪枝，-1 跳过剪枝 |
 | | `status` | 原生返回值 (0/>0) | 原生错误码 (0/>0) | **推导: 默认赋值 0 (成功)** | 原生返回值 (0/>0) | 只有成功边传递数据流污点，失败边阻断扩散 |
+| *(调用可选)* | `old_path` | 原生具备 (rename 事件) | 原生具备 | 原生具备 (Event 2 目标名) | 原生具备 | 仅 rename 文件重命名边具备 |
+| *(调用可选)* | `sig` | 原生具备 (kill 信号) | 原生具备 | 原生具备 | 原生具备 | 仅 kill 异步信号边具备 |
+
 
 ---
 
@@ -296,7 +287,7 @@ CDM 20 规范中定义了 9 类核心实体对象（Subject, FileObject, NetFlow
 | **`p2r`** | `:Process` | `:Registry` | Windows 进程创建注册表键项或写入注册表键值配置 | `CREATE_OBJECT`, `WRITE` (`RegCreateKey`, `RegSetValue`) |
 | **`r2p`** | `:Registry` | `:Process` | Windows 进程读取注册表键项值或系统配置数据 | `READ` (`RegQueryValue`) |
 
-#### 通用强约束边属性字典（7 类边通用）
+#### 通用强约束边属性字典（7 类边通用，共 7 项）
 *   `event_id` (long/string, 必须): 图内全局递增的唯一事件流水号，用于幂等写入与边更新。
 *   `action` (string, 必须): 规范化因果动作枚举名（对齐 CDM 28 类因果动作，例如 `EVENT_WRITE`, `EVENT_CLONE`）。
 *   `syscall` (string, 必须): 操作系统原生系统调用或审计事件名（例如 `write`, `execve`, `RegSetValueEx`）。
@@ -304,7 +295,9 @@ CDM 20 规范中定义了 9 类核心实体对象（Subject, FileObject, NetFlow
 *   `end_time_ns` (long, 必须): 系统调用退出或连接终止的 Unix 纳秒时间戳（瞬时单点事件时等于 `start_time_ns`）。
 *   `bytes` (long, 必须): 传输数据载荷字节数。非数据传输类控制边（如 `fork`, `signal`）严格记为 `0`。**未知载荷存储为 `-1`**。
 *   `status` (int, 必须): 系统调用执行结果码。0 为成功，正数为 errno。只有成功边传递污点，失败边阻断扩散。
-*   `op_count` (int, 必须): 微观流式折叠的操作次数（未折叠前初始为 1）。
+*   *特定调用的可选字段（仅随特定系统调用入参产生，不设专用概念）*：
+    *   `old_path` (string, 可选): 仅在 `rename` 文件重命名边上记录被改名的原绝对规范路径。
+    *   `sig` (int, 可选): 仅在 `kill`/`signal` 异步信号边上记录信号编号（如 9 为 SIGKILL）。
 
 #### 空值处理规范（Null-safe Protocol）
 *   若原始日志未采集到某可选字段，向 Neo4j 传 `None`。Neo4j 底层直接不写入该属性键，不占用物理磁盘与内存空间。
@@ -496,7 +489,7 @@ $$\mathbf{N_{\text{total}}} + \mathbf{N_{\text{split\_bonus}}} \equiv \mathbf{N_
 |---|---|---|
 | **$N_{\text{total}}$** | 输入原始日志总行数（由适配器严格累计）。 | 原生日志行数 |
 | **$N_{\text{split\_bonus}}$** | 复合事件双边裂变补偿项（Windows Event 1 启用）。 | Linux 恒为 0 |
-| **$N_{\text{edges}}$** | 成功写入 Neo4j 图边的总事件数（含折叠器累加的 `op_count`）。 | 物理图边涵盖的原始调用数 |
+| **$N_{\text{edges}}$** | 成功写入 Neo4j 图边的总事件数。 | 物理图边涵盖的原始调用数 |
 | **$N_{\text{handle}}$** | 在内存中消化用于维护 FD / Handle 表的非边事件数（方案一严格 6 类）。 | `open`, `close`, `dup`, `fcntl` 等 |
 | **$N_{\text{attr\_update}}$** | 转换为节点内部属性增量更新的非边事件数（方案二严格 6 类）。 | 提权、模块加载、进程重命名等 |
 | **$N_{\text{namespace}}$** | 全局命名空间与服务管理事件数（方案三严格 4 类）。 | 挂载、卸载等 |
