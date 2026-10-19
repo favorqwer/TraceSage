@@ -8,8 +8,10 @@
 """
 from typing import Any, Dict, List, Optional, Tuple
 from closure.facts import TopologyFacts
+from orchestrator.boundary_story import BoundaryStoryOperator
 from orchestrator.bridge import CausalBridge
 from orchestrator.filter import CausalFilter
+from orchestrator.pivot_router import CausalPivotRouter
 from rules.matcher import PatternMatcher
 
 
@@ -67,11 +69,16 @@ class RouterOrchestrator:
 
         rule_promoted = []
         promoted_by_motif: Dict[str, int] = {}
+        # 闸门审计：本次实际生效的放行门槛取值与“被门槛否决的匹配次数”
+        matcher_min_conf: Optional[float] = None
+        conf_filtered_count = 0
 
         # 4. 通道二（规则分流与因果桥接）：仅在 rules 和 hybrid 模式下执行；llm-only 模式旁路跳过
         if self.mode in ("rules", "hybrid"):
             matcher = PatternMatcher(tf, self.patterns)
+            matcher_min_conf = matcher.min_conf
             matched = matcher.match(clean_unexcluded, confirmed_seeds=final_confirmed_map)
+            conf_filtered_count = matcher.filtered_by_conf
 
             for e in clean_unexcluded:
                 key = _key(e)
@@ -94,6 +101,16 @@ class RouterOrchestrator:
                 final_confirmed_map[key] = e_bridged
                 rule_promoted.append(e_bridged)
                 motif_id = e_bridged.get("motif", "CAUSAL_BRIDGE")
+                promoted_by_motif[motif_id] = promoted_by_motif.get(motif_id, 0) + 1
+
+            # 4.6 边界穿越故事通道（并列的第二条符号促进通路，只增不减）
+            #     与上文 matcher/bridge 完全并列：输入同一候选池与同一已确认集合，输出合并进已确认，
+            #     不替换也不删除任何既有确认边。判据见 orchestrator/boundary_story.py。
+            story_map = BoundaryStoryOperator().promote(candidate_pool, final_confirmed_map)
+            for key, e_story in story_map.items():
+                final_confirmed_map[key] = e_story
+                rule_promoted.append(e_story)
+                motif_id = e_story.get("motif", "BOUNDARY_STORY")
                 promoted_by_motif[motif_id] = promoted_by_motif.get(motif_id, 0) + 1
 
         ambiguous_candidates = [e for e in clean_unexcluded if _key(e) not in final_confirmed_map]
@@ -126,8 +143,12 @@ class RouterOrchestrator:
         else:
             remaining_ambiguous = ambiguous_candidates
 
-        # 组装最终未排除段
-        final_unexcluded = remaining_ambiguous + pruned_background
+        # 6. 通道四（因果拓扑前向影响与死端伴生碎片剪枝）：消除包管理内部伴生碎片，阻断假阳性扩散
+        pivot_router = CausalPivotRouter(poi_anchors=anchor_triples)
+        final_confirmed_map, debris_pruned = pivot_router.route_confirmed(final_confirmed_map)
+
+        # 组装最终未排除段（被剪枝的碎片安全留存至未排除段，绝不静默丢失）
+        final_unexcluded = remaining_ambiguous + pruned_background + debris_pruned
 
         return {
             "mode": self.mode,
@@ -139,7 +160,10 @@ class RouterOrchestrator:
             "ambiguous_count": len(ambiguous_candidates),
             "llm_confirmed_count": len(llm_confirmed),
             "anchor_confirmed_count": len(anchor_confirmed),
+            "debris_pruned_count": len(debris_pruned),
             "promoted_by_motif": promoted_by_motif,
+            "matcher_min_conf": matcher_min_conf,
+            "conf_filtered_count": conf_filtered_count,
             "routing_summary": {
                 "mode": self.mode,
                 "anchor_forced": len(anchor_confirmed),
@@ -147,6 +171,7 @@ class RouterOrchestrator:
                 "fast_path_pruned": len(pruned_background),
                 "slow_path_ambiguous": len(ambiguous_candidates),
                 "slow_path_llm_confirmed": len(llm_confirmed),
+                "debris_pruned": len(debris_pruned),
             }
         }
 

@@ -106,6 +106,8 @@ def run_scenario(scenario_name: str, input_report: str = None, output_report: st
         llm_enabled=need_deps,
         anchor_confirmed_count=route_result["anchor_confirmed_count"],
         promoted_by_motif=route_result["promoted_by_motif"],
+        matcher_min_conf=route_result.get("matcher_min_conf"),
+        conf_filtered_count=route_result.get("conf_filtered_count", 0),
         mode=mode,
     )
 

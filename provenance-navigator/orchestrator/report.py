@@ -20,13 +20,16 @@ def build_report(
     anchor_confirmed_count: int = 0,
     promoted_by_motif: dict = None,
     mode: str = "hybrid",
+    matcher_min_conf: float = None,
+    conf_filtered_count: int = 0,
 ) -> dict:
     """
     构造符合评测脚本与系统标准的三段报告结构。
     包含 edges（已确认）、unexcluded（未排除）、excluded（已排除）和 stats 统计信息。
 
     统计保真：大模型调用次数必须由调用方传入真实记账值；
-    运行模式、是否启用慢速通道、锚点强制确认数、规则命中按基模归因一并如实落盘。
+    运行模式、是否启用慢速通道、锚点强制确认数、规则命中按基模归因一并如实落盘；
+    在线放行门槛（matcher_min_conf）及其否决次数（conf_filtered_count）也必须落盘。
     """
     if excluded_edges is None:
         excluded_edges = []
@@ -50,6 +53,8 @@ def build_report(
             "pruned_noise_count": pruned_count,
             "promoted_count": promoted_count,
             "promoted_by_motif": promoted_by_motif or {},
+            "matcher_min_conf": matcher_min_conf,
+            "conf_filtered_count": int(conf_filtered_count),
             "anchor_confirmed_count": anchor_confirmed_count,
             "llm_enabled": bool(llm_enabled),
             "llm_calls": int(llm_calls),
