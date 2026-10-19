@@ -17,13 +17,21 @@ def _key(e: Dict[str, Any]) -> Tuple[Any, Any, Any]:
 
 
 class PatternMatcher:
-    """确定性图因果基模匹配与进程血缘闭环引擎。"""
+    """确定性图因果基模匹配与进程血缘闭环引擎。
+
+    放行门槛 min_conf：候选基模被形状匹配上后，其在训练池上的命中查准率
+    必须 >= min_conf 才会确认；不达标则该次匹配不确认（边退到报告的“未排除”段，不丢失）。
+    默认值 0.50 是在本项目 5 个基准场景上选出的**精度优先**取值，未做跨场景验证；
+    只要取值非 0，报告 stats 里会如实记录该取值与被否决的匹配次数（conf_filtered_count）。
+    """
 
     def __init__(self, topology_facts: TopologyFacts, patterns: Optional[List[Dict[str, Any]]] = None, min_conf: float = 0.50):
         self.tf = topology_facts
         self.patterns = patterns or []
         self.min_conf = min_conf
         self.high_conf_pids: Set[str] = set()
+        # 被放行门槛否决的匹配次数（按边计：1 跳否决计 1 条，2 跳链否决计 2 条，不去重）
+        self.filtered_by_conf = 0
 
     def match(self, candidate_pool: List[Dict[str, Any]], confirmed_seeds: Optional[Dict[Tuple, Dict[str, Any]]] = None) -> Dict[Tuple, Dict[str, Any]]:
         """执行完整的高纯度基模匹配与进程血缘拉直，返回 {边三元组: 命中的基模/原因字典}。"""
@@ -92,6 +100,8 @@ class PatternMatcher:
                                 self.high_conf_pids.add(p)
                             for _, p in e.get("dst_identities", []):
                                 self.high_conf_pids.add(p)
+                        else:
+                            self.filtered_by_conf += 1
                         break
 
         # 3. 真·2-跳因果路径连通性匹配 (A -> B -> C)
@@ -146,6 +156,8 @@ class PatternMatcher:
                             self.high_conf_pids.add(p)
                         for _, p in e2.get("dst_identities", []):
                             self.high_conf_pids.add(p)
+                    else:
+                        self.filtered_by_conf += 2
 
         # 4. 操作系统通用进程血缘树传递（Process Lineage Tree Propagation）
         # 将已确诊三元组涉及的所有 PID 统一合并入高确信集合
