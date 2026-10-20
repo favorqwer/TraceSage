@@ -1,6 +1,6 @@
 # TraceSage Linux/Sysdig 溯源图设计规范 V2
 
-- **版本**：v2.0（设计定稿，未实现）
+- **版本**：v2.1（设计定稿，未实现；本版修订：失败调用的建节点条件、pid→节点解析、行级账本、边身份与去重、`born_ns` 推算回填、地址类返回值的 `res` 语义）
 - **验证基线**：`attack/data/1,2,3,4,5,6,7,9,10/capture.scap` 共 9 个捕获，读取与采集端均为 sysdig 0.27.1；本文所有"实测"数字均出自这批文件，复现命令见附录 C。
 - **框架约束**：三类顶点（`:Process` / `:File` / `:Network`）、五种边（`p2p` / `p2f` / `f2p` / `p2n` / `n2p`）**不变**。
 
@@ -14,7 +14,6 @@
 | 主键 | 唯一确定一个顶点的字段组合（本文不用额外的"键串"属性） |
 | fd（文件描述符） | 进程打开文件/套接字后领到的号码，**只在它自己的进程内有意义** |
 | 泛型事件 | 日志里只有调用名、参数与返回值栏目全空的记录 |
-| 折叠 | 把短时间内重复的同一种动作合并成一条边并记次数 |
 | 视图 | 同一路径在不同容器上下文里的身份；本文用 `container_id` 表达 |
 | 台账 | 不进图但必须逐项计数、随报告输出的记录 |
 
@@ -26,27 +25,26 @@
 
 | # | 不变量 | 判定方式 |
 |---|---|---|
-| 1 | **只放有客体的事实**：图上每条边都能指到两端真实实体，没有"自己指向自己"的边 | 按 §3.4 逐条核查 |
+| 1 | **只放有客体的事实**：图上每条边都能指到两端真实实体，没有"自己指向自己"的边 | 按 §3.3 逐条核查 |
 | 2 | **节点只存身份**：每个节点 ≤ 8 个属性，且不含无界列表 | 逐节点类型核对属性表（§2） |
 | 3 | **客体名用数据源原生形态**，禁止发明 | 抽查节点 `path`/`tuple` 能否在原始日志中逐字找到 |
 | 4 | **结果单轨**：失败与取值只由 `res` 一个字段表达 | 边上只有一个结果字段 `res` |
-| 5 | **不丢账**：每条事件的去处只有 §6-1 列出的若干桶（边覆盖 / 属性更新 / 显式丢弃 / 仅句柄 / 无客体 / 未知句柄 / 未配对 / 未归类 / 无进程归属 / 异常行 / 其他） | 两层账本差额为 0，且未归类逐名披露 |
+| 5 | **不丢账**：每条日志行的去处只有 §6-1 列出的若干桶（边覆盖 / 属性更新 / 尝试未成立 / 显式丢弃 / 仅句柄 / 无客体 / 未知句柄 / 未配对 / 未归类 / 无进程归属 / 异常行 / 其他） | 行级两层账本差额为 0，且未归类逐名披露 |
 
 ## 1.2 统一降级规则（替代一切"某调用天生没有客体"的硬编码结论）
 
 | 规则 | 内容 |
 |---|---|
-| **R1** | 客体可解析（fd 有可用名字，或参数里有路径）→ 建边 |
-| **R2** | 无客体、且语义是"主体自身状态/属性变更"（身份、能力、内存保护、计时器、日志操作、内核对象）→ 记入进程节点 `ops` 计数，不建边 |
-| **R3** | 其余（参数缺失、客体无可标识名字、只问不改的探测）→ 记账（按 **调用名 + 进程** 计数），并在报告中输出"参数可得性报告" |
-| **R4** | 客体名一律采用数据源原生形态；名字里没有可区分标识 → **不建边**（禁止拿 fd 号、内核地址、自造前缀当身份） |
-| **R5** | "本批捕获未出现 / 未解码" **不等于**"数据源不支持"：对应动词与客体位**保留**并标注"未验证"，不得据此删除设计 |
-| **R6** | 容器元数据**分次到达**（先占位、后补全）：后到者补全，并**回填**此前已建节点；占位值（空挂载表、`privileged=false`）不得作为结论 |
+| **R1** | 客体可解析（fd 有可用名字，或参数里有路径）→ 建边；**对象由本次调用产生时还须调用成功，见 §4.6** |
+| **R2** | 无客体可指的动作（主体自身的状态/属性变更、参数缺失、客体不可标识）→ **记账**（按 进程 + 调用名）写入 `ops.csv`，**不进图**；报告同时输出"参数可得性报告" |
+| **R3** | 客体名一律采用数据源原生形态；名字里没有可区分标识 → **不建边**（禁止拿 fd 号、内核地址、自造前缀当身份） |
+| **R4** | "本批捕获未出现 / 未解码" **不等于**"数据源不支持"：对应动词与客体位**保留**并标注"未验证"，不得据此删除设计 |
+| **R5** | 容器元数据**分次到达**（先占位、后补全）：后到者补全，并**回填**此前已建节点；占位值（空挂载表、`privileged=false`）不得作为结论 |
 
 ## 1.3 字段清单纪律
 
 - **无条件字段**（每条事件必须取；缺失即为解析错误）：`evt.num` `evt.rawtime` `evt.dir` `evt.type` `proc.pid` `thread.tid`。
-- **条件字段**（必须逐事件类型实测其上下文存在后再使用）：`proc.ppid` `proc.exepath` `proc.cmdline` `proc.args` `proc.duration`（仅 spawn/exec/procexit）、`container.id` `container.name` `container.image` `container.privileged` `container.mounts`（仅容器元数据事件）、`fd.num` `fd.name` `fd.type` `fd.l4proto`、`evt.rawres`、`evt.buffer`（配 `-b`）、`evt.arg[0..N]`。
+- **条件字段**（必须逐事件类型实测其上下文存在后再使用）：`proc.ppid` `proc.exepath` `proc.cmdline` `proc.args` `proc.duration`（**捕获内创建的进程每条事件都有**；捕获前已存在则无；唯一用途是 §2.1 的 `born_ns` 推算回填）、`user.uid`（每事件，语义为真实 UID）、`container.id` `container.name` `container.image` `container.privileged` `container.mounts`（仅容器元数据事件）、`fd.num` `fd.name` `fd.type` `fd.l4proto`、`evt.rawres`、`evt.buffer`（配 `-b`）、`evt.arg[0..N]`。
 - **禁止项**：
   1. 把 `%evt.buflen` 混入取值模板——该字段在 `read` 退出行无上下文，会让**整行消失**；
   2. 用"大而全"的单一模板混取条件字段（任一字段缺上下文即丢整行，且是**按事件类型成批**丢，不报错）；
@@ -67,18 +65,21 @@
 | `container_id` | 必 | 逐事件 `container.id` | 无容器为字面量 `host`；这是 **cgroup 归属**，不是路径/挂载视图 |
 | `pid` | 必 | `proc.pid` | |
 | `born_ns` | 必 | 见下 | **本段身份起点时刻** |
+| `born_src` | 必 | 解析器推导 | 身份起点来源：`clone` / `exec` / `duration` / `unknown`；`duration` 表示由 `proc.duration` 回填（推算值，非实测） |
 | `exe` | 条 | `proc.exepath` | 最后观测值 |
 | `cmdline` | 条 | `proc.cmdline` / `proc.args` | 最后观测值 |
-| `ppid` | 条 | `proc.ppid` | 最后观测值；克隆边缺失时补父子线索 |
-| `uid` / `ruid` | 条 | `get*uid`、`setuid`、`setresuid` 等 | 有效/真实身份；未出现相关调用则**留空**（禁止用空值断言"无提权"） |
+| `ppid` | 条 | `proc.ppid` | **首次观测值**（避免父进程先退出、ppid 被 reparent 成 1 的误导）；克隆边缺失时补父子线索 |
+| `uid` / `ruid` | 条 | `uid`（euid）：`geteuid`/`setuid`/`setresuid` 等；`ruid`：**每事件 `user.uid`** | `ruid` 稠密（每条事件都有，实测语义为真实 UID）；`uid`（euid）稀疏，未出现相关调用则留空（禁止用空值断言"无提权"） |
 | `privileged` | 条 | `container.privileged` | 所属容器是否特权 |
 | `host_root_rw` | 条 | `container.mounts` | 所属容器是否**持有宿主根的写权限** |
-| `ops` | 条 | 无客体动作计数 | 固定 9 键字符串，见 §4.3 |
 
-**`born_ns` 定义**：
-- 进程由 `clone`/`fork`/`vfork` 创建 → 取该事件时刻；
-- `execve`/`execveat` 换程序 → 取该 execve 事件时刻（**这保证"换程序=新节点"不会与旧节点撞键**）；
-- 捕获开始前已存在 → `0`（表示未知，**禁止当成 1970 年**）。
+**`born_ns` 定义**（每种来源同时写入 `born_src`）：
+- 进程由 `clone`/`fork`/`vfork` 创建 → 取该事件时刻，`born_src=clone`；
+- `execve`/`execveat` 换程序 → 取该 execve 事件时刻（**这保证"换程序=新节点"不会与旧节点撞键**），`born_src=exec`；
+- 捕获内创建但创建事件丢失（该 pid 段第一次出现时没有任何 clone/exec 记录，且该事件 `proc.duration` 有值——`0` 也算有值）→ `born_ns = 事件时刻 − proc.duration`，`born_src=duration`；以该 pid 段**首次**观测的推算值为准，后续观测与首值相差超过 1 毫秒时计 `born_estimate_jitter` 并写入报告（不阻断）；
+- 捕获开始前已存在（`proc.duration` 取不到）→ `0`（表示未知，**禁止当成 1970 年**），`born_src=unknown`。
+
+`born_src=duration` 的 `born_ns` 是**推算值**：只用于排序与 pid 解析，不参与"攻击发生在何时"的结论，报告与查询必须能把它和实测值区分开。推算到的是 **fork 时刻**（`proc.duration` 自进程创建起算）；若该 pid 段的 exec 事件同时丢失，该节点会同时覆盖 exec 前后的两段身份且无法切分，需在报告标注。
 
 ## 2.2 `:File`
 
@@ -110,6 +111,7 @@
 - 端点（`bind`/`listen`）：端口 > 0，允许通配 IP（如 `0.0.0.0:8443`）。
 
 **语义**：
+- 节点身份是"日志给出的元组标识"，**不保证会话已建立**：`connect` 失败（`res<0`）仍建节点与边（对象产生条件见 §4.6），查询必须用 `res` 区分"已建立"与"被拒/不可达"；
 - `tuple` 左端恒为客户端、右端恒为服务端；
 - 因此**跨主机缝合 = `tuple` 字符串相等**；
 - **本机角色**由动作决定（`connect`=客户端，`accept`=服务端），不存属性；
@@ -117,7 +119,7 @@
 
 ## 2.4 明确不建节点的东西
 
-主机（`host_id` 属性）、线程（归所属进程）、身份（进程属性）、内存区间（地址/长度不落图）、容器本身（`container_id` 属性 + 进程上的两个布尔位）、裸 `socket()`（无对端 → 记账）、无可区分名字的匿名 IPC（eventfd/signalfd/timerfd/inotify/epoll/socketpair）、bpf 对象（按 R4：数据源给不出可区分名字时不建节点）、内核密钥（无 serial）、挂载点以外的一切"配置项"。
+主机（`host_id` 属性）、线程（归所属进程）、身份（进程属性）、内存区间（地址/长度不落图）、容器本身（`container_id` 属性 + 进程上的两个布尔位）、裸 `socket()`（无对端 → 记账）、无可区分名字的匿名 IPC（eventfd/signalfd/timerfd/inotify/epoll/socketpair）、bpf 对象（按 R3：数据源给不出可区分名字时不建节点）、内核密钥（无 serial）、挂载点以外的一切"配置项"。
 
 ---
 
@@ -133,33 +135,29 @@
 | `p2n` | 进程作用于网络：连接、绑定、监听、发送 | `:Process` → `:Network` |
 | `n2p` | 网络流入进程：接受、接收 | `:Network` → `:Process` |
 
-**归类唯一规则**：客体类型决定边类（`:File` → `p2f`/`f2p`；`:Network` → `p2n`/`n2p`）；动词只描述语义，成功/失败/零字节都由 `res` 表达，**不改变动作名**。
+**归类唯一规则**：客体类型决定边类（`:File` → `p2f`/`f2p`；`:Network` → `p2n`/`n2p`）；动词只描述语义，成功/失败/零字节由 `res` 表达（`mmap`/`mmap2`/`shmat` 成功时无 `res`，见 §3.2），**不改变动作名**；**对象是否成立（是否建节点）另由 §4.6 判定**。
 
-## 3.2 边属性（统一 9 个，不设"通用/专有"之分）
+## 3.2 边属性（统一 10 个语义属性 + 1 个身份字段）
 
 | 属性 | 必/条 | 口径 |
 |---|---|---|
-| `evt` | 必 | 进入行 `evt.num`；折叠后取区间首号（回原始日志核对的锚点） |
+| `evt` | 必 | 进入行 `evt.num`（回原始日志核对的锚点；孤儿退出行独立成边时取该退出行事件号，见 §5.2）。**不唯一**：一个事件可产出多条边，须与 `seq` 联合使用 |
 | `ts_ns` / `te_ns` | 必 | 进入行/退出行时刻（单点事件两者相等） |
 | `action` | 必 | §4.2 动词表中的一个 |
-| `n` | 条 | 折叠覆盖次数，默认 1 |
-| `res` | 条 | `evt.rawres` 原样：数据类=字节数、失败=负错误码、零字节=0。**全局唯一结果字段**；缺失留空不补；`mmap` 族不写（返回值是地址） |
+| `res` | 条 | `evt.rawres` 原样：数据类=字节数、失败=负错误码、零字节=0。**全局唯一结果字段**；缺失留空不补。`mmap`/`mmap2`/`shmat` 这类**成功时返回地址**的调用例外：**失败时写入负错误码，成功时不写**（成功返回值是地址，不入图） |
 | `flags` | 条 | 解码后的关键标志集合（`O_*` / `PROT_*` / `MAP_*` / `CLONE_*` / `AT_*` / `RENAME_*` / `MS_*`） |
 | `head` | 条 | 载荷前若干字节的 base64（取法：`-p "%evt.buffer" -b`；本批快照上限 80 字节） |
-| `detail` | 条 | 该动词的关键标量，语法固定 `key=value[;key=value]`（分隔符统一用 `;`），键取自封闭集：`old`（改名源）、`src`（链接目标）、`mode`（权限位）、`sig`（信号号）、`req`（ioctl 请求码）、`fstype`、`dev`、`umount=true` |
+| `old_path` | 条 | `rename` 的源路径（参数 `oldpath`）。5 类边里没有"文件→文件"，这是它唯一的落点 |
+| `target_path` | 条 | `link`/`linkat` 的源文件路径（`oldpath`）；`symlink`/`symlinkat` 的目标字符串（`target`）——目标可以是相对路径或不存在，不一定是图上的节点 |
+| `mode` | 条 | `chmod`/`fchmod`/`fchmodat` 的权限位，八进制字符串（如 `"0700"`） |
+
+**身份字段 `seq`**：同一事件号产出多条边时的序号（0 起）。与 `evt` 一起构成边的唯一身份（§5.9-5），不承载语义，不进上表。
 
 **三态语义**：有值 = 实测；无属性 = 未观测；`0` = 实测零。
 
-## 3.3 折叠
+## 3.3 禁止事项
 
-1. 判据：同 `(host, container, pid, 源, 宿, 动词, res)`，本条的 `ts_ns` 与槽位上一条的 `te_ns` 间隔 < `fold_window_ns`（默认 200 毫秒）。
-2. 合并：`n` 累加、`te_ns` 更新为末条、`head` 保留组内首个、`evt` 保留首条。
-3. **禁止折叠**：`exec`、`rename`、`unlink`、`chmod`、`connect`、`bind`、`listen`、任何失败调用（`res<0`）。
-4. 窗口是**受控变量**：必须报告 `fold_window_ns` 取 200ms / 1s / 5s 时边数与关键指标的变化。
-
-## 3.4 禁止事项
-
-1. **禁止自环边**（`src = dst`）。无客体动作走 §4.3 计数，不走边。
+1. **禁止自环边**（`src = dst`）。无客体动作走 §4.3 记账（不进图），不走边。
 2. **禁止人工补边**：拼前缀、猜对端、把同名当同一物，一律不许写进图。
 3. **禁止把解析器内部状态写进图**（如"参数没取到"这类标记 → 进台账）。
 
@@ -172,57 +170,61 @@
 1. 先判"谁把数据给了谁"，再判"谁改了什么"，最后才判纯行为。
 2. 分类函数的输入是**调用名 + 关键标志 + 两端客体类型**；同名不同参数可落不同动词（例：`openat` 带 `O_CREAT`/`O_TRUNC` → `create`，否则不建边）。
 3. 映射不上的调用 → 未归类桶（记账 + 逐名披露），**禁止静默丢弃**。
+4. **作用于已有对象的失败调用照常建边**：读、写、改名源、删除、截断、权限、探测、收发、`ioctl`、`mount` 等动作的对象在调用前已存在，成功失败都建边，动作名不变，失败由 `res<0` 表达；失败不传播数据流（不写 `head`），但**禁止丢弃**（扫描、爆破、被拒写入的证据全在这里）。
+5. **对象由本次调用产生时，只有成功才落节点**：`clone`/`exec`/`create`/`link`/`rename` 的新路径/`bind`/`listen`/`accept` 失败时**不建节点、不建边**，改记"尝试未成立"（§6-1，落 `attempts.csv`：目标串 + 错误码 + 次数 + 首末时刻）。逐动词判据见 §4.6。
 
 ## 4.2 动词表（34 个，唯一枚举）
 
-状态列按**动词级**判定：**已产出** = 本批该动词下至少一个调用能生成边；**部分** = 部分调用能生成；**本批不产出** = 调用了但采集端未给参数/客体无可标识名（按 R3 记账）；**未出现** = 本批 0 次，设计位保留待验证（R5）。同一动词内仍属未验证的调用（如 `create` 里的 `memfd_create`）见本节末。
+状态列按**动词级**判定：**已产出** = 本批该动词下至少一个调用能生成边；**部分** = 部分调用能生成；**本批不产出** = 调用了但采集端未给参数/客体无可标识名（按 R2 记账）；**未出现** = 本批 0 次，设计位保留待验证（R4）。同一动词内仍属未验证的调用（如 `create` 里的 `memfd_create`）见本节末。
+
+各动词的**建节点条件**（成功判据、失败去向）统一见 §4.6；下表只描述语义与客体来源。
 
 | 动词 | 边 | 适用调用 | 客体/取值来源 | 本批状态 |
 |---|---|---|---|---|
-| `clone` | p2p | `clone`/`clone3`/`fork`/`vfork`（含 `CLONE_THREAD` 不建边） | 子进程（返回值即子 pid） | 已产出 |
-| `exec` | p2p | `execve`/`execveat` | 旧节点→新身份节点（同 pid，`born_ns`=本事件时刻） | 已产出 |
-| `exit` | p2p | `exit`/`exit_group`/`procexit` | 父进程（克隆边优先，回退 `ppid`；无父记录则不建边） | 已产出 |
-| `signal` | p2p | `kill`/`tgkill`/`tkill`/`pidfd_send_signal` | 目标进程；`detail=sig` | 已产出 |
+| `clone` | p2p | `clone`/`clone3`/`fork`/`vfork`（含 `CLONE_THREAD` 不建边） | 子进程（`res>0` 时取该返回值） | 已产出 |
+| `exec` | p2p | `execve`/`execveat` | 旧节点→新身份节点（同 pid，`born_ns`=本事件时刻；仅成功，失败不分裂） | 已产出 |
+| `exit` | p2p | `exit`/`exit_group`/`procexit` | 父进程（克隆边优先，回退 `ppid`；解析规则见 §5.7；无父记录则不建边） | 已产出 |
+| `signal` | p2p | `kill`/`tgkill`/`tkill`/`pidfd_send_signal` | 目标进程（按 §5.7 解析；信号号不落图，按 `signal:<n>` 记账） | 已产出 |
 | `ptrace` | p2p | `ptrace`(ATTACH/SEIZE) | 目标进程 | 未出现 |
 | `mem_read` | p2p | `process_vm_readv`、`/proc/<pid>/mem` 读 | 目标进程 | 未出现（`/proc` 派生除外） |
 | `mem_write` | p2p | `process_vm_writev`、`ptrace`(POKE)、`/proc/<pid>/mem` 写 | 目标进程 | 未出现 |
 | `pidfd_getfd` | p2p | `pidfd_getfd` | 目标进程 | 未出现 |
-| `wait` | p2p | `wait4`/`waitid` | 子进程（参数给出 pid 时取该 pid 最近活跃节点） | 本批不产出 |
-| `create` | p2f | `openat`/`open`/`creat`(带 `O_CREAT`/`O_TRUNC`)、`mkdir(at)`、`mknodat`、`memfd_create` | 路径参数 / fd 名 | 已产出 |
-| `link` | p2f | `link`/`linkat`/`symlink(at)` | 新路径；`detail=src` | 已产出 |
-| `rename` | p2f | `rename`/`renameat`/`renameat2` | 新路径；`detail=old` | 已产出 |
+| `wait` | p2p | `wait4`/`waitid` | 子进程（按 §5.7 解析） | 本批不产出 |
+| `create` | p2f | `openat`/`open`/`creat`(带 `O_CREAT`/`O_TRUNC`)、`mkdir(at)`、`mknodat`、`memfd_create` | 路径参数 / fd 名（失败不建，见 §4.6） | 已产出 |
+| `link` | p2f | `link`/`linkat`/`symlink(at)` | 新路径（失败不建，见 §4.6）；`target_path`=源文件路径 / 符号链接目标 | 已产出 |
+| `rename` | p2f | `rename`/`renameat`/`renameat2` | 新路径（失败不建，见 §4.6）；`old_path`=源路径 | 已产出 |
 | `unlink` | p2f | `unlink`/`unlinkat`/`rmdir` | 路径参数 | 已产出 |
 | `truncate` | p2f | `truncate`（`ftruncate`/`fallocate` 本批无参数 → 记账） | 路径参数 | 部分 |
 | `write` | p2f | `write`/`writev`/`pwrite`/`pwritev` + 零拷贝出向（`splice`/`sendfile`/`tee`/`copy_file_range`） | 由句柄表解析；套接字改投 `send` | 已产出 |
-| `chmod` | p2f | `chmod`/`fchmod`/`fchmodat` | 路径或 fd；`detail=mode` | 已产出 |
-| `mount` | p2f | `mount`/`umount2` | 挂载点；`detail=fstype=…;dev=…`（卸载时 `umount=true`） | 已产出 |
+| `chmod` | p2f | `chmod`/`fchmod`/`fchmodat` | 路径或 fd；`mode`=权限位（八进制串） | 已产出 |
+| `mount` | p2f | `mount` | 挂载点（`fstype`/`dev` 不落图；`umount2` 不建边，见 §4.4） | 已产出 |
 | `chroot` | p2f | `chroot`/`pivot_root` | 新根目录 | 已产出 |
-| `ns` | p2f | `setns`（`unshare` 无客体 → `ops.ns`） | 命名空间文件路径 | 已产出 |
+| `ns` | p2f | `setns`（`unshare` 无客体 → 记报告） | 命名空间文件路径 | 已产出 |
 | `module` | p2f | `finit_module`/`init_module`/`delete_module` | 模块文件 | 本批不产出 |
 | `bpf` | p2f | `bpf` | fd 名 | 本批不产出 |
 | `io_uring` | p2f | `io_uring_setup`/`_enter`/`_register` | 环 fd 名 | 未出现 |
-| `shm` | p2f | `shmget`/`shmat`/`shmdt`/`shmctl` | 段标识 | 本批不产出 |
-| `ioctl` | p2f | `ioctl` | fd 客体；`detail=req` | 已产出 |
+| `shm` | p2f | `shmget`/`shmat`/`shmdt`/`shmctl` | 段标识；`shmat` 按 `mmap` 同一 `res` 规则（失败写负错误码，成功不写） | 本批不产出 |
+| `ioctl` | p2f | `ioctl` | fd 客体（请求码不落图，按 `ioctl:<req>` 记账） | 已产出 |
 | `read` | f2p | `read`/`readv`/`pread`/`preadv` + 零拷贝入向 | 由句柄表解析；套接字改投 `recv` | 已产出 |
 | `load_image` | f2p | `execve`/`execveat` | 镜像文件（起点=新身份节点） | 已产出 |
-| `mmap` | f2p | `mmap`/`mmap2`（文件后备）、`shmat` | 文件；`flags=PROT_*/MAP_*` | 已产出 |
+| `mmap` | f2p | `mmap`/`mmap2`（文件后备）、`shmat` | 文件；`flags=PROT_*/MAP_*`；`res` 仅失败时写负错误码（成功返回地址，不写） | 已产出 |
 | `probe` | f2p | `access`/`faccessat`/`getdents64`/`statfs`/`readlink(at)`/`newfstatat`… | 有客体才建边 | 部分（本批仅 `access`/`getdents64` 有客体） |
-| `connect` | p2n | `connect` | 会话节点（元组良构才建） | 已产出 |
-| `bind` | p2n | `bind` | 监听端点 | 已产出 |
-| `listen` | p2n | `listen` | 监听端点 | 已产出 |
+| `connect` | p2n | `connect` | 会话/端点节点（元组良构才建；失败照建，见 §2.3） | 已产出 |
+| `bind` | p2n | `bind` | 监听端点（失败不建，见 §4.6） | 已产出 |
+| `listen` | p2n | `listen` | 监听端点（失败不建，见 §4.6） | 已产出 |
 | `send` | p2n | `sendto`/`sendmsg`/`sendmmsg` + 套接字上的 `write` | 会话/端点；`res`=字节 | 已产出 |
-| `accept` | n2p | `accept`/`accept4` | 会话节点（与客户端 `connect` 天然同键） | 已产出 |
+| `accept` | n2p | `accept`/`accept4` | 会话节点（`res≥0` 且元组良构；失败不建） | 已产出 |
 | `recv` | n2p | `recvfrom`/`recvmsg`/`recvmmsg` + 套接字上的 `read` | 会话；`res`=字节 | 已产出 |
 
 **`openat` 分流**：带 `O_CREAT`/`O_TRUNC` → `create`；其余（只读/只写打开）**不建边**，读写由后续 `read`/`write` 边体现（代价见 §8 边界 7）。
 
 **无独立动词的未验证调用**：`memfd_create`（客体并入 `create`）、`userfaultfd`、`kexec_load`、`open_by_handle_at` —— 本批未出现或无可标识客体，按 R3 记账；换采集端或合成场景后再验证。
 
-## 4.3 无客体动作：`:Process.ops` 计数（9 键）
+## 4.3 无客体动作：写报告，不进图
 
-**格式**：单个字符串属性，非空键才写，字典序，形如 `chown=1,utimes=3`。
+**格式**：以下调用不进图、不落节点属性；与本表同样写入 `ops.csv` 的还有"边上有、但未落图的枚举参数"（信号号、ioctl 请求码、mount 文件系统类型），按 `调用名:取值` 记账（如 `signal:9`、`ioctl:TIOCSTI`、`mount:tmpfs`）。表内所有条目均为 `进程 + 调用名 + 次数 + 首次时刻 + 末次时刻`；下表分组仅用于报告阅读。
 
-| 键 | 覆盖调用 | 攻击含义 |
+| 报告分组 | 覆盖调用 | 攻击含义 |
 |---|---|---|
 | `priv` | `setuid`/`setgid`/`setresuid`/`setreuid`/`setregid`/`setfsuid`/`setfsgid`/`setgroups`/`capset`/`prctl`/`personality`/`setrlimit`/`prlimit`/`ioprio_set`/`sched_setscheduler`/`sched_setaffinity`/`setpriority`/`setsid`/`setpgid`/`umask`/`arch_prctl`/`chdir`/`fchdir`/`sethostname`/`quotactl` | 提权/能力变更 |
 | `utimes` | `utimensat` | 时间戳篡改（目标不可知） |
@@ -231,10 +233,10 @@
 | `seccomp` | `seccomp` | 沙箱设置 |
 | `syslog` | `syslog` | 内核日志操作 |
 | `timer` | `setitimer`/`alarm`/`timerfd_settime`/`timer_settime` | C2 心跳 |
-| `exec_mem` | 匿名 `mmap` + `PROT_EXEC` | 可执行匿名内存（注入） |
+| `exec_mem` | 匿名 `mmap` 且带 `PROT_EXEC` | 可执行匿名内存（注入）。匿名但非 `PROT_EXEC` → 无客体，进"无客体"桶 |
 | `kernel` | `bpf`/`finit_module`/`init_module`/`delete_module`/`keyctl`/`add_key`/`request_key`/`kexec_load`（**仅当客体不可得时**） | 内核对象操作（rootkit/逃逸） |
 
-## 4.4 完全不进图的调用（按 R3 记账，按调用名逐项计数）
+## 4.4 完全不进图的调用（按 R2 记账，按调用名逐项计数）
 
 **纯等待/轮询/调度**：`poll` `select` `pselect6` `ppoll` `epoll_wait` `epoll_pwait` `epoll_ctl` `futex` `switch` `sched_yield` `nanosleep` `clock_nanosleep` `times` `clock_gettime` `clock_getres` `clock_adjtime` `gettimeofday` `timer_create` `timer_delete` `restart_syscall`
 
@@ -252,6 +254,8 @@
 
 **数据流已被覆盖**：`fsync` `fdatasync` `msync`（由 `write` 边覆盖）
 
+**低价值动作**：`umount2`（卸载只按调用名记账，不建边）
+
 **无可标识客体**：`socket`（裸建）、`socketpair`、`eventfd`、`signalfd`、`timerfd_create`、`inotify_init`、`epoll_create`、`epoll_create1`、`pidfd_open`、`open_by_handle_at`（打开本身；后续读写照常）、`userfaultfd`（其数据流由 `read`/`write` 覆盖）
 
 **只维护句柄表**：`close` `dup` `dup2` `dup3` `fcntl` `lseek`
@@ -260,13 +264,31 @@
 
 | 原动作 | 并入 | 区分方式 |
 |---|---|---|
-| `symlink` | `link` | `detail=src`（链接目标） |
-| `umount2` | `mount` | `detail=umount=true` |
-| `kill`/`tgkill`/`tkill`/`pidfd_send_signal` | `signal` | `detail=sig` |
+| `symlink` | `link` | `target_path`（链接目标） |
+| `kill`/`tgkill`/`tkill`/`pidfd_send_signal` | `signal` | 信号号不落图（按 `signal:<n>` 记账） |
 | `mkdir`/`mkdirat`/`mknodat`/`openat(O_CREAT,O_TRUNC)`/`memfd_create` | `create` | `flags` |
 | `shmat` | `mmap`（文件/内存映射）或 `shm` | 由 fd 名形态判定 |
 | `sendfile`/`splice`/`tee`/`vmsplice`/`copy_file_range` | `read`/`write` | 方向由 `fd_in`/`fd_out` 决定 |
 | `read`/`write`（套接字上） | `recv`/`send` | 客体类型判定 |
+
+## 4.6 建节点条件（成功才建的动词）
+
+判据一律取**退出行** `evt.rawres`；进入行没有结果，不得据进入行建节点。未列出的动词按"对象在调用前已存在"处理（§4.1-4）。
+
+| 动词 | 本次调用产生的对象 | 成功判据 | 失败去向 |
+|---|---|---|---|
+| `clone` | 子进程节点 | `res > 0`（返回值即子 pid） | 尝试未成立 |
+| `exec` | 新身份进程节点 | `res ≥ 0` | 尝试未成立；**旧节点继续存活，不分裂身份** |
+| `create` | 新文件路径 | `res ≥ 0` | 尝试未成立 |
+| `link` | 新路径 | `res ≥ 0` | 尝试未成立 |
+| `rename` | 新路径 | `res ≥ 0` | 尝试未成立 |
+| `bind` / `listen` | 监听端点 | `res ≥ 0` | 尝试未成立 |
+| `accept` | 会话节点 | `res ≥ 0` 且元组良构 | 尝试未成立 |
+| `connect` | 会话/端点节点 | 元组良构即可（**不看 `res`**） | 照常建边，`res<0` 表示被拒/不可达 |
+
+**失败不得进图的原因**：这些动作在失败时不产生对象；建节点等于宣告一个从未存在的进程、文件或监听状态。被拒的执行、创建、绑定同样有取证价值，但它们的准确形态是"目标 + 错误码"，由 `attempts.csv` 承载（§6-11），不需要也不允许伪装成实体。`rename` 失败时源路径按 `oldpath:<路径>` 另记 `ops.csv`；`clone` 失败没有子进程、`accept` 失败没有对端，目标串均记 `-`（监听端点若可得另记 `ops.csv`）。
+
+判据字段缺失（如某场景 `execve` 没有退出行）→ 该动词状态记"未验证"并在报告披露，**禁止改用其它信号推断成功**。
 
 ---
 
@@ -275,7 +297,7 @@
 ## 5.1 接入
 
 1. **直读捕获**：解析器启动一个 sysdig 进程读 `.scap`，把输出当**事件流**逐条消费；**不得**先把捕获整体翻译成中间文件再解析。
-2. **对账（必经）**：`独立计数 == 接入累计事件数`；差额非 0 → 阻断。独立计数必须来自解析器之外（同一捕获上只取事件序号的纯计数）。**对账只覆盖读取侧**——两侧读的是同一个文件，采集阶段的丢失由 §5.1-3 的断号统计发现。
+2. **对账（必经）**：`独立计数 == 接入累计事件数`；两者均为**日志行数**（一个事件一行），行级账本等式见 §6-1。差额非 0 → 阻断。独立计数必须来自解析器之外（同一捕获上只取事件序号的纯计数）。**对账只覆盖读取侧**——两侧读的是同一个文件，采集阶段的丢失由 §5.1-3 的断号统计发现。
 3. **事件号断号统计**：记录 `实存条数`、`末事件号`、`断号总数`、`断号段数`、`最大单段`；采集侧丢失不可补（实测值见 §7）。
 4. **通道**：本机 / WSL2 / SSH 远端 / 容器四选一；通道不可用（无 sysdig、读不到文件、无权限）→ **立即阻断**并说明缺哪一环，禁止降级去读历史中间文件。
 5. **字段分隔符**：解析输出必须用**制表符**（`|` 是 sysdig 多值字段的内部隔符，会把列冲掉）。
@@ -286,12 +308,12 @@
 
 - 键：`(host, container, pid, tid, 调用名)`；同键内**先进先出**。
 - 进入行给参数、退出行给结果；阻塞类（`accept`/`read`/`recv*`/`wait*`）超时不淘汰，只保留进入行等待配对。
-- 孤儿退出行：自带全部参数者（`openat` 类）独立成边并计 `unpaired_independent`；否则丢弃计 `unpaired`。
+- 孤儿退出行：自带全部参数**且满足 §4.6 建节点条件**者独立成边，行计入"边覆盖"，并以该退出行事件号作为 `evt` 锚点；不能独立成边者计"未配对"。流结束时配对池必须排空，仍在池中的进入行（含阻塞类）统一计"未配对（stream_end）"，禁止残留。
 
 ## 5.3 句柄表
 
 - `(host, container, pid, fd) → 客体引用`；容量上限 `fd_table_max`（默认 4096，超限淘汰最早登记并计数）。
-- 必须支持：`dup` 别名、`close` 注销、`exec` 时按 `CLOEXEC` 裁剪、`pipe` 的 `fd1/fd2/ino` 登记。
+- 必须支持：`clone`/`fork` 时**整表复制**并继承 `cwd`、`dup` 别名（**不继承** `CLOEXEC`）、`close` 注销、`exec` 时按 `CLOEXEC` 裁剪、`pipe` 的 `fd1/fd2/ino` 登记。
 - 未命中 → 不建数据流边，计 `unknown_fd`。
 
 ## 5.4 路径解析与规范化
@@ -299,7 +321,7 @@
 1. **优先 `fd.name`**（内核真实路径）；`fd.name` 为空或 `-1` 时回退到参数路径。
 2. 仅有参数路径时：绝对路径直接用；相对路径先用 `dirfd` 在句柄表中解析出的目录路径拼接，回退进程 `cwd`；两者都不可得 → `path_unresolved`，节点 `path` 记 `?<原始串>`。
 3. 规范化：合并连续 `/`；解析 `.` 与 `..`（纯字符串，不访问文件系统）；去末尾 `/`（根除外）；**不做大小写折叠**；**不解析符号链接**。
-4. `<UNKNOWN><n>` 占位 → 计入 `path_unresolved`，不建边（R4）。
+4. `<UNKNOWN><n>` 占位 → 计入 `path_unresolved`，不建边（R3）。
 5. **cwd 与根**：cwd 是解析器状态（初值取 `proc.cwd`，由 `chdir`/`fchdir` 更新，不落节点属性）；`chroot`/`pivot_root` 后按新根规范化。
 
 ## 5.5 容器与视图
@@ -309,48 +331,62 @@
    - `container.id` `container.name` `container.image` `container.privileged`；
    - 首选带序号字段 `container.mount.source[i]` / `.dest[i]` / `.rdwr[i]` / `.mode[i]` / `.propagation[i]`：从 `i=0` 递增到取不到为止（实测可用；`container.mount[N]` 形式无上下文，禁止使用）；
    - 备选 `container.mounts` 复合串：多条用 `,` 分隔，每条 `源:目标:模式:可写:传播`（例：`/:/host::true:rslave`、`/usr/sbin/svc-watchdog:/usr/sbin/svc-watchdog:ro:false:rprivate`；路径含 `:` 时不可用）。
-3. **分次到达（R6）**：同一容器先出现占位事件（`mounts` 空、`privileged=false`、`name` 空），后出现完整事件；占位不得当结论；完整事件到达时必须**回填**此前已建节点，计 `container_meta_backfills`。
-4. `host_root_rw`：存在 `source = /` 且可写的挂载 → `true`；元数据缺失 → 留空（见 §8-20）。
+3. **分次到达（R5）**：同一容器先出现占位事件（`mounts` 空、`privileged=false`、`name` 空），后出现完整事件；占位不得当结论；完整事件到达时必须**回填**此前已建节点，计 `container_meta_backfills`。
+4. `host_root_rw`：存在 `source = /` 且可写的挂载 → `true`；元数据缺失 → 留空（见 §8-19）。
 5. 视图不合并（§2.2 规则 4/5）。
 
 ## 5.6 `/proc/<pid>/…` 派生边
 
-访问 `/proc/<pid>/(mem|maps|environ|cmdline|fd/*)` 时，除 `:File` 上的边外，**另派生一条 `p2p` 边**指向该 pid 的进程（`mem_read`/`mem_write`/探测）。
+访问 `/proc/<pid>/(mem|maps|environ|cmdline|fd/*)` 时，除 `:File` 上的边外，**另派生一条 `p2p` 边**指向该 pid 的进程（`mem_read`/`mem_write`/探测）；目标 pid 按 §5.7 解析，无对应节点则不派生。
 
-## 5.7 进程身份分裂
+## 5.7 pid → 节点解析（全局唯一规则）
 
-- `execve`/`execveat` → 旧节点结束于 `p2p exec` 边时刻；新建 `:Process`（`born_ns`=execve 事件时刻）；同时建 `f2p load_image`（新节点→镜像文件）。
-- `clone(CLONE_THREAD)` → 不建边、不建节点，动作归所属进程。
+所有需要把 pid 换成图节点的动作（`signal` 目标、`exit` 父进程、`ptrace`/`process_vm_*` 目标、`pidfd_getfd` 目标、§5.6 的 `/proc/<pid>/` 派生边）共用同一条规则，禁止各动词自行实现：
+
+1. 候选集 = 同 `host_id`、同 `container_id`、同 `pid`，且 `born_ns ≤ 事件时刻` 的全部节点（`born_src=unknown` 的 `0` 视为最早；`born_src=duration` 的推算值正常参与比较）。
+2. 剔除在该时刻之前已退出的候选；退出时刻由解析器在内存中维护，不落节点属性。
+3. 剩余候选中取 `born_ns` 最大者；仍并列取事件号更大者，计 `pid_resolve_tie`。
+4. 无候选 → 不建边，计 `target_unresolved`，报告写明"目标 pid 在捕获范围内无对应节点"。
+5. 目标 pid ≤ 0（`kill(-1)`/`kill(0)` 这类组播或自身信号）→ 不建边，按 `signal:<n>` 记账并注明"组播信号"。
+6. 解析时刻统一取**进入行**时刻，与边的 `ts_ns` 对齐，保证结果与到达顺序无关、同输入重跑一致。
+7. `clone` 成功后把"该 pid 段的父节点"记入内存索引，`exit` 优先用它；无记录时按本规则解析 `ppid`。
+
+## 5.8 进程身份分裂
+
+- `execve`/`execveat` **成功时**（`res ≥ 0`）→ 旧节点结束于 `p2p exec` 边时刻；新建 `:Process`（`born_ns`=execve 事件时刻，`born_src=exec`）；同时建 `f2p load_image`（新节点→镜像文件）。
+- `execve`/`execveat` **失败时**（`res < 0`）→ **不分裂身份、不建节点、不建边**，旧节点继续存活；写"尝试未成立"并落 `attempts.csv`（目标路径 + 错误码）。
+- `clone(CLONE_THREAD)` → 不建边、不建节点，动作归所属进程；`clone` 失败（`res ≤ 0`）同样不建节点（§4.6）。
 - pid 复用 → 由 `born_ns` 天然区分；若同一 pid 出现"退出后又以同 pid 创建"，计 `pid_reuse_anomaly` 并正常分裂。
-
-## 5.8 折叠
-
-见 §3.3。
 
 ## 5.9 写库
 
 1. **唯一约束**（多属性复合）：`:Process(host_id, container_id, pid, born_ns)`、`:File(host_id, container_id, path)`、`:Network(host_id, tuple)`。
-2. **索引**：`File.kind`、`Process.container_id`、`Network.tuple`、边 `action`、边 `ts_ns`。
+2. **索引**：`File.kind`、`Process.container_id`、`Network.tuple`、边 `action`、边 `ts_ns`、边 `(evt, seq)`（幂等合并用；Neo4j 版本支持时用关系属性唯一约束）。
 3. **批量与背压**：顶点每批 `vertex_batch`（默认 5,000），边每批 `edge_batch`（默认 10,000）或 `flush_interval_ms`（默认 500）；待写批次超 `backpressure_batches`（默认 5）暂停读取。
 4. **重试**：锁冲突按 100→200→400→800→1600 毫秒（±20% 抖动）重试 `retry_max`（默认 5）次；仍失败 → 阻断并输出冲突主键。
-5. **幂等**：默认按场景清库后整批导入；增量导入用 `evt.num` 水位续跑（**水位只用于写库去重**，接入永远从头直读，见 §5.1-1），重复边按 `evt` 去重。
-6. **图快照**：`nodes.csv` 列为 `label` + 该类主键 + 该类属性并集（空值留空），按 `(label, 主键)` 排序；`edges.csv` 列为 `edge_class` + 两端主键 + §3.2 九个属性，按 `(源, edge_class, 宿, evt)` 排序；用于逐字段可复现比对（§6-7）。
+5. **幂等**：边的唯一身份 = `(evt, seq, 源主键, 目标主键, action)`，写库以此为合并键，**禁止按 `evt` 单键去重**（一个事件可产出 p2p + f2p、read + write 等多条边，由 `seq` 区分）。同一事件产生的全部边必须在同一事务或同一批次边界内提交。默认按场景清库后整批导入；增量导入的水位 = **最后一个完整提交的事件号**，续跑从该事件重放（**水位只用于写库去重**，接入永远从头直读，见 §5.1-1），重复边由唯一身份吸收。
+6. **图快照**：`nodes.csv` 列为 `label` + 该类主键 + 该类属性并集（空值留空），按 `(label, 主键)` 排序；`edges.csv` 列为 `edge_class` + `seq` + 两端主键 + §3.2 十个语义属性，按 `(源, edge_class, 宿, evt, seq)` 排序；用于逐字段可复现比对（§6-7）。
 
 ---
 
 # 6. 审计与报告（每个场景必须输出）
 
-1. **两层账本**
-   - 接入层：独立计数、接入累计、差额；
-   - 解析层：`逻辑调用数 = 边覆盖数（折叠边按 n 累计）+ 属性更新数 + 显式丢弃数 + 仅句柄数 + 无客体数 + 未知句柄数 + 未配对数 + 未归类数 + 无进程归属数 + 异常行数 + 其他`，差额必须为 0。
-   - 桶定义：`无客体数` = 参数缺失或客体不可标识（R3，按调用名 + 进程计数）；`显式丢弃数` 按调用名逐项计数；`异常行数` 按异常类型列出；`其他` 必须逐类说明。
+1. **两层账本（行级）**
+   - **接入层**：独立计数、接入累计、差额，三者均为**日志行数**（一个事件一行）。
+   - **解析层按行记账**：每行在结算时（单行事件即时结算；配对调用在配对完成时结算；未配对在流结束时结算）按"异常行 → 属性更新 → 无进程归属 → 边覆盖 → 尝试未成立 → 未归类 → 仅句柄 → 未知句柄 → 无客体 → 显式丢弃 → 未配对 → 其他"的顺序判定，**第一个成立者**即该行的桶（互斥且穷尽）。
+   - **对账等式**：`接入累计行数 = 待定行数 + 各桶行数之和`。`待定` = 仍在配对池、等待退出行或流结束的进入行；每个检查点校验，流结束时先排空配对池（§5.2）使 `待定=0` 再校验；任一差额非 0 → 阻断。
+   - **调用级视图**（仅供阅读，不参与阻断）：`逻辑调用数 = 配对成功调用数 + 单行事件数 + 孤儿行数`；配对成功按"进入行 + 退出行 = 1 次"计，报告必须写明该口径。
+   - **桶定义**：`边覆盖` = 该行所属动作最终产出至少一条边；`属性更新` = 只改写节点属性（容器元数据、R5 回填）且不产边；`尝试未成立` = §4.6 中对象由调用产生而失败的调用（另落 `attempts.csv`，按调用计次，§6-11）；`无客体数` = R2 的无客体动作（按进程 + 调用名计数）；`显式丢弃数` 按调用名逐项计数；`未配对` 在流结束时统一结算（含阻塞类）；`异常行数` 按异常类型列出；`其他` 必须逐类说明。
 2. **事件号断号**：实存条数、末事件号、断号总数、段数、最大单段（§5.1）。
 3. **参数可得性报告**：逐调用名列出"事件数 / 能定位客体的条数 / 能取到返回值的条数"。这是**划边界的唯一依据**，也是判断采集端是否升级的信号。
 4. **未归类清单**：逐名 + 次数；`<unknown>` 单独统计。非空必须披露，禁止宣称"映射表完整"。
 5. **容器清单**：id / 名称 / 镜像 / `privileged` / 挂载表 / 占位事件数 / 回填次数 / 跨视图同名候选对数量（标注为候选）。
-6. **折叠统计**：组数、`n` 总和、最大组、以及 200ms/1s/5s 三档敏感性。
+6. **边数统计**：边总数、按 `action` 的分布、最大出度进程与最大入度客体。
 7. **快照**：`nodes.csv` / `edges.csv`，同输入重跑必须逐字段一致。
 8. **参数快照**：本次运行的附录 A 全部参数、字典版本、代码版本。
+9. **无客体动作与未落图参数表**（`ops.csv`）：进程 × 调用名 / `调用名:取值` × 次数 × 首次时刻 × 末次时刻（清单见 §4.3、§4.4）。
+10. **身份起点来源**：按 `born_src` 统计进程段数（`clone` / `exec` / `duration` / `unknown`），单列 `born_src=duration` 与 `unknown` 的进程列表，并输出 `born_estimate_jitter` 次数。
+11. **尝试未成立表**（`attempts.csv`）：进程 × 动词 × 目标串（路径或元组）× 错误码 × 次数 × 首次时刻 × 末次时刻；次数按调用计（配对行只算 1 次）。
 
 ---
 
@@ -377,12 +413,13 @@
 | 17 | 路径不带视图前缀 | 容器侧 14,504 条文件操作中，`arg.name` 含 `/host` 的为 **0**；同一宿主文件在容器侧与宿主侧给出**同一路径字符串** |
 | 18 | 多值字段分隔符 | `%evt.arg.flags` 渲染为 `O_TRUNC\|O_CREAT\|O_RDWR`（`\|` 为内部分隔符） |
 | 19 | `<unknown>` 事件 | 场景 1 共 71,388 条（0.55%） |
+| 20 | `user.uid` 与 `proc.duration` 的可得性 | `user.uid` 每事件都有，语义为 **ruid**（sshd 子进程 `setresuid(euid=root)` 后仍为 129）；`proc.duration` 在**捕获内创建的进程**上每条事件都有（shred pid 18645：clone 13,607ns → `execve` 77,608ns …），捕获前已存在则取不到（pid 1 无值） |
 
 ---
 
 # 8. 边界声明（逐条勾选，报告必须原样列出）
 
-1. **属主 / 时间戳 / 扩展属性篡改不能按文件查**：本批采集端未解码这些调用的参数，只能按进程 `ops` 计数。
+1. **属主 / 时间戳 / 扩展属性篡改不能按文件查**：本批采集端未解码这些调用的参数，只能按 进程 + 调用名 计数（`ops.csv`）。
 2. **`mprotect` 不可见**：其客体是内存区间，本设计不把内存区间当节点；本批参数也缺失 → 无法回答"哪块内存区间后来被执行"。
 3. **载荷只有前 80 字节**：这是**采集端快照配置**，不是数据源上限；是否截断按"`res` 与 base64 解码长度比较"现算。
 4. **匿名通道**（`socketpair`/`eventfd`/`signalfd`/`timerfd`/`inotify`/`epoll`）上的数据流不落图：fd 名是类型代号（`<e>`/`<t>`/`<i>`）或内核地址，无可区分身份。
@@ -397,23 +434,28 @@
 13. **本批"无参数"调用**（清单见 §7-4 与 §7-15）：只计数，不建边。
 14. **跨主机缝合要求同一采集端版本**（靠 `tuple` 字符串相等）。
 15. **内核级盲区**：继承《多主机环境系统调用图物理级不可见与拓扑盲区攻击清单》的 25 + 7 条。
-16. **折叠窗口内的逐次细节不可恢复**：同一 `(进程, 客体, 动词, res)` 在窗口内被合并，只能还原次数、首末时刻与首个载荷快照。
-17. **符号链接不解析**：同一文件经不同软链接会成为多个节点。
-18. **同路径"删除后重建"视为同一节点**：数据源无 inode/版本号。
-19. **时间戳来自被测主机时钟**：跨主机比较前必须核对时钟一致性。
-20. **容器元数据缺失时 `privileged`/`host_root_rw` 为空（未知）**，禁止当作 `false`。
+16. **符号链接不解析**：同一文件经不同软链接会成为多个节点。
+17. **同路径"删除后重建"视为同一节点**：数据源无 inode/版本号。
+18. **时间戳来自被测主机时钟**：跨主机比较前必须核对时钟一致性。
+19. **容器元数据缺失时 `privileged`/`host_root_rw` 为空（未知）**，禁止当作 `false`。
+20. **`SCM_RIGHTS` fd 传递不可见**：`sendmsg`/`recvmsg` 只给返回值与载荷，不带 fd 列表 → 不建 fd 传递边；跨进程传 fd 的链只能在套接字两端各自可见。
+21. **`unshare` 的命名空间种类与 `bpf` 命令号不落图**：只记报告计数（按调用名），无法区分 `CLONE_NEWNS` 还是 `CLONE_NEWPID`、`BPF_PROG_LOAD` 还是 `BPF_MAP_CREATE`；需区分时在报告里附位图（当前不做）。
+22. **`ioctl` 请求码、`mount` 的 `fstype`/`dev`、信号号、`umount2` 不落图**：只能在报告里按 `ioctl:<req>` / `mount:<fstype>` / `signal:<n>` 检索；卸载动作本身不建边。
+23. **`born_src=duration` 的时间是推算值**（事件时刻 − 进程已运行时长，推算到 fork 时刻）：只用于排序与 pid 解析，不得当作攻击发生时刻引用；若该 pid 段的 exec 事件同时丢失，节点覆盖 exec 前后两段身份，无法切分。
+24. **失败的对象创建/执行/绑定不落图**：这些动作失败时不产生对象，按 §4.6 只记 `attempts.csv`；图上 `action` 为 `create`/`exec`/`accept` 等的边全部对应成功调用（`connect` 除外，其失败边由 `res<0` 标识）。
 
 ---
 
 # 9. 验证计划
 
-**未验证与"本批不产出"的清单见 §4.2 状态列与其后的"无独立动词的未验证调用"**（按 R5 保留设计位）。
+**未验证与"本批不产出"的清单见 §4.2 状态列与其后的"无独立动词的未验证调用"**（按 R4 保留设计位）。
 
 **验证手段**：
 1. **合成场景**（隔离测试机，各采一次）：起一个容器（记录完整挂载表）、跑一次 `io_uring` 读写、`memfd_create` + `execveat`、`ptrace` attach、`keyctl`、`finit_module`、共享内存读写。
 2. **采集端升级后重跑**：逐场景输出"参数可得性报告"，对比"能定位客体/不能定位"的比例，判断哪些调用从"无参数"变成"可归属"。
 3. **容器闭环端到端**（场景 9）：容器 id 归属 → 挂载表 → `host_root_rw` → 容器写宿主文件 → 宿主进程加载同一路径（同名候选链）；补齐容器侧写型操作清单与外泄容器的读取清单。
 4. **容器事件全量核对**：8 个场景逐一全量扫描（禁止用采样结论代替）。
+5. **特殊打开方式**：`openat(O_TMPFILE)`、`openat(O_PATH)`、`execveat(AT_EMPTY_PATH)` 各采一次，确认数据源给出的客体名形态（当前按原生形态处理，未验证）。
 
 ---
 
@@ -422,11 +464,9 @@
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `host_id` | 必填 | 每场景一个 |
-| `fold_window_ns` | 200 ms | 折叠时间窗（受控变量，须做敏感性） |
 | `pair_timeout_ns` | 5 s | 进入行超时淘汰（阻塞类不淘汰） |
 | `pair_pool_max` | 100,000 | 配对池上限 |
 | `fd_table_max` | 4,096 | 单进程句柄表上限 |
-| `fold_slot_max` | 100,000 | 折叠槽上限 |
 | `keep_payload` | 开 | 是否保留载荷 |
 | `payload_max_bytes` | 80 | 采集端快照上限（配置项） |
 | `vertex_batch` | 5,000 | 顶点批量 |
@@ -442,17 +482,17 @@
 1. **初始访问**：`MATCH (n:Network)-[r:n2p {action:'accept'}]->(p:Process)-[w:p2f {action:'create'}]->(f:File) WHERE r.ts_ns>=$t0 RETURN n.tuple, p.exe, f.path, w.ts_ns LIMIT 50`
 2. **执行链**：`MATCH (a:Process)-[r:p2p {action:'exec'}]->(b:Process)-[l:f2p {action:'load_image'}]->(f:File) WHERE r.ts_ns>=$t0 RETURN a.exe, b.exe, f.path, b.cmdline`
 3. **持久化**：`MATCH (p:Process)-[r:p2f]->(f:File) WHERE f.path CONTAINS 'cron' OR f.path CONTAINS 'systemd/system' OR f.path CONTAINS 'authorized_keys' RETURN p.exe, f.path, r.action, r.ts_ns ORDER BY r.ts_ns`
-4. **提权**：`MATCH (p:Process) WHERE p.uid<>p.ruid OR p.ops CONTAINS 'priv=' RETURN p.exe, p.uid, p.ruid, p.ops`
-5. **时间戳篡改**：`MATCH (p:Process) WHERE p.ops CONTAINS 'utimes=' RETURN p.exe, p.ops, p.container_id`
+4. **提权**：`MATCH (p:Process) WHERE p.uid<>p.ruid RETURN p.exe, p.uid, p.ruid`
+5. **凭据读取**：`MATCH (f:File)-[r:f2p]->(p:Process) WHERE f.path IN ['/etc/shadow','/etc/passwd'] RETURN p.exe, f.path, r.ts_ns`
 6. **出站连接 / 横向移动**：`MATCH (p:Process)-[r:p2n {action:'connect'}]->(n:Network) WHERE n.tuple ENDS WITH ':22' OR n.tuple ENDS WITH ':445' RETURN p.exe, n.tuple, r.res, r.ts_ns`
-7. **外泄量**：`MATCH (p:Process)-[r:p2n {action:'send'}]->(n:Network) WHERE r.res>0 RETURN p.exe, n.tuple, sum(r.res*r.n) AS bytes ORDER BY bytes DESC LIMIT 20`
+7. **外泄量**：`MATCH (p:Process)-[r:p2n {action:'send'}]->(n:Network) WHERE r.res>0 RETURN p.exe, n.tuple, sum(r.res) AS bytes ORDER BY bytes DESC LIMIT 20`
 8. **C2 周期性**：`MATCH (p:Process)-[r:p2n {action:'send'}]->(n:Network) WITH p,n,count(r) AS c, min(r.ts_ns) AS t0, max(r.ts_ns) AS t1 RETURN p.exe, n.tuple, c, t0, t1 ORDER BY c DESC`
 9. **跨视图同名候选**：`MATCH (a:File),(b:File) WHERE a.host_id=b.host_id AND a.path=b.path AND a.container_id<>b.container_id RETURN a.path, a.container_id, b.container_id LIMIT 100`
 10. **容器写宿主文件（逃逸）**：`MATCH (p:Process)-[r:p2f]->(f:File) WHERE p.container_id<>'host' AND p.host_root_rw=true AND r.action IN ['create','write','rename'] RETURN p.container_id, p.exe, f.path, r.action, r.ts_ns ORDER BY r.ts_ns`
 11. **进程隐藏（/proc 扫描）**：`MATCH (p:Process)-[r:f2p]->(f:File) WHERE f.path STARTS WITH '/proc/' AND (f.path ENDS WITH '/comm' OR f.path ENDS WITH '/cmdline') RETURN p.container_id, p.exe, count(*) AS n ORDER BY n DESC`
 12. **内存注入**：`MATCH (p:Process)-[r:f2p {action:'mmap'}]->(f:File) WHERE 'PROT_EXEC' IN r.flags RETURN p.exe, f.path, r.flags, r.ts_ns` 与 `MATCH (a:Process)-[r:p2p]->(b:Process) WHERE r.action IN ['mem_write','ptrace'] RETURN a.exe,b.exe,r`;
-13. **勒索/擦除**：`MATCH (p:Process)-[r:p2f]->(f:File) WHERE r.action IN ['rename','unlink','write'] AND r.n>10 RETURN p.exe, r.action, count(DISTINCT f) AS files ORDER BY files DESC`
-14. **影响（定时器）**：`MATCH (p:Process) WHERE p.ops CONTAINS 'timer=' RETURN p.exe, p.ops`
+13. **勒索/擦除**：`MATCH (p:Process)-[r:p2f]->(f:File) WHERE r.action IN ['rename','unlink','write'] RETURN p.exe, r.action, count(DISTINCT f) AS files ORDER BY files DESC`
+14. **信号投递分布**：`MATCH (a:Process)-[r:p2p {action:'signal'}]->(b:Process) RETURN a.exe, b.exe, count(*) AS c ORDER BY c DESC LIMIT 50`（信号号不落图；按信号类型检索需查报告 `signal:<n>`）
 
 # 附录 C · 复现命令
 

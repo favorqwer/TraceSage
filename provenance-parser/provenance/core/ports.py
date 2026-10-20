@@ -1,0 +1,46 @@
+"""外层端口：runtime 只依赖这些协议，不依赖具体 IO。"""
+
+from __future__ import annotations
+
+from typing import Iterator, Protocol
+
+from .audit import Audit
+from .classify import Decision
+from .events import BadRow, Call, EventRow
+from .graph import Edge, Node, Outcome
+from .snapshots import StatsSnapshot
+
+
+class Capture(Protocol):
+    @property
+    def backend(self) -> str: ...
+
+    def containers(self) -> list[dict[str, str]]: ...
+
+    def audit(self) -> Audit: ...
+
+    def events(self) -> Iterator[EventRow | BadRow]: ...
+
+
+class GraphWriter(Protocol):
+    def write_nodes(self, nodes: list[Node]) -> None: ...
+
+    def write_edges(self, edges: list[Edge]) -> None: ...
+
+    def close(self) -> None: ...
+
+
+class RunObserver(Protocol):
+    def on_event(self, row: EventRow) -> None: ...
+
+    def on_bad(self, bad: BadRow) -> None: ...
+
+    def on_call(self, call: Call, decision: Decision, outcome: Outcome) -> None: ...
+
+    def on_single_line(self) -> None: ...
+
+    def on_no_owner(self, rows: int) -> None: ...
+
+    def snapshot(self) -> StatsSnapshot: ...
+
+    def close(self) -> None: ...
