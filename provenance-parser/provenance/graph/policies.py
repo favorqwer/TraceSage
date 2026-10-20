@@ -88,7 +88,14 @@ class Policies:
         target: str,
         res: int | None,
     ) -> None:
-        """只记录“目标 + 错误码”，不改变这一行的桶归属。"""
+        """只记录“目标 + 错误码”，不改变这一行的桶归属。
+
+        ``res`` 必须是被观测到的值：未知结果不能写成 0，因为 0 在整套口径里
+        是“成功 / 零字节”，会把“没有证据”读成“没有报错”。调用方遇到 res=None
+        时应自己落 OTHER 桶（reason ``result_unobserved:<verb>``）。
+        """
+        if res is None:
+            return
         key = ctx.key(call)
-        errno = -res if res is not None and res < 0 else 0
+        errno = -res if res < 0 else 0
         out.attempts.append((key, verb, target or "-", errno, call.ts_ns))

@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import base64
 import re
 from dataclasses import dataclass
 
@@ -245,3 +246,14 @@ def payload_head(args: dict[str, str], limit: int) -> str | None:
     if not data:
         return None
     return data[:limit] if limit > 0 else None
+
+
+def payload_head_b64(value: str, limit: int) -> str | None:
+    """%evt.buffer -b 的 base64 -> 前 limit 字节的 base64。"""
+    if not value or limit <= 0:
+        return None
+    try:
+        raw = base64.b64decode(value, validate=False)
+    except Exception:
+        return None
+    return base64.b64encode(raw[:limit]).decode("ascii")

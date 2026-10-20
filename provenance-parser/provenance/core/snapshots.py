@@ -37,6 +37,17 @@ class StatsSnapshot:
     no_owner_rows: int
     single_line_rows: int
     edge_rows: int
+    res_source: dict[str, dict[str, int]]
+    edge_res: dict[str, list[int]]
+    emit_calls: dict[str, int]
+    emit_calls_with_edge: dict[str, int]
+    emit_no_edge_reason: dict[str, str]
+    capability_gaps: dict[str, tuple[int, str]]
+    endpoint_total: int
+    endpoint_with_edge: int
+    pid_present_rows: int
+    pid_present_by_type: dict[str, int]
+    missing_by_field: dict[str, dict[str, int]]
 
 
 @dataclass(slots=True)

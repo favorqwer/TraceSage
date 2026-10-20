@@ -69,6 +69,7 @@ def create_scap_source(
     json_output: bool = True,
     expression: Optional[str] = None,
     sysdig_bin: str = "sysdig",
+    base64_buffer: bool = False,
     ssh_host: str = "",
     ssh_user: str = "",
     ssh_port: int = DEFAULT_SSH_PORT,
@@ -100,6 +101,7 @@ def create_scap_source(
         json_output=json_output,
         expression=expression,
         sysdig_bin=sysdig_bin,
+        base64_buffer=base64_buffer,
     )
     if selected == "local":
         return LocalScapSource(**common)

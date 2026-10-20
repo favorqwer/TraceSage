@@ -5,8 +5,9 @@ from __future__ import annotations
 from ..core import args as A
 from ..core.events import Call
 from ..core.graph import Edge, Node, Outcome
-from ..core.kinds import EdgeClass, FileKey, NetKey, ProcKey
+from ..core.kinds import EdgeClass, FileKey, NetKey, ProcKey, file_kind_of
 from ..core.options import EmitOptions
+from ..core.results import norm_res
 from .state import State
 from .state.proc import Seg
 
@@ -34,11 +35,11 @@ class GraphEmitter:
 
     def proc_node(self, seg: Seg) -> Node:
         props: dict[str, object] = {
-            "born_src": seg.born_src,
             "exe": seg.exe or None,
-            "cmdline": seg.cmdline or None,
+            "args": seg.args or None,
             "ppid": seg.ppid,
             "ruid": seg.ruid or None,
+            "uid": seg.uid,
         }
         props.update(self.st.containers.props_for(seg.key.container_id))
         return Node(seg.key, props)
@@ -46,7 +47,10 @@ class GraphEmitter:
     def file_node(self, cid: str, path: str, kind: str = "") -> Node | None:
         if not path:
             return None
-        return Node(FileKey(self.host, cid, path), {"kind": kind or None})
+        normalized = file_kind_of(kind)
+        if normalized is None:
+            return None
+        return Node(FileKey(self.host, cid, path), {"kind": normalized.value})
 
     def net_node(self, name: str, proto: str = "") -> Node | None:
         if not name:
@@ -66,7 +70,6 @@ class GraphEmitter:
         call: Call,
         *,
         res: int | None = None,
-        flags: set[str] | None = None,
         head: bool = False,
         old_path: str = "",
         target_path: str = "",
@@ -75,9 +78,11 @@ class GraphEmitter:
         if src == dst:
             self.counts["self_loop"] += 1
             return None
+        # 结果唯一出口：fd 号与内存地址不得当作 "字节数 / 错误码" 落图。
+        res = norm_res(action, call.call, res)
         payload = None
-        if head and self.options.keep_payload:
-            payload = A.payload_head(call.args, self.options.payload_max_bytes)
+        if head and self.options.keep_payload and (res is None or res >= 0):
+            payload = A.payload_head_b64(call.buffer_b64, self.options.payload_max_bytes)
         edge = Edge(
             cls=cls,
             action=action,
@@ -88,7 +93,6 @@ class GraphEmitter:
             ts_ns=call.ts_ns,
             te_ns=call.te_ns,
             res=res,
-            flags="|".join(sorted(flags)) if flags else None,
             head=payload,
             old_path=old_path or None,
             target_path=target_path or None,

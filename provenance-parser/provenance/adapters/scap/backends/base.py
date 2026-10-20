@@ -120,6 +120,7 @@ class ScapSource(ABC):
         json_output: bool = True,
         expression: Optional[str] = None,
         sysdig_bin: str = "sysdig",
+        base64_buffer: bool = False,
     ) -> None:
         self.scap_path = scap_path
         self.format_string = format_string
@@ -127,6 +128,7 @@ class ScapSource(ABC):
         self.json_output = json_output
         self.expression = expression
         self.sysdig_bin = sysdig_bin
+        self.base64_buffer = base64_buffer
         self._proc: Optional[subprocess.Popen] = None
         self._closed = False
 
@@ -146,6 +148,8 @@ class ScapSource(ABC):
             args.append(self.expression)
         if self.json_output:
             args.append("-j")
+        if self.base64_buffer:
+            args.append("-b")
         args += ["-p", self.format_string]
         if self.max_events is not None and self.max_events > 0:
             args += ["-n", str(self.max_events)]

@@ -26,8 +26,11 @@ class EventRow:
     cwd: str
     ppid: int
     ruid: str
-    cmdline: str
+    proc_args: str
     args: dict[str, str]
+    rawres: int | None = None
+    buffer_b64: str = ""
+    na_fields: frozenset[str] = frozenset()
 
     @property
     def is_enter(self) -> bool:
@@ -42,6 +45,8 @@ class Call:
     enter: EventRow | None
     exit: EventRow | None
     args: dict[str, str]
+    rawres: int | None = None
+    buffer_b64: str = ""
 
     @classmethod
     def build(cls, enter: EventRow | None, exit: EventRow | None) -> "Call":
@@ -53,7 +58,22 @@ class Call:
                 if value != "":
                     merged[key] = value
         name = (enter or exit).call  # type: ignore[union-attr]
-        return cls(call=name, enter=enter, exit=exit, args=merged)
+        # 结果只取退出行：进入行在内核 ABI 里没有返回值，若回退到进入行
+        # 的 %evt.rawres，会把"未观测"写成"实测零"（§3.2 三态语义）。
+        rawres = exit.rawres if exit is not None else None
+        buffer_b64 = ""
+        for row in (exit, enter):
+            if row is not None and row.buffer_b64:
+                buffer_b64 = row.buffer_b64
+                break
+        return cls(
+            call=name,
+            enter=enter,
+            exit=exit,
+            args=merged,
+            rawres=rawres,
+            buffer_b64=buffer_b64,
+        )
 
     @property
     def head_row(self) -> EventRow:
@@ -100,6 +120,22 @@ class Call:
     def number(self, key: str) -> int | None:
         value = self.args.get(key)
         return A.int_of(value) if value else None
+
+    @property
+    def res_source(self) -> str | None:
+        """结果取自哪个字段：rawres（%evt.rawres）/ args（evt.args 的 res=）/ 无。"""
+        if self.rawres is not None:
+            return "rawres"
+        if self.number("res") is not None:
+            return "args"
+        return None
+
+    @property
+    def result(self) -> int | None:
+        """统一结果：优先退出行 %evt.rawres，缺失时回退 evt.args 的 res=。"""
+        if self.rawres is not None:
+            return self.rawres
+        return self.number("res")
 
 
 @dataclass(slots=True)

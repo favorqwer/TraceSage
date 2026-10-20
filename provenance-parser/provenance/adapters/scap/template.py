@@ -1,11 +1,15 @@
-"""13 列模板解码：一行 sysdig 输出 -> EventRow / BadRow。"""
+"""主趟与容器模板：解码、`<NA>` 处理、续行判断。
+
+主趟使用 ``*`` 前缀：条件字段缺失时输出 ``<NA>``，不会整行消失。
+当前主趟 15 列：在 13 列基础上加 ``%proc.exepath``、``%evt.rawres``、``%evt.buffer``。
+容器预扫使用带序号的挂载字段，复合串 ``%container.mounts`` 只做兜底。
+"""
 
 from __future__ import annotations
 
 from ...core import args as A
 from ...core.events import BadRow, EventRow
 
-# 13 列（含 %container.id）。最后一列 proc.args 吸收制表符。
 FIELDS = (
     "%evt.num",
     "%evt.rawtime",
@@ -14,22 +18,46 @@ FIELDS = (
     "%proc.pid",
     "%thread.tid",
     "%container.id",
-    "%proc.exe",
+    "%proc.exepath",
     "%proc.cwd",
     "%proc.ppid",
     "%user.uid",
     "%evt.args",
     "%proc.args",
+    "%evt.rawres",
+    "%evt.buffer",
 )
 TEMPLATE = "\t".join(FIELDS)
+STAR_TEMPLATE = "*" + TEMPLATE
 COLUMNS = len(FIELDS)
+NA = "<NA>"
+FIELD_NAMES = tuple(field.lstrip("%") for field in FIELDS)
 
 AUDIT_ALL_TEMPLATE = "%evt.num\t%evt.type"
 AUDIT_PID_TEMPLATE = "%evt.num\t%evt.type\t%proc.pid"
-CONTAINER_TEMPLATE = (
-    "%container.id\t%container.name\t%container.image\t"
-    "%container.privileged\t%container.mounts"
+
+# ------------------------------------------------------------------ 容器元数据
+
+MOUNT_SLOTS = 16
+CONTAINER_HEADER = (
+    "%evt.num",
+    "%container.id",
+    "%container.name",
+    "%container.image",
+    "%container.privileged",
 )
+CONTAINER_MOUNT_ATTRS = ("source", "dest", "rdwr", "mode", "propagation")
+CONTAINER_MOUNT_FIELDS = tuple(
+    f"%container.mount.{attr}[{i}]"
+    for i in range(MOUNT_SLOTS)
+    for attr in CONTAINER_MOUNT_ATTRS
+)
+CONTAINER_TEMPLATE = "*" + "\t".join(
+    CONTAINER_HEADER + CONTAINER_MOUNT_FIELDS + ("%container.mounts",)
+)
+CONTAINER_MOUNT_START = len(CONTAINER_HEADER)
+CONTAINER_MOUNT_STRIDE = len(CONTAINER_MOUNT_ATTRS)
+CONTAINER_MOUNTS_INDEX = CONTAINER_MOUNT_START + MOUNT_SLOTS * CONTAINER_MOUNT_STRIDE
 
 
 def ns_of(raw: str) -> int:
@@ -51,32 +79,59 @@ def decode(line: bytes, host_id: str = "") -> EventRow:
     if len(parts) > COLUMNS:
         parts = parts[: COLUMNS - 1] + [b"\t".join(parts[COLUMNS - 1 :])]
 
-    def txt(idx: int) -> str:
-        return parts[idx].decode("utf-8", "replace")
+    na: set[str] = set()
 
-    num = int(parts[0])
-    ns = ns_of(txt(1))
+    def txt(idx: int) -> str:
+        value = parts[idx].decode("utf-8", "replace")
+        if value == NA:
+            na.add(FIELD_NAMES[idx])
+            return ""
+        return value
+
+    def integer(idx: int) -> int:
+        value = txt(idx)
+        return int(value) if value else 0
+
+    num_text = txt(0)
+    rawtime_text = txt(1)
     direction = txt(2)
     call = txt(3)
+    if not num_text:
+        raise ValueError("事件号缺失")
+    if not rawtime_text:
+        raise ValueError("事件时间缺失")
     if direction not in (">", "<"):
         raise ValueError(f"方向非法：{direction!r}")
     if not call:
         raise ValueError("调用名为空")
 
+    pid = integer(4)
+    container_id = txt(6)
+    if not container_id:
+        # pid 缺失的 switch 行没有容器，归 host 即可（随后会进 NO_OWNER）。
+        # 有 pid 却没有容器，说明这一行无法可靠归属，计异常行而不是猜 host。
+        if pid > 0:
+            raise ValueError("container.id 缺失")
+        container_id = "host"
+
+    rawres_text = txt(13)
     return EventRow(
-        num=num,
-        ns=ns,
+        num=int(num_text),
+        ns=ns_of(rawtime_text),
         direction=direction,
         call=call,
-        pid=int(parts[4]) if parts[4] else 0,
-        tid=int(parts[5]) if parts[5] else 0,
-        container_id=txt(6) or "host",
+        pid=pid,
+        tid=integer(5),
+        container_id=container_id,
         exe=txt(7),
         cwd=txt(8),
-        ppid=int(parts[9]) if parts[9] else 0,
+        ppid=integer(9),
         ruid=txt(10),
-        cmdline=txt(12),
+        proc_args=txt(12),
         args=A.parse(txt(11)),
+        rawres=A.int_of(rawres_text) if rawres_text else None,
+        buffer_b64=txt(14),
+        na_fields=frozenset(na),
     )
 
 
@@ -96,3 +151,7 @@ def as_bytes(raw: str | bytes) -> bytes:
     if isinstance(raw, bytes):
         return raw
     return raw.encode("utf-8", "replace")
+
+
+def container_na(value: str) -> str:
+    return "" if value == NA else value

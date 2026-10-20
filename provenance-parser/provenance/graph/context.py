@@ -30,7 +30,7 @@ class EmitContext:
         return self.graph.seg(call)
 
     def res(self, call: Call) -> int | None:
-        return call.number("res")
+        return call.result
 
     def proc_node(self, seg):
         return self.graph.proc_node(seg)
@@ -51,11 +51,13 @@ class EmitContext:
         self.graph.attach(out, node)
 
     # -- 客体 ----------------------------------------------------------
-    def norm_path(self, raw: str, call: Call) -> str:
-        return self.objects.norm_path(raw, call)
+    def norm_path(self, raw: str, call: Call,
+                  dirfd_key: str | None = None) -> str:
+        return self.objects.norm_path(raw, call, dirfd_key)
 
-    def path_arg(self, call: Call, *keys: str) -> str:
-        return self.objects.path_arg(call, *keys)
+    def path_arg(self, call: Call, *keys: str,
+                 dirfd_key: str | None = None) -> str:
+        return self.objects.path_arg(call, *keys, dirfd_key=dirfd_key)
 
     def fd_entry(self, call: Call, key: str = "fd"):
         return self.objects.fd_entry(call, key)
@@ -82,7 +84,7 @@ class EmitContext:
 
     def attempt(self, out, call, verb, target, res) -> Outcome:
         self.note_attempt(out, call, verb, target, res)
-        return out.settle(call, Bucket.ATTEMPT, verb)
+        return out.settle(call, Bucket.ATTEMPT, f"attempt:{verb}")
 
     def ops(self, out, call, name: str) -> None:
         out.ops.append((self.key(call), name, call.ts_ns))

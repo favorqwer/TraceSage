@@ -35,7 +35,12 @@ class GraphStore:
                 continue
             changed = False
             for key, value in node.props.items():
-                if value is not None and existing.props.get(key) != value:
+                if value is None:
+                    continue
+                if (key == "kind" and value == "unknown"
+                        and existing.props.get(key) not in (None, "unknown")):
+                    continue
+                if existing.props.get(key) != value:
                     existing.props[key] = value
                     changed = True
             if changed:

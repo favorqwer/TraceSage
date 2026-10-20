@@ -12,8 +12,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from ...core import args as A
+from ...core import paths as P
 from ...core.events import EventRow
 from ...core.kinds import ProcKey
 
@@ -26,13 +28,24 @@ class Seg:
     parent: ProcKey | None = None
     exited_ns: int | None = None
     exe: str = ""
-    cmdline: str = ""
+    args: str = ""
     ppid: int | None = None
     ruid: str = ""
+    uid: int | None = None
+    cwd: str = ""
+    root: str = "/"
+    threads: set[int] = field(default_factory=set)
 
     @property
     def born_ns(self) -> int:
         return self.key.born_ns
+
+
+def _remember_args(seg: Seg, value: str) -> None:
+    """统一 args 写入：只丢空值和单独一个 '-'，保留 -f/-n/-c/--wait 等真实参数。"""
+    text = (value or "").strip()
+    if text and text != "-":
+        seg.args = text
 
 
 class ProcState:
@@ -42,6 +55,8 @@ class ProcState:
         self._by_key: dict[ProcKey, Seg] = {}
         self._cid_by_pid: dict[int, set[str]] = {}
         self._seq = 0
+        self.exec_destinations: set[ProcKey] = set()
+        self.clone_destinations: set[ProcKey] = set()
         self.counts = {
             "born_clone": 0,
             "born_exec": 0,
@@ -51,6 +66,14 @@ class ProcState:
             "pid_resolve_tie": 0,
             "target_unresolved": 0,
             "target_pid_other_ns": 0,
+            "uid_observed": 0,
+            "fs_state_updates": 0,
+            "thread_clone": 0,
+            "thread_exit": 0,
+            "thread_untracked": 0,
+            "exit_no_segment": 0,
+            "exit_tid_missing": 0,
+            "late_event_after_exit": 0,
         }
 
     # -- 建段 ----------------------------------------------------------
@@ -59,6 +82,7 @@ class ProcState:
         self._seq += 1
         seg = Seg(key=ProcKey(self.host_id, cid, pid, born_ns), born_src=src, seq=self._seq,
                   parent=parent)
+        seg.threads.add(pid)
         self._segs.setdefault((cid, pid), []).append(seg)
         self._by_key[seg.key] = seg
         self._cid_by_pid.setdefault(pid, set()).add(cid)
@@ -70,6 +94,17 @@ class ProcState:
             if seg.exited_ns is None:
                 return seg
         return None
+
+    def live(self, cid: str, pid: int) -> Seg | None:
+        """只读查询活段；退出路径不得借它创建新段。"""
+        return self._live(cid, pid)
+
+    def is_dead(self, cid: str, pid: int) -> bool:
+        """最后一个段已退出且没有活段：后续普通事件视为迟到事件。"""
+        if self._live(cid, pid) is not None:
+            return False
+        segs = self._segs.get((cid, pid), ())
+        return bool(segs and segs[-1].exited_ns is not None)
 
     def observe(self, row: EventRow) -> Seg:
         """保证该行所属进程有一个活段，并刷新最后观测到的身份属性。"""
@@ -85,17 +120,18 @@ class ProcState:
             seg = self._new(row.container_id, row.pid, born, src)
         if row.exe:
             seg.exe = row.exe
-        if row.cmdline and not row.cmdline.startswith("-"):
-            seg.cmdline = row.cmdline
+        _remember_args(seg, row.proc_args)
         if row.ruid:
             seg.ruid = row.ruid
         if seg.ppid is None and row.ppid > 0:
             seg.ppid = row.ppid
+        if not seg.cwd and row.cwd:
+            seg.cwd = P.normalize(row.cwd) or row.cwd
         return seg
 
     # -- 身份事件 ------------------------------------------------------
     def on_clone(self, parent: Seg, child_pid: int, ts_ns: int,
-                 exe: str, cmdline: str) -> Seg:
+                 exe: str, proc_args: str) -> Seg:
         cid = parent.key.container_id
         live = self._live(cid, child_pid)
         if live is not None and live.born_src == "unknown":
@@ -106,28 +142,128 @@ class ProcState:
             self._by_key[live.key] = live
             live.born_src = "clone"
             live.parent = parent.key
+            live.cwd = live.cwd or parent.cwd
+            live.root = parent.root
+            live.threads.add(child_pid)
+            _remember_args(live, proc_args)
+            if live.uid is None:
+                live.uid = parent.uid
             self.counts["born_clone"] += 1
             self.counts["born_unknown"] = max(0, self.counts["born_unknown"] - 1)
             self.counts["late_clone_upgrade"] += 1
+            self.clone_destinations.add(live.key)
             return live
         seg = self._new(cid, child_pid, ts_ns, "clone", parent=parent.key)
+        self.clone_destinations.add(seg.key)
         seg.ppid = parent.key.pid
         seg.exe = exe
-        seg.cmdline = cmdline
+        _remember_args(seg, proc_args)
+        seg.cwd = parent.cwd
+        seg.root = parent.root
+        seg.uid = parent.uid
         return seg
 
-    def on_exec(self, seg: Seg, ts_ns: int, exe: str, cmdline: str) -> Seg:
-        seg.exited_ns = seg.exited_ns if seg.exited_ns is not None else ts_ns
+    def on_exec(self, seg: Seg, ts_ns: int, exe: str, proc_args: str) -> Seg:
+        self.on_exit(seg, ts_ns)
         new = self._new(seg.key.container_id, seg.key.pid, ts_ns, "exec", parent=seg.parent)
+        self.exec_destinations.add(new.key)
         new.ppid = seg.ppid
         new.ruid = seg.ruid
+        new.uid = seg.uid
+        new.cwd = seg.cwd
+        new.root = seg.root
         new.exe = exe
-        new.cmdline = cmdline
+        _remember_args(new, proc_args)
         return new
+
+    # -- 线程身份 ------------------------------------------------------
+    def on_thread_clone(self, parent: Seg, tid: int) -> None:
+        parent.threads.add(tid)
+        self.counts["thread_clone"] += 1
+
+    def on_thread_exit(self, seg: Seg, tid: int, ts_ns: int) -> bool:
+        """返回 True 表示最后一个线程退出，进程应结束。"""
+        if tid in seg.threads:
+            seg.threads.discard(tid)
+        else:
+            self.counts["thread_untracked"] += 1
+        if seg.threads:
+            self.counts["thread_exit"] += 1
+            return False
+        self.on_exit(seg, ts_ns)
+        return True
+
+    # -- 身份属性（uid/euid）与路径状态 ---------------------------------
+    def observe_uid(self, call) -> None:
+        """从 geteuid/setuid/setresuid/setreuid 成功事件更新 euid。"""
+        name = call.call
+        if name not in ("geteuid", "setuid", "setresuid", "setreuid", "setfsuid"):
+            return
+        seg = self._live(call.container_id, call.pid) or self.observe(call.head_row)
+        if name == "geteuid":
+            row = call.exit or call.head_row
+            value = A.int_of(row.args.get("euid"))
+            if value is not None and value >= 0:
+                seg.uid = value
+                self.counts["uid_observed"] += 1
+            return
+
+        result = call.result
+        if result is not None and result < 0:
+            return
+        keys = {
+            "setuid": ("uid",),
+            "setresuid": ("euid",),
+            "setreuid": ("euid", "uid"),
+            "setfsuid": ("fsuid",),
+        }.get(name, ())
+        for key in keys:
+            value = A.int_of(call.args.get(key))
+            if value is not None and value >= 0:
+                seg.uid = value
+                self.counts["uid_observed"] += 1
+                return
+
+    def observe_fs(self, call, fds=None) -> None:
+        """维护 cwd / chroot 根；必须在 handler 解析完本次路径之后调用。"""
+        name = call.call
+        if name not in ("chdir", "fchdir", "chroot", "pivot_root"):
+            return
+        result = call.result
+        if result is None or result < 0:
+            return
+        seg = self._live(call.container_id, call.pid) or self.observe(call.head_row)
+
+        if name == "fchdir":
+            fd = A.fd_of(call.args.get("fd"))
+            if fd is not None and fds is not None:
+                path = fds.dir_path(call.container_id, call.pid, fd.num)
+                if path:
+                    seg.cwd = path
+                    self.counts["fs_state_updates"] += 1
+            return
+
+        path = (
+            call.text("path")
+            or call.text("filename")
+            or call.text("name")
+            or call.text("newroot")
+            or call.text("new_root")
+        )
+        if not path:
+            return
+        base = seg.cwd or call.head_row.cwd or "/"
+        value = P.normalize(path, base)
+        if name == "chdir":
+            seg.cwd = value
+        elif name in ("chroot", "pivot_root"):
+            seg.root = value
+        self.counts["fs_state_updates"] += 1
 
     def on_exit(self, seg: Seg, ts_ns: int) -> None:
         if seg.exited_ns is None:
             seg.exited_ns = ts_ns
+        seg.threads.clear()
 
     # -- 解析（§5.7）---------------------------------------------------
     def resolve(self, cid: str, pid: int, at_ns: int) -> Seg | None:
@@ -176,7 +312,47 @@ class ProcState:
             for seg in group:
                 yield seg
 
+    def identity_stats(self) -> dict[str, int]:
+        """按 (container, pid) 聚合身份段，区分合法 exec 与无 exec 的重复段。"""
+        groups: dict[tuple[str, int], list[Seg]] = {}
+        for (cid, pid), segs in self._segs.items():
+            groups[(cid, pid)] = list(segs)
+
+        extra = extra_exec = extra_clone = 0
+        placeholders = unexplained = 0
+        multi = 0
+        for segs in groups.values():
+            if len(segs) <= 1:
+                continue
+            multi += 1
+            has_clone = any(s.key in self.clone_destinations for s in segs)
+            for seg in segs:
+                if (seg.key.born_ns == 0
+                        and seg.key not in self.clone_destinations
+                        and seg.key not in self.exec_destinations
+                        and has_clone):
+                    placeholders += 1
+            for seg in sorted(segs, key=lambda s: s.key.born_ns)[1:]:
+                extra += 1
+                if seg.key in self.exec_destinations:
+                    extra_exec += 1
+                elif seg.key in self.clone_destinations:
+                    extra_clone += 1
+                elif seg.key.born_ns != 0 or not has_clone:
+                    unexplained += 1
+
+        return {
+            "unique_pids": len(groups),
+            "segments": sum(len(v) for v in groups.values()),
+            "multi_node_groups": multi,
+            "extra_segments": extra,
+            "extra_with_exec": extra_exec,
+            "extra_with_clone": extra_clone,
+            "late_clone_placeholders": placeholders,
+            "unexplained_segments": unexplained,
+        }
+
     def stats(self) -> dict[str, int]:
         out = dict(self.counts)
-        out["segments"] = sum(len(v) for v in self._segs.values())
+        out.update(self.identity_stats())
         return out

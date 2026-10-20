@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..core.graph import Edge, Node
-from ..core.kinds import EdgeClass, NodeKey, key_tuple, label_of
+from ..core.kinds import EdgeClass, key_tuple, label_of
 from ..core.options import Neo4jOptions
 
 _NODE_QUERIES = {
@@ -51,7 +51,7 @@ def _edge_query(cls: EdgeClass) -> str:
         f"{_match_clause(dst_label, 'b', 'x.d')} "
         f"MERGE (a)-[r:{rel} {{evt: x.evt, seq: x.seq}}]->(b) "
         "SET r.action = x.action, r.ts_ns = x.ts_ns, r.te_ns = x.te_ns, "
-        "r.res = x.res, r.flags = x.flags, r.head = x.head, r.old_path = x.old_path, "
+        "r.res = x.res, r.head = x.head, r.old_path = x.old_path, "
         "r.target_path = x.target_path, r.mode = x.mode"
     )
 
@@ -132,7 +132,6 @@ class Neo4jWriter:
                     "ts_ns": edge.ts_ns,
                     "te_ns": edge.te_ns,
                     "res": edge.res,
-                    "flags": edge.flags,
                     "head": edge.head,
                     "old_path": edge.old_path,
                     "target_path": edge.target_path,

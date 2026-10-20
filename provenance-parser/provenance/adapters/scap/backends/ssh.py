@@ -31,9 +31,11 @@ class SshScapSource(ScapSource):
         port: int = DEFAULT_SSH_PORT,
         remote_cache_dir: str = DEFAULT_REMOTE_CACHE_DIR,
         auto_sync: bool = True,
+        base64_buffer: bool = False,
     ) -> None:
         super().__init__(
-            scap_path, format_string, max_events, json_output, expression, sysdig_bin
+            scap_path, format_string, max_events, json_output, expression,
+            sysdig_bin, base64_buffer,
         )
         self.host = host
         self.user = user

@@ -17,9 +17,11 @@ class LocalScapSource(ScapSource):
         json_output: bool = True,
         expression: str | None = None,
         sysdig_bin: str = "sysdig",
+        base64_buffer: bool = False,
     ) -> None:
         super().__init__(
-            scap_path, format_string, max_events, json_output, expression, sysdig_bin
+            scap_path, format_string, max_events, json_output, expression,
+            sysdig_bin, base64_buffer,
         )
 
     @classmethod

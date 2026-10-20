@@ -30,6 +30,7 @@ class FdTable:
             "overwrite": 0,   # 登记时旧映射还在：要么 dup2 覆盖，要么 close 行丢了
             "fork_copies": 0,
             "pipe_registered": 0,
+            "blind_dup": 0,
         }
 
     def _bucket(self, cid: str, pid: int) -> dict[int, FdEntry]:

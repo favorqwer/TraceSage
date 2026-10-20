@@ -36,14 +36,14 @@ def create(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     flags = A.flags_of(call.args.get("flags"))
     fd = A.fd_of(call.args.get("fd"))
     raw_path = fd.name if fd and not A.is_unknown_name(fd.name) else ""
-    path = ctx.norm_path(raw_path, call) or ctx.path_arg(
-        call, "name", "path", "filename", "file")
+    path = ctx.norm_path(raw_path, call, "dirfd") or ctx.path_arg(
+        call, "name", "path", "filename", "file", dirfd_key="dirfd")
     ok, res = ctx.gate(call, "success")
     if not ok and res is None and fd is not None:
         ok = True
     if not ok:
         if res is None:
-            return ctx.give_up(out, call, Bucket.OTHER, "gate_missing_res")
+            return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:create")
         return ctx.attempt(out, call, "create", path or raw_path, res)
 
     if fd is not None:
@@ -56,21 +56,25 @@ def create(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
         return ctx.give_up(out, call, Bucket.OTHER, "path_unresolved")
 
     node = ctx.file_node(call.container_id, path, fd.kind if fd else "")
+    if node is None:
+        return ctx.give_up(out, call, Bucket.NO_OBJECT, "not_file")
     ctx.attach(out, node)
     ctx.add(out, ctx.edge(EdgeClass.P2F, "create", ctx.key(call), node.key,
-                          call, res=res, flags=flags))
+                          call, res=res))
     return ctx.covered(out, call)
 
 
 def link(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
-    new_path = ctx.path_arg(call, "linkpath", "newpath", "path", "name")
+    new_path = ctx.path_arg(
+        call, "linkpath", "newpath", "path", "name", dirfd_key="dirfd"
+    )
     target = call.text("target") or call.text("oldpath")
-    target_path = ctx.norm_path(target, call) if target else ""
+    target_path = ctx.norm_path(target, call, "olddirfd") if target else ""
     ok, res = ctx.gate(call, "success")
     if not ok:
         if res is None:
-            return ctx.give_up(out, call, Bucket.OTHER, "gate_missing_res")
+            return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:link")
         return ctx.attempt(out, call, "link", new_path or target_path, res)
     if not new_path:
         return ctx.give_up(out, call, Bucket.OTHER, "path_unresolved")
@@ -83,12 +87,12 @@ def link(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
 
 def rename(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
-    old_path = ctx.path_arg(call, "oldpath")
-    new_path = ctx.path_arg(call, "newpath")
+    old_path = ctx.path_arg(call, "oldpath", dirfd_key="olddirfd")
+    new_path = ctx.path_arg(call, "newpath", dirfd_key="newdirfd")
     ok, res = ctx.gate(call, "success")
     if not ok:
         if res is None:
-            return ctx.give_up(out, call, Bucket.OTHER, "gate_missing_res")
+            return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:rename")
         if old_path:
             ctx.ops(out, call, f"oldpath:{old_path}")
         return ctx.attempt(out, call, "rename", new_path or old_path, res)
@@ -103,7 +107,7 @@ def rename(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
 
 def unlink(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
-    path = ctx.path_arg(call, "path", "name", "filename")
+    path = ctx.path_arg(call, "path", "name", "filename", dirfd_key="dirfd")
     if not path:
         return ctx.give_up(out, call, Bucket.OTHER, "path_unresolved")
     node = ctx.file_node(call.container_id, path)
@@ -159,16 +163,12 @@ def mmap(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
     fd = A.fd_of(call.args.get("fd"))
     prot = A.flags_of(call.args.get("prot"))
-    mflags = A.flags_of(call.args.get("flags"))
     if fd is None or fd.num < 0 or (not fd.name and not fd.kind):
         reason = "exec_mem" if "PROT_EXEC" in prot else "anon_mmap"
         ctx.ops(out, call, f"mmap:{reason}")
         return ctx.give_up(out, call, Bucket.NO_OBJECT, reason)
-    flags = set(prot) | set(mflags)
-    bucket = _flow(ctx, out, call, call.text("fd"), "mmap", None, head=False)
+    bucket = _flow(ctx, out, call, call.text("fd"), "mmap", ctx.res(call), head=False)
     if bucket is Bucket.COVERED:
-        for edge in out.edges:
-            edge.flags = "|".join(sorted(flags))
         return ctx.covered(out, call)
     return ctx.give_up(out, call, bucket, "unusable_object")
 
@@ -176,7 +176,7 @@ def mmap(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
 def chmod(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
     mode = (call.text("mode").split("(", 1)[0] or "").strip()
-    path = ctx.path_arg(call, "filename", "path", "name")
+    path = ctx.path_arg(call, "filename", "path", "name", dirfd_key="dirfd")
     subject = ctx.key(call)
     if path:
         node = ctx.file_node(call.container_id, path)
@@ -185,6 +185,8 @@ def chmod(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
         if entry is None or A.is_unknown_name(entry.name):
             return ctx.give_up(out, call, Bucket.UNKNOWN_FD, "fd")
         node = ctx.file_node(call.container_id, entry.name, entry.kind)
+        if node is None:
+            return ctx.give_up(out, call, Bucket.NO_OBJECT, "not_file")
     ctx.attach(out, node)
     ctx.add(out, ctx.edge(EdgeClass.P2F, "chmod", subject, node.key,
                           call, res=ctx.res(call), mode=mode))
@@ -206,9 +208,34 @@ def mount(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     return ctx.covered(out, call)
 
 
+def unmount(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
+    """umount：只对成功建边。
+
+    卸载失败时挂载点可能根本不存在（ENOENT），建节点等于宣告一个不存在的
+    目录；所以失败走 attempts.csv（目标 + errno），保留“尝试”证据。
+    """
+    out = Outcome()
+    path = ctx.path_arg(call, "name", "dir", "target")
+    flags = A.int_of(call.args.get("flags"))
+    if flags:
+        ctx.ops(out, call, f"umount2:{flags}")
+    ok, res = ctx.gate(call, "success")
+    if not ok:
+        if res is None:
+            return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:unmount")
+        return ctx.attempt(out, call, "unmount", path or "-", res)
+    if not path:
+        return ctx.give_up(out, call, Bucket.OTHER, "path_unresolved")
+    node = ctx.file_node(call.container_id, path, "directory")
+    ctx.attach(out, node)
+    ctx.add(out, ctx.edge(EdgeClass.P2F, "unmount", ctx.key(call), node.key,
+                          call, res=res))
+    return ctx.covered(out, call)
+
+
 def chroot(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
-    path = ctx.path_arg(call, "path", "newroot")
+    path = ctx.path_arg(call, "path", "newroot", "new_root")
     if not path:
         return ctx.give_up(out, call, Bucket.OTHER, "path_unresolved")
     node = ctx.file_node(call.container_id, path, "directory")
@@ -228,6 +255,8 @@ def chroot_like(ctx: EmitContext, call: Call, action: str) -> Outcome:
     if entry is None or A.is_unknown_name(entry.name):
         return ctx.give_up(out, call, Bucket.UNKNOWN_FD, "fd")
     node = ctx.file_node(call.container_id, entry.name, entry.kind)
+    if node is None:
+        return ctx.give_up(out, call, Bucket.NO_OBJECT, "not_file")
     ctx.attach(out, node)
     ctx.add(out, ctx.edge(EdgeClass.P2F, action, ctx.key(call), node.key,
                           call, res=ctx.res(call)))
@@ -243,6 +272,8 @@ def ioctl(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     if entry is None or A.is_unknown_name(entry.name):
         return ctx.give_up(out, call, Bucket.UNKNOWN_FD, "fd")
     node = ctx.file_node(call.container_id, entry.name, entry.kind)
+    if node is None:
+        return ctx.give_up(out, call, Bucket.NO_OBJECT, "not_file")
     ctx.attach(out, node)
     ctx.add(out, ctx.edge(EdgeClass.P2F, "ioctl", ctx.key(call), node.key,
                           call, res=ctx.res(call)))
@@ -251,7 +282,7 @@ def ioctl(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
 
 def probe(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
-    path = ctx.path_arg(call, "name", "path", "filename")
+    path = ctx.path_arg(call, "name", "path", "filename", dirfd_key="dirfd")
     if path:
         node = ctx.file_node(call.container_id, path)
         ctx.attach(out, node)
@@ -261,6 +292,8 @@ def probe(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     fd, entry = ctx.fd_entry(call)
     if entry is not None and not A.is_unknown_name(entry.name):
         node = ctx.file_node(call.container_id, entry.name, entry.kind)
+        if node is None:
+            return ctx.give_up(out, call, Bucket.NO_OBJECT, "not_file")
         ctx.attach(out, node)
         ctx.add(out, ctx.edge(EdgeClass.F2P, "probe", node.key, ctx.key(call),
                               call, res=ctx.res(call)))

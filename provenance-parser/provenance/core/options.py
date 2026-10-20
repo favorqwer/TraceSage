@@ -19,7 +19,7 @@ class ScapOptions:
     ssh_auto_sync: bool = True
     docker_image: str = "sysdig/sysdig:latest"
     max_events: int | None = None
-    audit: bool = True
+    audit: bool = False
 
 
 @dataclass(frozen=True, slots=True)

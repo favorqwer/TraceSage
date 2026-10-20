@@ -6,6 +6,7 @@ import time
 
 from ..core.classify import Tables
 from ..core.events import BadRow, Call
+from ..core.graph import Outcome
 from ..core.kinds import Bucket
 from ..core.options import EmitOptions, GraphLimits, RunOptions
 from ..core.pair import PairingPool, should_pair
@@ -101,9 +102,23 @@ def run(
                 observer.on_no_owner(len(call.rows))
                 continue
 
-            state.proc.observe(call.head_row)
+            if (call.call not in ("exit", "exit_group", "procexit")
+                    and state.proc.is_dead(call.container_id, call.pid)):
+                decision = tables.decide(call)
+                outcome = Outcome()
+                outcome.settle(call, Bucket.OTHER, "late_event_after_exit")
+                state.proc.counts["late_event_after_exit"] += 1
+                for num, bucket, reason in outcome.buckets:
+                    ledger.settle(num, bucket, reason)
+                observer.on_call(call, decision, outcome)
+                continue
+
+            if call.call not in ("exit", "exit_group", "procexit"):
+                state.proc.observe(call.head_row)
             decision = tables.decide(call)
             outcome = dispatch(call, decision, ctx)
+            state.proc.observe_uid(call)
+            state.proc.observe_fs(call, state.fds)
             for num, bucket, reason in outcome.buckets:
                 ledger.settle(num, bucket, reason)
             observer.on_call(call, decision, outcome)

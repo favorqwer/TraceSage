@@ -26,35 +26,71 @@ class ResolvedObject:
     reason: str = ""
 
 
+AT_FDCWD = -100
+
+
 class ObjectResolver:
     def __init__(self, state: State) -> None:
         self.st = state
         self.counts = {"path_unresolved": 0, "fd_from_token": 0}
 
     # -- 路径 ----------------------------------------------------------
-    def norm_path(self, raw: str, call: Call) -> str:
+    def _seg(self, call: Call):
+        return self.st.proc.observe(call.head_row)
+
+    def _cwd(self, call: Call) -> str:
+        seg = self._seg(call)
+        return seg.cwd or call.head_row.cwd or ""
+
+    def _root(self, call: Call) -> str:
+        return self._seg(call).root or "/"
+
+    @staticmethod
+    def _apply_root(value: str, root: str) -> str:
+        if not value.startswith("/") or not root or root == "/":
+            return value
+        prefix = root.rstrip("/")
+        if value == prefix or value.startswith(prefix + "/"):
+            return value
+        return P.normalize(prefix + value)
+
+    def _base_dir(self, call: Call, dirfd_key: str | None) -> str:
+        if not dirfd_key:
+            return self._cwd(call)
+        fd = A.int_of(call.args.get(dirfd_key))
+        if fd is None or fd == AT_FDCWD:
+            return self._cwd(call)
+        path = self.st.fds.dir_path(call.container_id, call.pid, fd)
+        return path or self._cwd(call)
+
+    def norm_path(self, raw: str, call: Call, dirfd_key: str | None = None) -> str:
         if not raw:
             return ""
         value = P.path_value(raw)
         if not value or A.is_unknown_name(value):
             return ""
-        cwd = call.head_row.cwd or ""
-        if not value.startswith("/") and not cwd:
+        root = self._root(call)
+        if value.startswith("/"):
+            return self._apply_root(P.normalize(value), root)
+        base = self._base_dir(call, dirfd_key)
+        if not base:
             self.counts["path_unresolved"] += 1
-            return ""
-        return P.normalize(value, cwd)
+            return "?" + value
+        return self._apply_root(P.normalize(value, base), root)
 
-    def path_arg(self, call: Call, *keys: str) -> str:
+    def path_arg(self, call: Call, *keys: str,
+                 dirfd_key: str | None = None) -> str:
         for key in keys:
             raw = call.args.get(key, "")
             if raw:
-                path = self.norm_path(raw, call)
+                path = self.norm_path(raw, call, dirfd_key)
                 if path:
                     return path
         return ""
 
-    def by_path(self, call: Call, *keys: str) -> ResolvedObject:
-        path = self.path_arg(call, *keys)
+    def by_path(self, call: Call, *keys: str,
+                dirfd_key: str | None = None) -> ResolvedObject:
+        path = self.path_arg(call, *keys, dirfd_key=dirfd_key)
         if not path:
             return ResolvedObject("none", bucket=Bucket.OTHER, reason="path_unresolved")
         return ResolvedObject(
@@ -98,6 +134,7 @@ class ObjectResolver:
             path = A.unix_path(entry.name)
             if not path:
                 return ResolvedObject("none", bucket=unix_bucket, reason="unix_unusable")
+            path = self._apply_root(P.normalize(path), self._root(call))
             return ResolvedObject(
                 "file",
                 FileKey(self.st.host_id, call.container_id, path),

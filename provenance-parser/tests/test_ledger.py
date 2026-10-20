@@ -12,7 +12,7 @@ from provenance.runtime.ledger import Ledger  # noqa: E402
 
 def row(num, call="read", pid=1):
     return EventRow(num=num, ns=num * 10, direction="<", call=call, pid=pid, tid=pid,
-                    container_id="host", exe="", cwd="/", ppid=0, ruid="", cmdline="",
+                    container_id="host", exe="", cwd="/", ppid=0, ruid="", proc_args="",
                     args={})
 
 

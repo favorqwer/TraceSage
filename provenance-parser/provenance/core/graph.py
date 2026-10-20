@@ -27,7 +27,6 @@ class Edge:
     ts_ns: int
     te_ns: int
     res: int | None = None
-    flags: str | None = None
     head: str | None = None
     old_path: str | None = None
     target_path: str | None = None

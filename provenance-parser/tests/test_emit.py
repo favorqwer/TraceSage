@@ -1,3 +1,4 @@
+import base64
 import sys
 import unittest
 from pathlib import Path
@@ -18,15 +19,16 @@ DATA = ROOT / "data"
 
 
 def row(num, direction, call, text="", pid=100, ns=1000, cid="host", exe="/bin/sh",
-        cwd="/", ppid=1):
-    return EventRow(num=num, ns=ns, direction=direction, call=call, pid=pid, tid=pid,
+        cwd="/", ppid=1, buffer_b64="", tid=None):
+    return EventRow(num=num, ns=ns, direction=direction, call=call, pid=pid,
+                    tid=pid if tid is None else tid,
                     container_id=cid, exe=exe, cwd=cwd, ppid=ppid, ruid="0",
-                    cmdline="", args=A.parse(text))
+                    proc_args="", args=A.parse(text), buffer_b64=buffer_b64)
 
 
-def call(name, enter="", exit="", pid=100, ns=1000):
-    e = row(1, ">", name, enter, pid=pid, ns=ns)
-    x = row(2, "<", name, exit, pid=pid, ns=ns + 10)
+def call(name, enter="", exit="", pid=100, ns=1000, buffer_b64="", tid=None):
+    e = row(1, ">", name, enter, pid=pid, ns=ns, buffer_b64=buffer_b64, tid=tid)
+    x = row(2, "<", name, exit, pid=pid, ns=ns + 10, buffer_b64=buffer_b64, tid=tid)
     return Call.build(e, x)
 
 
@@ -48,9 +50,16 @@ class EmitTest(unittest.TestCase):
         edge = out.edges[0]
         self.assertEqual((edge.cls, edge.action), (EdgeClass.P2F, "create"))
         self.assertEqual(edge.dst, FileKey("h", "host", "/tmp/x"))
-        self.assertEqual(edge.res, 5)
+        # res=5 是文件描述符（进程内局部编号），不是结果 -> 不落图
+        self.assertIsNone(edge.res)
         self.assertIn(Bucket.COVERED, [b for _, b, _ in out.buckets])
         self.assertIsNotNone(self.st.fds.get("host", 100, 5))
+
+    def test_create_mkdir_keeps_zero(self):
+        """mkdir 成功返回 0：0 是实测结果，必须保留。"""
+        out = self.run_call(call("mkdir", "name=/tmp/d", "res=0"))
+        self.assertEqual(len(out.edges), 1)
+        self.assertEqual(out.edges[0].res, 0)
 
     def test_create_failure_goes_to_attempts(self):
         out = self.run_call(call("openat", "", "res=-17(EEXIST) name=/tmp/x flags=577(O_CREAT)"))
@@ -60,12 +69,13 @@ class EmitTest(unittest.TestCase):
 
     def test_read_on_socket_becomes_recv(self):
         out = self.run_call(call(
-            "read", "fd=7(<4t>1.2.3.4:5->9.9.9.9:80) size=10", "res=10 data=abc"))
+            "read", "fd=7(<4t>1.2.3.4:5->9.9.9.9:80) size=10", "res=10 data=abc",
+            buffer_b64=base64.b64encode(b"abc").decode("ascii")))
         self.assertEqual(len(out.edges), 1)
         edge = out.edges[0]
         self.assertEqual((edge.cls, edge.action), (EdgeClass.N2P, "recv"))
         self.assertEqual(edge.src, NetKey("h", "1.2.3.4:5->9.9.9.9:80"))
-        self.assertEqual(edge.head, "abc")
+        self.assertEqual(base64.b64decode(edge.head), b"abc")
         self.assertEqual(edge.res, 10)
 
     def test_write_on_file(self):
@@ -100,6 +110,48 @@ class EmitTest(unittest.TestCase):
             "clone", "", "res=5(x) flags=33601539(CLONE_THREAD|CLONE_VM|CLONE_FILES)"))
         self.assertEqual(out.edges, [])
         self.assertIn("thread_clone", [r for _, _, r in out.buckets])
+        parent = self.st.proc.live("host", 100)
+        self.assertIsNotNone(parent)
+        self.assertIn(5, parent.threads)
+
+    def test_thread_exit_does_not_close_process(self):
+        self.st.proc.observe(row(1, ">", "read", pid=100, ns=500))
+        parent = self.st.proc.live("host", 100)
+        self.assertIsNotNone(parent)
+        self.st.proc.on_thread_clone(parent, 101)
+        out = self.run_call(call("procexit", pid=100, tid=101, ns=600))
+        self.assertEqual(out.edges, [])
+        self.assertIn("thread_exit", [r for _, _, r in out.buckets])
+        self.assertIsNotNone(self.st.proc.live("host", 100))
+
+    def test_untracked_thread_exit_is_not_a_process_exit(self):
+        self.st.proc.observe(row(1, ">", "read", pid=100, ns=500))
+        out = self.run_call(call("procexit", pid=100, tid=101, ns=600))
+        self.assertEqual(out.edges, [])
+        self.assertIn("thread_untracked", [r for _, _, r in out.buckets])
+        self.assertIsNotNone(self.st.proc.live("host", 100))
+
+    def test_main_exit_waits_for_worker(self):
+        self.st.proc.observe(row(1, ">", "read", pid=100, ns=500))
+        parent = self.st.proc.live("host", 100)
+        self.assertIsNotNone(parent)
+        self.st.proc.on_thread_clone(parent, 101)
+
+        out = self.run_call(call("procexit", pid=100, tid=100, ns=600))
+        self.assertEqual(out.edges, [])
+        self.assertIn("thread_exit", [r for _, _, r in out.buckets])
+        self.assertIsNotNone(self.st.proc.live("host", 100))
+
+        out = self.run_call(call("procexit", pid=100, tid=101, ns=700))
+        self.assertEqual(out.edges, [])  # 父进程 pid=1 没有节点，所以只有节点结束、没有边
+        self.assertIsNone(self.st.proc.live("host", 100))
+
+    def test_exit_without_live_segment_creates_nothing(self):
+        out = self.run_call(call("procexit", pid=999, tid=999, ns=600))
+        self.assertEqual(out.edges, [])
+        self.assertEqual(out.nodes, [])
+        self.assertIn("exit_no_segment", [r for _, _, r in out.buckets])
+        self.assertEqual(self.st.proc.counts["exit_no_segment"], 1)
 
     def test_rename_keeps_old_path_on_edge(self):
         out = self.run_call(call(

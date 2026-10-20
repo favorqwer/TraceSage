@@ -16,136 +16,152 @@
 name = "handle"
 verdict = "handle"
 reason = "fd_table_only"
+value = "L3"
 calls = ["close", "dup", "dup2", "dup3", "fcntl", "fcntl64", "lseek", "pipe", "pipe2"]
 
 [[group]]
 name = "attr"
 verdict = "attr"
 reason = "container_meta"
+value = "L3"
 calls = ["container"]
 
 [[group]]
 name = "drop_fsync"
 verdict = "drop"
 reason = "fsync_covered"
+value = "L3"
 calls = ["fsync", "fdatasync", "msync"]
-
-[[group]]
-name = "drop_low_value"
-verdict = "drop"
-reason = "low_value"
-calls = ["umount2"]
 
 [[group]]
 name = "drop_sched"
 verdict = "drop"
 reason = "scheduler"
+value = "L4"
 calls = ["switch", "sched_switch"]
 
 [[group]]
 name = "priv"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["setuid", "setgid", "setresuid", "setresgid", "setreuid", "setregid", "setfsuid", "setfsgid", "setgroups", "capset", "prctl", "personality", "setrlimit", "prlimit", "prlimit64", "ioprio_set", "sched_setscheduler", "sched_setaffinity", "setpriority", "setsid", "setpgid", "umask", "arch_prctl", "chdir", "fchdir", "sethostname", "quotactl"]
 
 [[group]]
 name = "utimes"
 verdict = "ops"
 reason = "not_decoded"
+value = "L1"
 calls = ["utimensat", "utimes", "futimesat"]
 
 [[group]]
 name = "chown"
 verdict = "ops"
 reason = "not_decoded"
+value = "L1"
 calls = ["chown", "fchown", "lchown", "fchownat", "setxattr", "lsetxattr", "fsetxattr", "removexattr", "lremovexattr", "fremovexattr"]
 
 [[group]]
 name = "ns_unshare"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["unshare"]
 
 [[group]]
 name = "seccomp"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["seccomp"]
 
 [[group]]
 name = "syslog"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["syslog"]
 
 [[group]]
 name = "timer"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["setitimer", "alarm", "timerfd_settime", "timer_settime"]
 
 [[group]]
 name = "sched"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["poll", "select", "pselect6", "ppoll", "epoll_wait", "epoll_pwait", "epoll_pwait2", "epoll_ctl", "futex", "futex_waitv", "sched_yield", "nanosleep", "clock_nanosleep", "times", "clock_gettime", "clock_getres", "clock_adjtime", "gettimeofday", "timer_create", "timer_delete", "restart_syscall"]
 
 [[group]]
 name = "mem_mgmt"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["brk", "munmap", "mremap", "madvise", "mincore", "mprotect", "process_madvise"]
 
 [[group]]
 name = "sig_cfg"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["rt_sigaction", "rt_sigprocmask", "rt_sigpending", "rt_sigtimedwait", "sigaltstack", "signaldeliver", "sigreturn", "rt_sigreturn"]
 
 [[group]]
 name = "inotify_cfg"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["inotify_add_watch", "inotify_rm_watch"]
 
 [[group]]
 name = "self_query"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["getpid", "gettid", "getppid", "getpgrp", "getpgid", "getsid", "getuid", "geteuid", "getgid", "getegid", "getresuid", "getresgid", "getgroups", "getrusage", "getrandom", "getrlimit", "getpriority", "ioprio_get", "capget", "sched_getaffinity", "sched_getparam", "sched_getscheduler", "sched_get_priority_min", "sched_get_priority_max", "set_tid_address", "set_robust_list", "getcwd", "sysinfo", "uname"]
 
 [[group]]
 name = "sockopt"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["shutdown", "setsockopt", "getsockopt", "getsockname", "getpeername"]
 
 [[group]]
 name = "xattr_read"
 verdict = "ops"
 reason = "not_decoded"
+value = "L3"
 calls = ["getxattr", "lgetxattr", "fgetxattr", "flistxattr", "listxattr", "llistxattr", "flock", "fadvise64"]
 
 [[group]]
 name = "anon_ipc"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["socket", "socketpair", "eventfd", "eventfd2", "signalfd", "signalfd4", "timerfd_create", "inotify_init", "inotify_init1", "epoll_create", "epoll_create1", "pidfd_open"]
 
 [[group]]
 name = "kernel"
 verdict = "ops"
 reason = "kernel_object"
+value = "L1"
 calls = ["bpf", "finit_module", "init_module", "delete_module", "keyctl", "add_key", "request_key", "kexec_load", "shmget", "shmat", "shmdt", "shmctl", "io_uring_setup", "io_uring_enter", "io_uring_register", "userfaultfd", "open_by_handle_at", "module"]
 
 [[group]]
 name = "not_decoded"
 verdict = "ops"
 reason = "not_decoded"
+value = "L1"
 calls = ["ftruncate", "ftruncate64", "fallocate"]
 
 [[group]]
 name = "sysv_msg"
 verdict = "ops"
 reason = "no_object"
+value = "L3"
 calls = ["msgget", "msgsnd", "msgrcv", "msgctl", "semget", "semop", "semctl"]

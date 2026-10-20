@@ -142,6 +142,14 @@ calls = ["mount"]
 note = "客体=挂载点；fstype 进 ops 台账"
 
 [[verb]]
+name = "unmount"
+edge = "p2f"
+source = "path"
+gate = "success"
+calls = ["umount", "umount2"]
+note = "客体=挂载点；成功才建边（失败时挂载点可能不存在，进 attempts）；flags 不落图"
+
+[[verb]]
 name = "chroot"
 edge = "p2f"
 source = "path"

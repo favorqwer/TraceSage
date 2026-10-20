@@ -38,6 +38,7 @@ class ContainerState:
             "backfilled": 0,
             "placeholder_ignored": 0,
             "mounts_parse_failed": 0,
+            "container_attribution_missing": 0,
         }
 
     # -- 解析 ----------------------------------------------------------
@@ -49,6 +50,19 @@ class ContainerState:
         if text == "false":
             return False
         return None
+
+    def _parse_indexed(self, items: list) -> bool | None:
+        if not items:
+            return None
+        host_root = False
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            src = str(item.get("source", "") or "").strip()
+            rw = str(item.get("rdwr", "") or "").strip().lower()
+            if src == "/" and rw == "true":
+                host_root = True
+        return host_root
 
     def _parse_mounts(self, raw: str) -> tuple[bool | None, bool]:
         """返回 (host_root_rw, 是否解析失败)。"""
@@ -68,8 +82,10 @@ class ContainerState:
         return host_root, failed
 
     # -- 观测 ----------------------------------------------------------
-    def observe(self, meta: dict[str, str]) -> ContainerInfo:
-        cid = (meta.get("id") or "").strip()
+    def observe(self, meta: dict[str, object]) -> ContainerInfo:
+        cid = str(meta.get("id") or "").strip()
+        if not cid:
+            self.counts["container_attribution_missing"] += 1
         info = self._items.get(cid)
         if info is None:
             info = ContainerInfo(id=cid)
@@ -77,15 +93,25 @@ class ContainerState:
         info.observations += 1
         self.counts["observed"] += 1
 
-        name = (meta.get("name") or "").strip()
-        image = (meta.get("image") or "").strip()
-        mounts = (meta.get("mounts") or "").strip()
-        privileged = self._parse_privileged(meta.get("privileged", ""))
-        host_root, failed = self._parse_mounts(mounts)
+        name = str(meta.get("name") or "").strip()
+        image = str(meta.get("image") or "").strip()
+        mounts = str(meta.get("mounts") or "").strip()
+        indexed = meta.get("mounts_indexed")
+        if not isinstance(indexed, list):
+            indexed = []
+        privileged = self._parse_privileged(str(meta.get("privileged") or ""))
+        indexed_host = self._parse_indexed(indexed)
+        composite_host, failed = self._parse_mounts(mounts)
         if failed:
             self.counts["mounts_parse_failed"] += 1
+        if indexed_host is True or composite_host is True:
+            host_root = True
+        elif indexed_host is False or composite_host is False:
+            host_root = False
+        else:
+            host_root = None
 
-        complete = bool(name or mounts)
+        complete = bool(name or mounts or indexed)
         changed = False
         if name and name != info.name:
             info.name = name

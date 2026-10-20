@@ -64,6 +64,8 @@ def bind(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     raw, proto, fd = _endpoint(ctx, call)
     ok, res = ctx.gate(call, "success")
     if not ok:
+        if res is None:
+            return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:bind")
         return ctx.attempt(out, call, "bind", raw, res)
     if not raw or not A.endpoint_usable(raw):
         ctx.ops(out, call, f"bind:{raw or '-'}")
@@ -81,6 +83,8 @@ def listen(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     raw, proto, fd = _endpoint(ctx, call)
     ok, res = ctx.gate(call, "success")
     if not ok:
+        if res is None:
+            return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:listen")
         return ctx.attempt(out, call, "listen", raw, res)
     if not raw or not A.endpoint_usable(raw):
         ctx.ops(out, call, f"listen:{raw or '-'}")
@@ -101,6 +105,8 @@ def accept(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     if not ok and res is None and fd is not None:
         ok = True
     if not ok:
+        if res is None:
+            return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:accept")
         return ctx.attempt(out, call, "accept", raw, res)
     if fd is not None and fd.kind == "unix":
         path = A.unix_path(fd.name) or A.unix_path(raw)

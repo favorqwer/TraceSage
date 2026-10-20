@@ -13,21 +13,27 @@ from ..context import EmitContext
 def clone(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
     flags = A.flags_of(call.args.get("flags"))
-    if "CLONE_THREAD" in flags:
-        return ctx.give_up(out, call, Bucket.DROP, "thread_clone")
-
     res = ctx.res(call)
+    if "CLONE_THREAD" in flags:
+        if res is not None and res > 0:
+            parent = ctx.seg(call)
+            ctx.st.proc.on_thread_clone(parent, res)
+            return ctx.give_up(out, call, Bucket.DROP, "thread_clone")
+        return ctx.give_up(out, call, Bucket.DROP, "thread_clone_unobserved")
+
     parent = ctx.seg(call)
     if res == 0:
         return ctx.give_up(out, call, Bucket.DROP, "clone_child_view")
-    if res is None or res < 0:
+    if res is None:
+        return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:clone")
+    if res < 0:
         return ctx.attempt(out, call, "clone", "-", res)
 
     child_pid = res
     child = ctx.st.proc.on_clone(
         parent, child_pid, call.ts_ns,
         call.exit.exe if call.exit else parent.exe,
-        call.exit.cmdline if call.exit else parent.cmdline,
+        call.exit.proc_args if call.exit else parent.args,
     )
     if call.exit is not None:
         child.ruid = call.exit.ruid or parent.ruid
@@ -43,14 +49,16 @@ def exec_(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
     res = ctx.res(call)
     old = ctx.seg(call)
-    target = ctx.norm_path(call.text("filename"), call)
+    target = ctx.norm_path(call.text("filename"), call, "dirfd")
 
-    if res is None or res < 0:
+    if res is None:
+        return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:exec")
+    if res < 0:
         return ctx.attempt(out, call, "exec", target or call.text("filename"), res)
 
     exe = (call.exit.exe if call.exit else "") or old.exe
-    cmdline = (call.exit.cmdline if call.exit else "") or ""
-    new = ctx.st.proc.on_exec(old, call.ts_ns, exe, cmdline)
+    proc_args = (call.exit.proc_args if call.exit else "") or ""
+    new = ctx.st.proc.on_exec(old, call.ts_ns, exe, proc_args)
     ctx.st.fds.prune_cloexec(call.container_id, call.pid)
 
     ctx.attach(out, ctx.proc_node(old))
@@ -68,13 +76,34 @@ def exec_(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
 
 def exit_(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
-    seg = ctx.seg(call)
-    parent = ctx.st.proc.parent_of(seg, call.te_ns)
-    ctx.st.proc.on_exit(seg, call.ts_ns)
-    if parent is None or parent == seg.key:
+
+    # 退出路径只允许使用活段，绝不在这里新建身份段。
+    live = ctx.st.proc.live(call.container_id, call.pid)
+    if live is None:
+        ctx.st.proc.counts["exit_no_segment"] += 1
+        return ctx.give_up(out, call, Bucket.OTHER, "exit_no_segment")
+
+    tid = call.tid
+    if tid <= 0:
+        ctx.st.proc.counts["exit_tid_missing"] += 1
+        tid = call.pid
+
+    if call.call == "exit_group":
+        # 整组退出，一定是进程退出。
+        ctx.st.proc.on_exit(live, call.ts_ns)
+    else:
+        # procexit / exit：可能是线程退出。
+        if tid != call.pid and tid not in live.threads:
+            ctx.st.proc.counts["thread_untracked"] += 1
+            return ctx.give_up(out, call, Bucket.OTHER, "thread_untracked")
+        if not ctx.st.proc.on_thread_exit(live, tid, call.ts_ns):
+            return ctx.give_up(out, call, Bucket.OTHER, "thread_exit")
+
+    parent = ctx.st.proc.parent_of(live, call.te_ns)
+    if parent is None or parent == live.key:
         return ctx.give_up(out, call, Bucket.OTHER, "target_unresolved")
-    ctx.attach(out, ctx.proc_node(seg))
-    ctx.add(out, ctx.edge(EdgeClass.P2P, "exit", parent, seg.key, call))
+    ctx.attach(out, ctx.proc_node(live))
+    ctx.add(out, ctx.edge(EdgeClass.P2P, "exit", parent, live.key, call))
     return ctx.covered(out, call)
 
 

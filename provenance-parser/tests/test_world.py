@@ -10,10 +10,10 @@ from provenance.graph.state import State  # noqa: E402
 from provenance.graph.state.fds import FdEntry  # noqa: E402
 
 
-def row(pid, ns, call="read", cid="host", exe="/bin/sh"):
+def row(pid, ns, call="read", cid="host", exe="/bin/sh", proc_args="cmd"):
     return EventRow(num=ns, ns=ns, direction="<", call=call, pid=pid, tid=pid,
                     container_id=cid, exe=exe, cwd="/", ppid=1, ruid="0",
-                    cmdline="cmd", args={})
+                    proc_args=proc_args, args={})
 
 
 class ProcTest(unittest.TestCase):
@@ -65,6 +65,58 @@ class ProcTest(unittest.TestCase):
         self.assertEqual(child.key.born_ns, 95)
         self.assertEqual(self.p.counts["late_clone_upgrade"], 1)
         self.assertNotEqual(old_key, child.key)
+
+    def test_thread_exit_keeps_process_alive(self):
+        proc = self.p.observe(row(60, 100))
+        self.p.on_thread_clone(proc, 61)
+        self.assertFalse(self.p.on_thread_exit(proc, 61, 150))
+        self.assertIsNotNone(self.p.live("host", 60))
+        self.assertTrue(self.p.on_thread_exit(proc, 60, 200))
+        self.assertIsNone(self.p.live("host", 60))
+        self.assertEqual(self.p.counts["thread_exit"], 1)
+
+    def test_main_thread_exit_waits_for_worker(self):
+        proc = self.p.observe(row(62, 100))
+        self.p.on_thread_clone(proc, 63)
+        self.assertFalse(self.p.on_thread_exit(proc, 62, 150))
+        self.assertIsNotNone(self.p.live("host", 62))
+        self.assertTrue(self.p.on_thread_exit(proc, 63, 200))
+        self.assertIsNone(self.p.live("host", 62))
+
+    def test_args_keep_leading_dash(self):
+        proc = self.p.observe(row(90, 100, proc_args="-f -P"))
+        self.assertEqual(proc.args, "-f -P")
+
+    def test_args_dash_placeholder_is_ignored(self):
+        proc = self.p.observe(row(91, 100, proc_args="-"))
+        self.assertEqual(proc.args, "")
+        proc = self.p.observe(row(91, 200, proc_args="-n /run/x"))
+        self.assertEqual(proc.args, "-n /run/x")
+
+    def test_clone_and_exec_args_keep_leading_dash(self):
+        parent = self.p.observe(row(92, 100))
+        child = self.p.on_clone(parent, 93, 200, "/bin/sh", "-c foo")
+        self.assertEqual(child.args, "-c foo")
+        new = self.p.on_exec(child, 300, "/bin/ls", "--color=auto")
+        self.assertEqual(new.args, "--color=auto")
+
+    def test_is_dead_after_last_exit(self):
+        proc = self.p.observe(row(80, 100))
+        self.assertFalse(self.p.is_dead("host", 80))
+        self.p.on_exit(proc, 200)
+        self.assertTrue(self.p.is_dead("host", 80))
+
+    def test_identity_stats_separate_exec_from_duplicates(self):
+        parent = self.p.observe(row(70, 100))
+        child = self.p.on_clone(parent, 71, 200, "/bin/sh", "sh")
+        self.p.on_exec(child, 300, "/bin/ls", "ls")
+        stats = self.p.identity_stats()
+        self.assertEqual(stats["unique_pids"], 2)
+        self.assertEqual(stats["segments"], 3)
+        self.assertEqual(stats["extra_segments"], 1)
+        self.assertEqual(stats["extra_with_exec"], 1)
+        self.assertEqual(stats["extra_with_clone"], 0)
+        self.assertEqual(stats["unexplained_segments"], 0)
 
 
 class FdTest(unittest.TestCase):

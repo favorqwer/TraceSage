@@ -35,11 +35,17 @@ class VerbSpec:
 
 @dataclass(frozen=True, slots=True)
 class Decision:
-    """分类结论。纯函数产物，不含任何图状态。"""
+    """分类结论。纯函数产物，不含任何图状态。
+
+    ``value`` 是该调用在设计上的溯源等级（L1 主干 / L2 增强 / L3 记账 /
+    L4 丢弃），只用于报告「哪些 L1 因数据源拿不到客体而降级为记账」；
+    不参与任何图的产出。门控为空的 ``EMIT`` 一律视为 L1。
+    """
 
     verdict: Verdict
     verb: str = ""
     reason: str = ""
+    value: str = ""
 
 
 class Tables:
@@ -68,14 +74,17 @@ class Tables:
                 self.by_call[call] = spec
 
         self.ledger: dict[str, tuple[Verdict, str, str]] = {}
+        self.ledger_value: dict[str, str] = {}
         for item in calls_doc.get("group", []):
             group = item["name"]
             verdict = Verdict(item["verdict"])
             reason = item.get("reason", "")
+            value = item.get("value", "L3")
             for call in item.get("calls", []):
                 if call in self.ledger or call in self.by_call:
                     raise ValueError(f"调用名重复归属：{call}")
                 self.ledger[call] = (verdict, reason, group)
+                self.ledger_value[call] = value
 
         overlap = (set(self.ledger) | set(self.by_call)) & OPEN_FAMILY
         if overlap:
@@ -86,28 +95,29 @@ class Tables:
         entry = self.ledger.get(name)
         if entry is not None:
             verdict, reason, _group = entry
+            value = self.ledger_value.get(name, "L3")
             if verdict is Verdict.HANDLE:
-                return Decision(Verdict.HANDLE, reason=reason)
+                return Decision(Verdict.HANDLE, reason=reason, value=value)
             if verdict is Verdict.ATTR:
-                return Decision(Verdict.ATTR, reason=reason)
+                return Decision(Verdict.ATTR, reason=reason, value=value)
             if verdict is Verdict.DROP:
-                return Decision(Verdict.DROP, reason=reason)
-            return Decision(Verdict.OPS, reason=reason)
+                return Decision(Verdict.DROP, reason=reason, value=value)
+            return Decision(Verdict.OPS, reason=reason, value=value)
 
         if name in CREATE_ALWAYS:
-            return Decision(Verdict.EMIT, verb="create")
+            return Decision(Verdict.EMIT, verb="create", value="L1")
         if name in OPEN_FAMILY:
             flags = A.flags_of(call.args.get("flags"))
             if "O_TMPFILE" in flags:
-                return Decision(Verdict.DROP, reason="open_tmpfile")
+                return Decision(Verdict.DROP, reason="open_tmpfile", value="L3")
             if "O_CREAT" in flags or "O_TRUNC" in flags:
-                return Decision(Verdict.EMIT, verb="create")
-            return Decision(Verdict.DROP, reason="open_readonly")
+                return Decision(Verdict.EMIT, verb="create", value="L1")
+            return Decision(Verdict.DROP, reason="open_readonly", value="L3")
 
         spec = self.by_call.get(name)
         if spec is not None:
-            return Decision(Verdict.EMIT, verb=spec.name)
-        return Decision(Verdict.UNMAPPED, reason="unmapped")
+            return Decision(Verdict.EMIT, verb=spec.name, value="L1")
+        return Decision(Verdict.UNMAPPED, reason="unmapped", value="L2")
 
     # -- 供测试与报告 --------------------------------------------------
     def verb_count(self) -> int:

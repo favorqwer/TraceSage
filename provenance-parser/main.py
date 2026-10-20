@@ -39,7 +39,8 @@ def _build() -> argparse.ArgumentParser:
     ap.add_argument("--wsl-distro", default="")
     ap.add_argument("--detect-backends", action="store_true", help="探测并打印后端可用性后退出")
     ap.add_argument("--max-events", type=int, default=0, help="只读前 N 个事件（开发用）")
-    ap.add_argument("--no-audit", action="store_true", help="跳过第二趟采集端审计")
+    ap.add_argument("--audit", action="store_true", help="额外跑两趟采集端审计（默认跳过）")
+    ap.add_argument("--no-audit", action="store_true", help="兼容旧参数；默认已跳过审计")
     ap.add_argument("--no-payload", action="store_true", help="边属性不写 head 载荷")
     ap.add_argument("--dry-run", action="store_true", help="只解析，不写 Neo4j")
     ap.add_argument("--out-dir", default="", help="报告目录（默认 output/parser-v2/<scenario>）")
@@ -58,7 +59,7 @@ def _apply_args(settings: Settings, args: argparse.Namespace) -> Settings:
         backend=args.backend,
         sysdig_bin=args.sysdig_bin,
         max_events=args.max_events or None,
-        audit=not args.no_audit,
+        audit=bool(args.audit and not args.no_audit),
         ssh_host=args.ssh_host or settings.scap.ssh_host,
         ssh_user=args.ssh_user or settings.scap.ssh_user,
         ssh_port=args.ssh_port or settings.scap.ssh_port,

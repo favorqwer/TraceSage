@@ -15,11 +15,11 @@ DATA = ROOT / "data"
 
 
 def row(num, direction, call, text="", pid=100, cid="host", ns=1000, exe="/bin/sh",
-        cwd="/", ppid=1, ruid="0", cmdline=""):
+        cwd="/", ppid=1, ruid="0", proc_args=""):
     return EventRow(
         num=num, ns=ns, direction=direction, call=call, pid=pid, tid=pid,
         container_id=cid, exe=exe, cwd=cwd, ppid=ppid, ruid=ruid,
-        cmdline=cmdline, args=A.parse(text),
+        proc_args=proc_args, args=A.parse(text),
     )
 
 
@@ -33,8 +33,9 @@ class TableTest(unittest.TestCase):
     def setUp(self):
         self.t = Tables(DATA)
 
-    def test_verb_enum_is_34(self):
-        self.assertEqual(self.t.verb_count() + len(DEFERRED_VERBS), 34)
+    def test_verb_enum_is_35(self):
+        # 原 30 个动词 + 新增 unmount = 31；另有 4 个按约定延后
+        self.assertEqual(self.t.verb_count() + len(DEFERRED_VERBS), 35)
 
     def test_every_verb_has_handler(self):
         for name in self.t.verbs:

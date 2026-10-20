@@ -30,6 +30,7 @@ HANDLERS = {
     "write": file.write,
     "chmod": file.chmod,
     "mount": file.mount,
+    "unmount": file.unmount,
     "chroot": file.chroot,
     "ns": file.ns,
     "ioctl": file.ioctl,

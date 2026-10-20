@@ -58,6 +58,47 @@ class ObjSource(str, Enum):
     NONE = "none"
 
 
+class FileKind(str, Enum):
+    """File 节点的小而稳定的类型枚举；不在枚举内的 fd 类型不进 File。"""
+
+    FILE = "file"
+    DIRECTORY = "directory"
+    PIPE = "pipe"
+    UNIX = "unix"
+    NETLINK = "netlink"
+    SPECIAL = "special"
+    UNKNOWN = "unknown"
+
+
+_FD_TO_FILE_KIND = {
+    "file": FileKind.FILE,
+    "directory": FileKind.DIRECTORY,
+    "pipe": FileKind.PIPE,
+    "unix": FileKind.UNIX,
+    "netlink": FileKind.NETLINK,
+    "event": FileKind.SPECIAL,
+    "timerfd": FileKind.SPECIAL,
+    "signalfd": FileKind.SPECIAL,
+    "inotify": FileKind.SPECIAL,
+    "eventpoll": FileKind.SPECIAL,
+    "bpf": FileKind.SPECIAL,
+    "memfd": FileKind.SPECIAL,
+    "other": FileKind.SPECIAL,
+}
+
+
+def file_kind_of(value: str | None) -> FileKind | None:
+    """fd 类型/路径事件 -> File.kind；ipv4/ipv6 返回 None（不是 File）。"""
+    if not value:
+        return FileKind.UNKNOWN
+    if value in ("ipv4", "ipv6"):
+        return None
+    try:
+        return FileKind(value)
+    except ValueError:
+        return _FD_TO_FILE_KIND.get(value, FileKind.SPECIAL)
+
+
 @dataclass(frozen=True, slots=True)
 class ProcKey:
     host_id: str
