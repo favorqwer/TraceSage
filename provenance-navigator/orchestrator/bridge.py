@@ -61,13 +61,13 @@ def find_local_ips(edges: List[Dict[str, Any]]) -> Set[str]:
 
 
 def get_external_ips(endpoint_str: Any, local_ips: Set[str]) -> Set[str]:
-    """从网络端点字符串中提取对端外部 IP 地址。"""
+    """从网络端点字符串中提取对端外部 IP 地址（严格排除 RFC 1122 环回网络 127.0.0.0/8 与 ::1）。"""
     ext = set()
     if endpoint_str and "->" in str(endpoint_str):
         left, _, right = str(endpoint_str).partition("->")
         for part in (left, right):
             ip = part.split(":")[0] if ":" in part else part
-            if ip and ip not in local_ips:
+            if ip and ip not in local_ips and not ip.startswith("127.") and ip != "::1":
                 ext.add(ip)
     return ext
 
@@ -76,6 +76,9 @@ def is_readonly_system_mechanism(src: Any, syscall: Any, dst: Any) -> bool:
     """操作系统只读机制与系统套接字调用（防依赖爆炸）。"""
     s, d = str(src), str(dst)
     if any(s.startswith(p) or d.startswith(p) for p in LOGIN_MACHINERY_PREFIXES):
+        return True
+    # 排除系统内部本地 DNS 解析器 (如 127.0.0.53:53) 的伪连接
+    if (":53" in s and "127." in s) or (":53" in d and "127." in d):
         return True
     if str(syscall) in ("read", "recvfrom"):
         if any(s.startswith(p) or d.startswith(p) for p in READONLY_MECHANISM_PREFIXES):
