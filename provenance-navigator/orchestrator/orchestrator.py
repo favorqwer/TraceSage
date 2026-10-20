@@ -145,7 +145,7 @@ class RouterOrchestrator:
 
         # 6. 通道四（因果拓扑前向影响与死端伴生碎片剪枝）：消除包管理内部伴生碎片，阻断假阳性扩散
         pivot_router = CausalPivotRouter(poi_anchors=anchor_triples)
-        final_confirmed_map, debris_pruned = pivot_router.route_confirmed(final_confirmed_map)
+        final_confirmed_map, debris_pruned = pivot_router.route_confirmed(final_confirmed_map, candidate_pool=candidate_pool)
 
         # 组装最终未排除段（被剪枝的碎片安全留存至未排除段，绝不静默丢失）
         final_unexcluded = remaining_ambiguous + pruned_background + debris_pruned
