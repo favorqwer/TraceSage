@@ -5,7 +5,7 @@
     python tools/l1_index.py --database attack-3-phishing-beacon-cryptomining
     python tools/l1_index.py --database attack-3-phishing-beacon-cryptomining --force
 
-正常跑 agent 时不用手动建：索引缺失或过期会自动重建（见 `pagent/layers/l1_reach/graph_index.py`
+正常跑导航器时不用手动建：索引缺失或过期会自动重建（见 `foundation/layers/l1_reach/graph_index.py`
 的 `ensure_snapshot`）。这个脚本只用于「先建好再看，或者强制重建」。
 """
 
@@ -17,16 +17,16 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "provenance-agent"))
+sys.path.insert(0, str(ROOT / "provenance-navigator"))
 
-from pagent.core import settings  # noqa: E402
-from pagent.core.db import ReadOnlyGraph  # noqa: E402
-from pagent.layers.l1_reach import graph_index as snap  # noqa: E402
+from foundation.core import settings  # noqa: E402
+from foundation.core.db import ReadOnlyGraph  # noqa: E402
+from foundation.layers.l1_reach import graph_index as snap  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="构建第 1 层的顶点-时间索引快照")
-    parser.add_argument("--database", required=True, help="Neo4j 库名（见 config/scenarios.json）")
+    parser.add_argument("--database", required=True, help="Neo4j 库名（见 provenance-navigator/config/scenarios.json）")
     parser.add_argument("--force", action="store_true", help="已存在也重建")
     args = parser.parse_args()
 

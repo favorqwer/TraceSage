@@ -1,20 +1,21 @@
 """慢速语义通道：基于大语言模型的歧义候选边判定仲裁器（LlmJudge / LlmJudgeClient）。
 
-与 provenance-agent 判定层完全同口径、同提示词、同数据结构，实现无缝复用与路由适配。
+与导航器内迁入的判定底座（`foundation/layers/l2_judge/`）同口径、同提示词、同数据结构，
+只把「送哪些边去判」限制在符号通道未确认的歧义边上。
 """
 import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT / "provenance-agent") not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT / "provenance-agent"))
+_NAV_DIR = Path(__file__).resolve().parents[1]
+if str(_NAV_DIR) not in sys.path:
+    sys.path.insert(0, str(_NAV_DIR))
 
-from pagent.core import settings
-from pagent.core.llm import make_model
-from pagent.layers import l2_judge as l2
-from pagent.orchestration.judging import _judge_pass
+from foundation.core import settings
+from foundation.core.llm import make_model
+from foundation.layers import l2_judge as l2
+from foundation.orchestration.judging_pass import _judge_pass
 
 
 class LlmJudge:

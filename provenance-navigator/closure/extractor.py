@@ -4,7 +4,7 @@
 从 Neo4j 中根据场景配置匹配终点事件（POI），沿着进程、文件、套接字等图实体展开反向因果可达闭包，
 抽取所有候选因果边，作为神经符号路由器的输入，彻底摆脱对外部大模型智能体预过滤产物的依赖。
 
-场景与调查起点（POI）的唯一真源为 provenance-agent/config/scenarios.json，本系统不再维护副本。
+场景与调查起点（POI）的唯一真源为 provenance-navigator/config/scenarios.json，本系统不再维护副本。
 """
 
 import sys
@@ -12,18 +12,18 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-# 引入 provenance-agent 核心库以复用确定性图展开逻辑
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT / "provenance-agent") not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT / "provenance-agent"))
+# 引入导航器内迁入的取数底座（反向因果闭包与折叠）
+_NAV_DIR = Path(__file__).resolve().parents[1]
+if str(_NAV_DIR) not in sys.path:
+    sys.path.insert(0, str(_NAV_DIR))
 
-from pagent import app
-from pagent.core import scenarios, settings
-from pagent.orchestration import expand_closure, intake
+from foundation.core import scenarios, settings
+from foundation.deps import build_deps
+from foundation.orchestration import expand_closure, intake
 
 
 def list_scenarios() -> List[str]:
-    """全部场景名（真源：provenance-agent 的场景配置）。"""
+    """全部场景名（真源：provenance-navigator/config/scenarios.json）。"""
     settings.load_dotenv()
     return scenarios.available_scenarios()
 
@@ -56,7 +56,7 @@ def extract_raw_closure(scenario_name: str, return_deps: bool = False,
     run_id = f"pnavigator-{int(time.time())}"
 
     t0 = time.time()
-    deps = app.build_deps(sc, run_id)
+    deps = build_deps(sc, run_id)
     intake.intake(deps)
     prep = expand_closure.prepare(deps)
 
