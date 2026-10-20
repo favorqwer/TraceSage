@@ -18,7 +18,7 @@
     - 召回（按步骤）= (命中条目数 + 命中规则数) / (条目数 + 规则数)
     - 查准（按边）= (命中条目边数 + 满足规则的边数) / 报告去重后的内容三元组数
     - 规则条件里的端点种类（process/file/network）从场景库顶点标签判定（场景名 -> 库名见
-      provenance-agent/config/scenarios.json）；连不上库时 vertex 条件不参与判定
+      provenance-navigator/config/scenarios.json）；连不上库时 vertex 条件不参与判定
 
 baseline.json 的 final_edges 键是 "host|srcId|dstId|eventId"（数字 id 空间），
 不含 syscall/时间。旧产物经 Neo4j 按 event_id + 端点内容反查补全（连接参数取根 .env）；

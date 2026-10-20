@@ -320,9 +320,9 @@ def render_overview(data: dict, unex: dict, fingerprints: dict, run_stamp: str) 
     add("2. **未排除段列** = 把该段当作上报边集合、用官方工具评分的结果；它是保守兜底池，反映覆盖的保守程度而非判定质量。")
     add("3. **大模型调用次数** = 真实记账值（`deps.budget.calls`），如实写入报告 `stats.llm_calls`；"
         "`stats.promoted_by_motif` 记录规则确认边的基模归因；`stats.conf_filtered_count` 记录被在线门槛否决的匹配次数。")
-    add("4. **POI 锚点**：调查起点来自 `provenance-agent/config/scenarios.json` 的人工指定（外部前置输入），报告中的"
+    add("4. **POI 锚点**：调查起点来自 `provenance-navigator/config/scenarios.json` 的人工指定（外部前置输入），报告中的"
         "「锚点强制确认」条数即该锚点事件本身；系统自主范围是自锚点起反向闭包的抽取、判定与归因。")
-    add("5. **闭包取数**：走 `tmp/provenance-agent/l1-index/` 下的 L1 索引快照（日志中 `source=snapshot`）。"
+    add("5. **闭包取数**：走 `tmp/provenance-navigator/l1-index/` 下的 L1 索引快照（日志中 `source=snapshot`）。"
         "索引缺失时闭包耗时会上升，召回/查准不受影响。")
     add("6. **边界穿越故事通道的判据与边界**：判据只引用图内事实（连接对象上 connect/accept 是否成对、谁写出了什么对象、"
         "谁消费了它、两个主体的可执行程序是否相同）与操作系统本体事实（内核按需生成的伪文件——/sys、/proc、/dev 下设备与终端节点、"

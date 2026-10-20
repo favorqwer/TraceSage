@@ -39,7 +39,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SCENARIOS = ROOT / "provenance-agent" / "config" / "scenarios.json"
+SCENARIOS = ROOT / "provenance-navigator" / "config" / "scenarios.json"
 
 _LABEL_TO_KIND = {"Process": "process", "File": "file", "Network": "network"}
 
@@ -200,7 +200,7 @@ class VertexKinds:
 
     @classmethod
     def for_gt(cls, gt, database=None):
-        """按 GT 的 scenario 找场景库（provenance-agent/config/scenarios.json），读顶点种类。"""
+        """按 GT 的 scenario 找场景库（provenance-navigator/config/scenarios.json），读顶点种类。"""
         db = database or scenario_database(gt.get("scenario"))
         if not db:
             return cls.empty()

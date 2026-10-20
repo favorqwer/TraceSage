@@ -74,7 +74,7 @@ import util.llm.LlmConfig;
  * `--poi-srcip/--poi-srcport/--poi-dstip/--poi-dstport/--poi-optype`；文件 POI 用
  * `--poi-file <绝对路径>`，此时 dst 标签切为 File
  * （`(p:Process)-[st:FileEvent{optype:"write"}]->(f:File{name:"..."})`，`name` 经兼容层映射到 `path`）。
- * 各场景的 POI 见 `provenance-agent/config/scenarios.json`。属性名沿用 PG 侧写法，
+ * 各场景的 POI 见 `provenance-navigator/config/scenarios.json`。属性名沿用 PG 侧写法，
  * 由 Neo4jServerTraversal 兼容层翻译到 Neo4j schema（lip/lport/rip/rport/syscall，
  * 并剥掉 /32、/128 后缀）。
  *

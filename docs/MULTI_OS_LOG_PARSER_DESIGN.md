@@ -520,7 +520,7 @@ $$\text{Content Triple} = \langle \text{Source Entity String}, \text{Normalized 
 ## 6.2 既有代码适配改动清单（改动行数 $\le 5$ 行）
 
 由于边语义与实体类型被严格控制，已有代码只需要增加对 Windows 注册表边类型的枚举：
-*   **[`provenance-agent/pagent/core/graph_facts.py`](file:///E:/Work/TraceSage/provenance-agent/pagent/core/graph_facts.py)**：
+*   **[`provenance-navigator/foundation/core/graph_facts.py`](file:///E:/Work/TraceSage/provenance-navigator/foundation/core/graph_facts.py)**：
     ```python
     # 原查询：
     # MATCH (s)-[r:p2p|p2f|f2p|p2n|n2p]->(d)

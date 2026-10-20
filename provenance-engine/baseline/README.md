@@ -29,7 +29,7 @@ ProGQL 查询语言层（语法/解析器/AST 构建器）已从本仓库删除�
 bash provenance-engine/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
   output/engine-baseline/1_Web_Exploit_Ransomware --poi-file /srv/data/README_RESTORE.txt
 # 参数: run-baseline.sh <场景名> [outDir] [--poi-... / --poi-file <路径> / --entry-limit ...]
-# （POI 没有默认值，必须显式给；各场景的 POI 见 provenance-agent/config/scenarios.json）
+# （POI 没有默认值，必须显式给；各场景的 POI 见 provenance-navigator/config/scenarios.json）
 ```
 
 - 数据源：**Neo4j 服务器**（scap-parser 导入的溯源图；`bolt://localhost:7687/neo4j`，
@@ -40,7 +40,7 @@ bash provenance-engine/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
   描述 Network POI；`--poi-file <绝对路径>` 切换为 File POI
   （`(p:Process)-[st:FileEvent{optype:"..."}]->(f:File{name:"..."})`），
   `name` 经兼容层映射到 `File.path`。入口限额默认 5，用 `--entry-limit N` 覆盖。
-  各场景的 POI 见 `provenance-agent/config/scenarios.json`。
+  各场景的 POI 见 `provenance-navigator/config/scenarios.json`。
 - 场景范围：当前五场景各自一个独立库（前缀 `attack-`，命名约定见根 AGENTS.md），
   跑某个场景时用 `NEO4J_DATABASE` 指向对应场景库，并用 `run-baseline.sh` 的场景名与
   产物目录参数区分场景；产物落 `output/engine-baseline/<场景>/`（`baseline.json` +
