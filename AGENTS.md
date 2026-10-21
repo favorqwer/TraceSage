@@ -76,15 +76,21 @@ TraceSage/
 ## 第五部分：数据库规范与评测协议
 
 ### 数据库命名规范
-每个场景对应独立的 Neo4j 数据库（小写字母与连字符，前缀统一为 `attack-`）：
-| 场景 | SCAP 文件 / 日志 | Neo4j 数据库 |
+每个场景对应独立的 Neo4j 数据库（小写字母与连字符，前缀统一为 `attack-`，默认全部采用 `-v2` 标准物理规范 Schema 数据库）：
+| 场景 | SCAP 文件 / 日志 | Neo4j 数据库（默认采用 -v2 库） |
 |---|---|---|
-| `1_Web_Exploit_Ransomware` | `attack/data/1/capture.scap` | `attack-1-web-exploit-ransomware` |
-| `2_SSH_Spray_Lateral_Exfiltration` | `attack/data/2/capture.scap` | `attack-2-ssh-spray-lateral-exfiltration` |
-| `3_Phishing_Beacon_Cryptomining` | `attack/data/3/capture.scap` | `attack-3-phishing-beacon-cryptomining` |
-| `4_Repo_Poisoning_Backdoor` | `attack/data/4/capture.scap` | `attack-4-repo-poisoning-backdoor` |
-| `5_Exposed_Service_Pivot` | `attack/data/5/capture.scap` | `attack-5-exposed-service-pivot` |
+| `1_Web_Exploit_Ransomware` | `attack/data/1/capture.scap` | `attack-1-web-exploit-ransomware-v2` |
+| `2_SSH_Spray_Lateral_Exfiltration` | `attack/data/2/capture.scap` | `attack-2-ssh-spray-lateral-exfiltration-v2` |
+| `3_Phishing_Beacon_Cryptomining` | `attack/data/3/capture.scap` | `attack-3-phishing-beacon-cryptomining-v2` |
+| `4_Repo_Poisoning_Backdoor` | `attack/data/4/capture.scap` | `attack-4-repo-poisoning-backdoor-v2` |
+| `5_Exposed_Service_Pivot` | `attack/data/5/capture.scap` | `attack-5-exposed-service-pivot-v2` |
+| `6_Web_SQLi_Data_Exfiltration` | `attack/data/6/capture.scap` | `attack-6-web-sqli-data-exfiltration-v2` |
+| `7_DB_Bruteforce_Datawipe` | `attack/data/7/capture.scap` | `attack-7-db-bruteforce-datawipe-v2` |
+| `8_FTP_Weakcreds_Webshell_Exfiltration` | `attack/data/8/capture.scap` | `attack-8-ftp-weakcreds-webshell-exfiltration-v2` |
+| `9_Exposed_Container_Escape` | `attack/data/9/capture.scap` | `attack-9-exposed-container-escape-v2` |
+| `10_Tomcat_Weakcreds_DNS_Exfiltration` | `attack/data/10/capture.scap` | `attack-10-tomcat-weakcreds-dns-exfiltration-v2` |
 
+- **默认使用 -v2 库底线**：历史无 `-v2` 后缀的库（如 `attack-1-web-exploit-ransomware`）缺少必需的边属性（`action`、`start_ns`、`result` 等），属于早期遗留非标准库，严禁使用；系统调用图分析、基线评测与标注默认且必须连接 `-v2` 结尾的标准库。
 - 数据库操作严格使用官方驱动与参数化 Cypher，禁止字符串拼接构造 Cypher。
 
 ### 常用核心工具
