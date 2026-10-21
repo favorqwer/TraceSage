@@ -48,8 +48,9 @@ def load_agent_report(path, scenario=None):
     triples = {}
     skipped = 0
     for edge in edges:
-        src, dst = edge.get("src"), edge.get("dst")
-        syscall = edge.get("syscall")
+        src = eg.strip_endpoint_key(edge.get("src"))
+        dst = eg.strip_endpoint_key(edge.get("dst"))
+        syscall = edge.get("syscall") or edge.get("action")
         if not src or not dst or not syscall:
             skipped += 1
             continue

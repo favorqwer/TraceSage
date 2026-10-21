@@ -9,10 +9,10 @@
       "rule_id": "R1",
       "direction": "src_to_dst" | "either",
       "action": ["write", "rename", ...],
+      "effect": "success" | "failure" | "any",           # 可选，缺省 any
       "source": <端点条件>,
       "target": <端点条件>,
-      "edge": {"bytes": {"op": ">=", "value": 1024}},   # 可选，本模块按实例属性判定
-      "covered_triples": 478                            # 只记账，不参与判定
+      "edge": {"bytes": {"op": ">=", "value": 1024}}     # 可选，本模块按实例属性判定
     }
 
 端点条件是：叶子字段（vertex / match / value / values）与组合字段（any_of / all_of / none_of）可同现，
@@ -128,9 +128,13 @@ def _edge_matches(node, edge_attrs):
 # --------------------------------------------------------------------------- 规则判定
 
 
-def rule_matches(rule, src, syscall, dst, kinds=None, edge_attrs=None):
-    """一条报告边是否命中该规则。kinds 为 VertexKinds（或 None）；edge_attrs 为实例属性（可缺）。"""
+def rule_matches(rule, src, syscall, dst, kinds=None, edge_attrs=None,
+                 effect=None):
+    """一条报告边是否命中该规则。effect 为 success/failure/None（未知）；特定 effect 规则遇到未知 effect 不命中。"""
     if syscall not in (rule.get("action") or []):
+        return False
+    wanted_effect = rule.get("effect") or "any"
+    if wanted_effect != "any" and effect != wanted_effect:
         return False
     ok, _ = _edge_matches(rule.get("edge"), edge_attrs)
     if not ok:
@@ -180,11 +184,11 @@ class VertexKinds:
         uri, auth = _credentials()
         if not uri:
             return cls.empty(database=database)
-        # 内容口径与评分一致：进程取可执行文件路径（无则名字），文件取路径，网络取 network_id
+        # 内容口径与新图一致：进程 exe_path，文件 path，网络 endpoints
         query = (
             "MATCH (n) RETURN labels(n)[0] AS label, "
-            "CASE labels(n)[0] WHEN 'Process' THEN coalesce(n.exepath, n.name) "
-            "WHEN 'File' THEN coalesce(n.file_id, n.path) ELSE n.network_id END AS key"
+            "CASE labels(n)[0] WHEN 'Process' THEN coalesce(n.exe_path, n.exepath, n.name, '<NA>') "
+            "WHEN 'File' THEN coalesce(n.path, n.file_id) ELSE coalesce(n.endpoints, n.network_id) END AS key"
         )
         mapping = {}
         try:
@@ -249,9 +253,15 @@ def evaluate_report(gt_triples, rules, report_triples, kinds=None):
 
     gt_triples: [(src, syscall, dst, phase), ...]（必须集合条目）
     rules:      [(动作 id, 规则), ...]（可能集合）
-    report_triples: [(src, syscall, dst), ...]（报告去重后的内容三元组）
+    report_triples: [(src, syscall, dst), ...] 或带 effect 的四元组
     """
-    report_keys = set(report_triples)
+    report_keys = set()
+    report_effects = {}
+    for edge in report_triples:
+        triple = tuple(edge[:3])
+        report_keys.add(triple)
+        if len(edge) > 3 and edge[3] is not None:
+            report_effects[triple] = edge[3]
     must_hits = [t for t in gt_triples if (t[0], t[1], t[2]) in report_keys]
     must_misses = [t for t in gt_triples if (t[0], t[1], t[2]) not in report_keys]
     must_keys = {(t[0], t[1], t[2]) for t in gt_triples}
@@ -262,12 +272,14 @@ def evaluate_report(gt_triples, rules, report_triples, kinds=None):
     for step_id, rule in rules:
         hit = False
         for edge in report_triples:
+            triple = tuple(edge[:3])
             _, skipped = _edge_matches(rule.get("edge"), None)
             if skipped and rule.get("edge"):
                 edge_attrs_skipped.add(rule["rule_id"])
-            if rule_matches(rule, edge[0], edge[1], edge[2], kinds=kinds):
+            if rule_matches(rule, edge[0], edge[1], edge[2], kinds=kinds,
+                            effect=report_effects.get(triple)):
                 hit = True
-                edge_rule_hits.add(edge)
+                edge_rule_hits.add(triple)
         (rule_hits if hit else rule_misses).append(rule)
     rule_hits = [r for r in rule_hits]
 

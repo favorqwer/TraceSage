@@ -52,12 +52,26 @@ def load_env(path=ROOT / ".env"):
     return env
 
 
+def strip_endpoint_key(k):
+    if not isinstance(k, str):
+        return k
+    if k.startswith(("p:", "f:")) and k.count(":") >= 2:
+        return k.split(":", 2)[2]
+    if k.startswith("n:") and k.count(":") >= 2:
+        return k.split(":", 2)[2]
+    return k
+
 def load_gt(path):
     gt = json.loads(Path(path).read_text(encoding="utf-8"))
     triples = []
-    for phase in gt["attack_path"]:
+    for phase in gt.get("attack_path", []):
+        phase_name = phase.get("phase") or phase.get("id") or "unnamed"
         for edge in phase.get("edges", []) or []:
-            triples.append((edge["src"], edge["syscall"], edge["dst"], phase["phase"]))
+            call = edge.get("syscall") or edge.get("action")
+            src = strip_endpoint_key(edge.get("src"))
+            dst = strip_endpoint_key(edge.get("dst"))
+            if src and call and dst:
+                triples.append((src, call, dst, phase_name))
     return gt, triples
 
 
@@ -204,17 +218,19 @@ def report(title, triples, gt_triples, rules=(), kinds=None, instances=None, poi
         print(f"未命中的规则: {', '.join(met['rule_misses'])}")
     if met["extras"]:
         print(f"多出边 ({len(met['extras'])}):")
+        triple_to_inst = {}
+        if instances is not None and poi is not None:
+            for inst in instances:
+                if inst.get("start") is not None and inst.get("end") is not None:
+                    k = (inst["src"], inst["syscall"], inst["dst"])
+                    if k not in triple_to_inst:
+                        triple_to_inst[k] = inst
         for src, syscall, dst in met["extras"]:
             line = f"  {src} --{syscall}--> {dst}"
-            if instances is not None and poi is not None:
-                offs = [
-                    fmt_offset((i["start"] + i["end"]) / 2 - poi["start_time"])
-                    for i in instances
-                    if (i["src"], i["syscall"], i["dst"]) == (src, syscall, dst)
-                    and i["start"] is not None
-                ]
-                if offs:
-                    line += f"   [相对POI {offs[0]}]"
+            inst = triple_to_inst.get((src, syscall, dst))
+            if inst is not None:
+                off = fmt_offset((inst["start"] + inst["end"]) / 2 - poi["start_time"])
+                line += f"   [相对POI {off}]"
             print(line)
     return met["steps_hit"], met["steps_total"], met["correct_edges"], met["reported_triples"]
 
