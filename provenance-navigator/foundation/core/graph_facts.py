@@ -24,6 +24,44 @@ RELATION_LABELS: dict[str, tuple[str, str]] = {
     "p2p": ("Process", "Process"),
 }
 
+# 规范关系名（新解析器大驼峰全称）与内部简写代码的双向映射
+REL_NORM: dict[str, str] = {
+    "ProcessToFile": "p2f",
+    "FileToProcess": "f2p",
+    "ProcessToNetwork": "p2n",
+    "NetworkToProcess": "n2p",
+    "ProcessToProcess": "p2p",
+    "p2f": "p2f",
+    "f2p": "f2p",
+    "p2n": "p2n",
+    "n2p": "n2p",
+    "p2p": "p2p",
+}
+
+REL_CYPHER: dict[str, str] = {
+    "p2f": "ProcessToFile|p2f",
+    "f2p": "FileToProcess|f2p",
+    "p2n": "ProcessToNetwork|p2n",
+    "n2p": "NetworkToProcess|n2p",
+    "p2p": "ProcessToProcess|p2p",
+    "ProcessToFile": "ProcessToFile|p2f",
+    "FileToProcess": "FileToProcess|f2p",
+    "ProcessToNetwork": "ProcessToNetwork|p2n",
+    "NetworkToProcess": "NetworkToProcess|n2p",
+    "ProcessToProcess": "ProcessToProcess|p2p",
+}
+
+
+def normalize_rel(rel: str) -> str:
+    """将新版大驼峰关系名或旧版缩写归一为系统内部标准简写（p2f/f2p等）。"""
+    return REL_NORM.get(rel, rel)
+
+
+def cypher_rel_match(rel: str) -> str:
+    """返回用于 Cypher 匹配的双兼容关系类型表达式（如 ProcessToFile|p2f）。"""
+    return REL_CYPHER.get(rel, rel)
+
+
 # 全部五类（查子句或查询分支用；顺序固定）
 ALL_RELS = ("p2f", "f2p", "p2n", "n2p", "p2p")
 # 归属进程在源侧（进程把内容写进对象）的两类
@@ -36,17 +74,17 @@ DERIVATION_REL = "p2p"
 
 def labels_of(rel: str) -> tuple[str, str]:
     """一条边的两端标签（源端, 目标端）。未知关系类型按 Process -> Process（兜底口径）。"""
-    return RELATION_LABELS.get(rel, ("Process", "Process"))
+    return RELATION_LABELS.get(normalize_rel(rel), ("Process", "Process"))
 
 
 def owner_is_source(rel: str) -> bool:
     """内容三元组的源端是不是"归属进程"那一端。"""
-    return rel in PRODUCER_RELS
+    return normalize_rel(rel) in PRODUCER_RELS
 
 
 def is_derivation(rel: str) -> bool:
     """是不是派生边（父进程 → 子进程，归属子进程）。"""
-    return rel == DERIVATION_REL
+    return normalize_rel(rel) == DERIVATION_REL
 
 
 def content_triple_of(rel: str, syscall: str, owner: str, other: str,

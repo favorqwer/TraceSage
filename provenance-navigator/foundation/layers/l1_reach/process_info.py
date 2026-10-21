@@ -9,11 +9,24 @@ from typing import Any, Iterable
 
 from ...core.db import ReadOnlyGraph
 
-_PROCESS_INFO_RETURN = ("p.process_id AS process_id, p.pid AS pid, p.name AS name, "
-                        "p.exepath AS exepath, p.args AS args, p.cwd AS cwd")
-_PROCESS_INFO_ONE = f"MATCH (p:Process {{process_id:$pid}}) RETURN {_PROCESS_INFO_RETURN}"
-_PROCESS_INFO_MANY = (f"UNWIND $pids AS pid MATCH (p:Process {{process_id: pid}}) "
-                      f"RETURN {_PROCESS_INFO_RETURN}")
+_PROCESS_INFO_RETURN = (
+    "coalesce(p.process_id, coalesce(p.host_id, '') + '|' + coalesce(p.container_id, '') + '|' + toString(p.pid) + '|' + toString(p.start_ns)) AS process_id, "
+    "p.pid AS pid, coalesce(p.name, '') AS name, "
+    "coalesce(p.exe_path, p.exepath, p.name) AS exepath, "
+    "coalesce(p.cmdline, p.args, '') AS args, "
+    "coalesce(p.cwd, '') AS cwd"
+)
+_PROCESS_INFO_ONE = (
+    f"MATCH (p:Process) WHERE (p.process_id = $pid OR "
+    f"(coalesce(p.host_id, '') + '|' + coalesce(p.container_id, '') + '|' + toString(p.pid) + '|' + toString(p.start_ns)) = $pid) "
+    f"RETURN {_PROCESS_INFO_RETURN}"
+)
+_PROCESS_INFO_MANY = (
+    f"UNWIND $pids AS pid MATCH (p:Process) "
+    f"WHERE (p.process_id = pid OR "
+    f"(coalesce(p.host_id, '') + '|' + coalesce(p.container_id, '') + '|' + toString(p.pid) + '|' + toString(p.start_ns)) = pid) "
+    f"RETURN {_PROCESS_INFO_RETURN}"
+)
 
 _PROCESS_INFO_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 

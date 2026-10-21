@@ -218,7 +218,8 @@ def run_closure(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
         """
         dist = 0 if from_dist < 0 else int(from_dist) + 1
         mask = _SEED_BIT if from_dist < 0 else CHANNEL_BITS.get(via_kind, 0)
-        prev = included.get(ev.event_id)
+        edge_key = (ev.event_id, ev.rel)
+        prev = included.get(edge_key)
         if prev is not None:
             # 同一条边可能从多个顶点被找到：留跳数最少的那一份（跳数相同则保留先到的）
             if dist < prev.dist:
@@ -231,7 +232,7 @@ def run_closure(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
         ev.dist = dist
         ev.via_kind, ev.via_key = via_kind, via_key
         ev.support = mask
-        included[ev.event_id] = ev
+        included[edge_key] = ev
         stats.events_included += 1
         if no_expand:
             stats.empty_reads += 1
@@ -523,7 +524,8 @@ class SnapshotReader:
                 # 派生边在两端顶点的块里各有一条入射记录：子进程侧是"它自己被谁启动"，
                 # 父进程侧是"它启动过谁"，两条都要（同一主体子进程算上游，见 `run_closure`）
                 self.rows += 1
-                if seen is not None and rec[6] in seen:
+                rel = snap.REL_BY_CODE[rec[2]]
+                if seen is not None and ((rec[6], rel) in seen or rec[6] in seen):
                     self.skipped += 1          # 已经收进闭包：不重造内部表示
                     continue
                 out.append(self._event(rec))
@@ -553,7 +555,7 @@ class SnapshotReader:
                 if "not_delivery" in J.event_ruling(rel, syscall, rec[7]).effects:
                     continue                # 连接建立类操作不传递内容
                 self.rows += 1
-                if seen is not None and rec[6] in seen:
+                if seen is not None and ((rec[6], rel) in seen or rec[6] in seen):
                     self.skipped += 1
                     continue
                 out.append(self._event(rec))

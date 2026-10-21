@@ -33,11 +33,25 @@
       "id": "obj.deliver.user_runtime_socket",
       "label": "用户运行目录下的套接字",
       "input": "object",
-      "match": {"prefixes": ["unix:[/run/user/"]},
+      "match": {"prefixes": ["unix:[/run/user/", "/run/user/"]},
       "effects": [],
       "basis": "structure",
       "why": "用户会话总线套接字能在进程之间传内容（包括提权指令）。它落在下面系统级套接字大前缀的字面范围内，所以必须排在大前缀之前先命中。",
       "evidence": "同上；条目顺序在判据表里可见，改动时按顺序核对。"
+    },
+    {
+      "id": "obj.deliver.container_escape_socket",
+      "label": "容器运行时控制套接字（Docker/Containerd逃逸通道）",
+      "input": "object",
+      "match": {"prefixes": [
+        "unix:[/run/docker.sock", "unix:[/var/run/docker.sock",
+        "unix:[/run/containerd/", "unix:[/var/run/containerd/",
+        "/run/docker.sock", "/var/run/docker.sock"
+      ]},
+      "effects": [],
+      "basis": "structure",
+      "why": "容器逃逸核心依赖向宿主机 Docker/Containerd 控制套接字注入 API 请求，属于合法内容交付通道，排在系统套接字大前缀之前允许反向展开。",
+      "evidence": "容器逃逸攻击链标准通道。"
     },
     {
       "id": "obj.nondelivery.kernel_proc_pid",
@@ -93,7 +107,7 @@
       "id": "obj.nondelivery.system_socket",
       "label": "系统级套接字路径（分档类）",
       "input": "object",
-      "match": {"prefixes": ["unix:[/run/", "unix:[/var/run/"]},
+      "match": {"prefixes": ["unix:[/run/", "unix:[/var/run/", "/var/run/"]},
       "effects": ["no_expand"],
       "basis": "distribution",
       "why": "系统级套接字能在进程之间传内容（服务控制接口），判据同为分布判断。",

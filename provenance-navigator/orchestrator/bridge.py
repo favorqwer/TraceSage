@@ -10,12 +10,16 @@
 """
 from collections import Counter
 from typing import Any, Dict, List, Optional, Set, Tuple
+from closure.facts import process_identity_variants
 
 LOGIN_MACHINERY_PREFIXES = (
     "/etc/update-motd.d",
     "/usr/lib/update-notifier",
     "/usr/lib/ubuntu-release-upgrader",
     "/snap/snapd-desktop-integration",
+    "/etc/profile.d",
+    "/etc/default",
+    "/var/run/motd",
 )
 
 SHARED_DAEMONS = frozenset({
@@ -27,6 +31,13 @@ SHARED_DAEMONS = frozenset({
     "cron",
     "dbus-daemon",
     "rsyslogd",
+    "mysqld",
+    "mariadb",
+    "redis-server",
+    "postgres",
+    "mongod",
+    "slapd",
+    "java",
 })
 
 READONLY_MECHANISM_PREFIXES = (
@@ -44,20 +55,36 @@ def _key(e: Dict[str, Any]) -> Tuple[Any, Any, Any]:
 
 
 def find_local_ips(edges: List[Dict[str, Any]]) -> Set[str]:
-    """通过图上全量网络边统计单机的主机内网 IP（客观自适应推断，无任何硬编码）。"""
+    """通过图上全量网络边自适应推断内网受害主机 IP 集合（支持单机与多主机拓扑，无单 IP 假设）。"""
+    local_ips = {"127.0.0.1", "0.0.0.0", "localhost", "::1"}
     ip_counter = Counter()
+    server_ips = set()
+
     for e in edges:
-        for node in (e.get("src"), e.get("dst")):
+        sc = str(e.get("syscall") or "")
+        src = str(e.get("src") or "")
+        dst = str(e.get("dst") or "")
+
+        # 服务端接收外部请求 (accept/recvfrom)：其目标端是受害主机本地 IP
+        if sc in ("accept", "recvfrom") and "->" in src:
+            _, _, right = src.partition("->")
+            ip = right.split(":")[0] if ":" in right else right
+            if ip and not ip.startswith("127.") and not ip.startswith("0.0."):
+                server_ips.add(ip)
+
+        for node in (src, dst):
             if node and "->" in str(node):
                 left, _, right = str(node).partition("->")
                 for part in (left, right):
                     ip = part.split(":")[0] if ":" in part else part
                     if ip and not ip.startswith("127.") and not ip.startswith("0.0."):
                         ip_counter[ip] += 1
-    if not ip_counter:
-        return {"127.0.0.1", "0.0.0.0", "localhost"}
-    most_common_ip, _ = ip_counter.most_common(1)[0]
-    return {most_common_ip, "127.0.0.1", "0.0.0.0", "localhost"}
+
+    local_ips.update(server_ips)
+    if ip_counter:
+        most_common_ip, _ = ip_counter.most_common(1)[0]
+        local_ips.add(most_common_ip)
+    return local_ips
 
 
 def get_external_ips(endpoint_str: Any, local_ips: Set[str]) -> Set[str]:
@@ -110,7 +137,9 @@ class SessionActiveBridge:
         active_session_sockets: Set[str] = set()
         conf_ext_ips: Set[str] = set()
         conf_nodes: Set[str] = set()
-        conf_pids: Set[str] = set(high_conf_pids or [])
+        conf_pids: Set[str] = set()
+        for p in (high_conf_pids or []):
+            conf_pids.update(process_identity_variants(p))
 
         for k, e in confirmed_map.items():
             s, sc, d = str(e.get("src")), str(e.get("syscall")), str(e.get("dst"))
@@ -123,19 +152,20 @@ class SessionActiveBridge:
                 for ext_ip in get_external_ips(node, local_ips):
                     conf_ext_ips.add(ext_ip)
             if e.get("process_id"):
-                conf_pids.add(str(e.get("process_id")))
+                conf_pids.update(process_identity_variants(str(e.get("process_id"))))
             for _, p in e.get("src_identities", []):
-                conf_pids.add(p)
+                conf_pids.update(process_identity_variants(p))
             for _, p in e.get("dst_identities", []):
-                conf_pids.add(p)
+                conf_pids.update(process_identity_variants(p))
 
         # 2. 识别真正派生了攻击子进程的入站会话套接字
         # 逻辑：外部端点 S -> 守护进程 P (或直接作为父进程/服务) 派生攻击子进程 C
         for e in candidate_pool:
             s, sc, d = str(e.get("src")), str(e.get("syscall")), str(e.get("dst"))
             pid = str(e.get("process_id", ""))
+            pid_vars = process_identity_variants(pid)
             if sc in ("accept", "recvfrom") and "->" in s:
-                if pid in conf_pids:
+                if pid_vars.intersection(conf_pids):
                     active_session_sockets.add(s)
 
         # 3. 严格受限的会话网络桥接
@@ -164,7 +194,13 @@ class SessionActiveBridge:
                     continue
 
             # 如果对端是确诊的攻击节点或确诊外联工具，予以闭环
-            if other in conf_nodes or str(e.get("process_id")) in conf_pids:
+            pid_vars = process_identity_variants(str(e.get("process_id", "")))
+            for _, p in e.get("src_identities", []):
+                pid_vars.update(process_identity_variants(p))
+            for _, p in e.get("dst_identities", []):
+                pid_vars.update(process_identity_variants(p))
+
+            if other in conf_nodes or pid_vars.intersection(conf_pids):
                 rec = dict(e)
                 rec["origin"] = "confirmed"
                 rec["class"] = "story"

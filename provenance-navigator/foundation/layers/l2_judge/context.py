@@ -55,7 +55,7 @@ def summarize_process(graph: Any, process_id: str, owner: str,
     return {
         "process_id": process_id,
         "owner": owner,
-        "owner_args": info.get("args") or "",
+        "owner_args": info.get("cmdline") or info.get("args") or "",
         "owner_pid": info.get("pid") or "",
         "cwd": info.get("cwd") or "",
         "t0": min(int(r["starttime"]) for r in rows),

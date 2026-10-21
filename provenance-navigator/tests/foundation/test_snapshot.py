@@ -126,7 +126,7 @@ class StubGraph:
                     out.append(self._row(rel, e))
             return out
         for rel in ("p2f", "f2p", "p2n", "n2p", "p2p"):
-            if f"[e:{rel}]" in cypher:
+            if f"[e:{rel}]" in cypher or f"|{rel}]" in cypher:
                 last, limit = int(params.get("last", 0)), int(params.get("limit", 1000))
                 rows = [e for e in self.edges if e[0] == rel and e[1] > last][:limit]
                 return [{"event_id": e[1], "starttime": e[2], "endtime": e[3],

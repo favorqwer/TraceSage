@@ -3,7 +3,7 @@
   "scenarios": {
     "1_Web_Exploit_Ransomware": {
       "_note": "新最小数据集场景 1。攻击链：公网 Web 应用插件上传漏洞 -> 网页载荷 -> 网站账号身份 -> 配置错误提权（最高权限定时任务执行 web 账号可写的脚本）-> 持久化 -> 勒索加密。锚点取攻击的最终产物：勒索说明文件（全部加密完成后写入）。",
-      "database": "attack-1-web-exploit-ransomware",
+      "database": "attack-1-web-exploit-ransomware-v2",
       "poi": {
         "kind": "file",
         "rel": "p2f",
@@ -20,7 +20,7 @@
     },
     "2_SSH_Spray_Lateral_Exfiltration": {
       "_note": "新最小数据集场景 2。攻击链：SSH 弱口令低速喷洒（三轮 589 次尝试）→ 弱口令登录 → 凭据窃取（私钥／应用配置／系统口令文件）→ 横向登录内网那台 → 经内网那台回连受害者机，把 326 MB 业务数据打包取走。POI 取外传连接上的写出：5184 个同构实例、合计 161.99 MB，是全图字节量最大的事件（第二名 0.1 MB）。",
-      "database": "attack-2-ssh-spray-lateral-exfiltration",
+      "database": "attack-2-ssh-spray-lateral-exfiltration-v2",
       "poi": {
         "kind": "network",
         "rel": "p2n",
@@ -37,7 +37,7 @@
     },
     "3_Phishing_Beacon_Cryptomining": {
       "_note": "新最小数据集场景 3。攻击链：伪装的浏览器校验页把一条命令放进剪贴板 → 用户在终端粘贴执行（落地第一阶段）→ 从一个受信任第三方地址取回第二阶段并常驻 → 轮询式心跳与任务下发 → 下载并启动真实的开源挖矿程序（资源劫持）→ 打包本机信息真实外传。锚点取外传那一次的写出：网络上只有 1 个实例、750 字节，且从它往回可覆盖全部三个任务（挖矿那个任务是同一常驻主体在门限之前派生出去的更早子进程）。注意：网络实体内容里含本机临时端口，每采集一次都要按新库回填。",
-      "database": "attack-3-phishing-beacon-cryptomining",
+      "database": "attack-3-phishing-beacon-cryptomining-v2",
       "poi": {
         "kind": "network",
         "rel": "p2n",
@@ -54,7 +54,7 @@
     },
     "4_Repo_Poisoning_Backdoor": {
       "_note": "新最小数据集场景 4。攻击链：内部软件源被投毒（签名私钥已泄露）→ 受害机自己的「内部工具更新」维护任务真的拉取并安装 2.0.0 → 安装后脚本以最高权限建后门账号（加进管理员组）、写开机自启的系统服务与定时器、植入授权密钥 → 常驻代理每 5 分钟向外部攻击机真实回连（3 次）→ 攻击者用植入的密钥三次登录（枚举、确认持久化、用账号口令提权读走口令文件）。锚点取最后一次登录连接上的写出：全窗口 16 个实例（23:10:05.962~23:10:06.464），往回可同时覆盖落地、回连、登录三条支链（另外两条支链在图上只是兄弟关系，唯一接口是安装后脚本写下的授权密钥被后续 SSH 服务读走）。注意：网络实体内容里含攻击机的临时源端口，每采集一次都要按新库回填。",
-      "database": "attack-4-repo-poisoning-backdoor",
+      "database": "attack-4-repo-poisoning-backdoor-v2",
       "poi": {
         "kind": "network",
         "rel": "p2n",
@@ -71,7 +71,7 @@
     },
     "5_Exposed_Service_Pivot": {
       "_note": "新最小数据集场景 5。攻击链：外部不使用任何漏洞、凭据或欺骗，直接连上受害者机一个无认证、且以最高权限运行的缓存服务端口 → 指使该服务把攻击者公钥写进最高权限账号的授权密钥文件（守护进程写别的用户的授权密钥，这是本场独有的边形态）→ 直接拿到最高权限，全程没有提权阶段 → 受害者机自己从攻击机取回第二阶段载荷、用目标机软件源装扫描工具、对内网那台做真实扫描、并开出对外监听的转发端口 → 攻击者经该端口打内网那台同样错误配置的服务。POI 取经转发端口打到内网那台的最后一条指令（第二轮第 7 条，event_id 72997，56 字节）；取最后一条而非语义更关键的 132 字节那条，是为了让全部攻击动作都落在锚点上游。注意：网络实体内容含受害机的临时端口，每采集一次都要按新库回填。",
-      "database": "attack-5-exposed-service-pivot",
+      "database": "attack-5-exposed-service-pivot-v2",
       "poi": {
         "kind": "network",
         "rel": "p2n",

@@ -12,11 +12,18 @@
 from typing import Any, Dict, List, Optional, Set, Tuple
 from closure.facts import TopologyFacts
 
-# Linux 标准系统领域本体常识（POSIX/FHS 规范不变式）
+# Linux 标准系统领域本体常识（POSIX/FHS 规范不变式与凭据配置）
 SENSITIVE_AUTH_PATHS = frozenset([
     "/etc/shadow",
     "/etc/passwd",
     "/etc/sudoers",
+    "/etc/group",
+    "/etc/gshadow",
+    "/etc/subuid",
+    "/etc/subgid",
+    "/etc/security/opasswd",
+    "/etc/pam.d/common-auth",
+    "/etc/pam.d/sshd",
 ])
 
 PERSISTENCE_PREFIXES = (
@@ -42,10 +49,14 @@ LOGIN_MACHINERY_PREFIXES = (
     "/usr/lib/update-notifier",
     "/usr/lib/ubuntu-release-upgrader",
     "/snap/snapd-desktop-integration",
+    "/etc/profile.d",
+    "/etc/default",
+    "/var/run/motd",
 )
 
 SHARED_DAEMONS = frozenset({
-    "sshd", "nginx", "apache2", "httpd", "systemd", "cron", "dbus-daemon", "rsyslogd"
+    "sshd", "nginx", "apache2", "httpd", "systemd", "cron", "dbus-daemon", "rsyslogd",
+    "mysqld", "mariadb", "redis-server", "postgres", "mongod", "slapd", "java"
 })
 
 
@@ -56,7 +67,7 @@ def abstract_node_role(node_str: str, graph_edges: List[Dict[str, Any]]) -> str:
         return "SOCKET_ENDPOINT"
     if any(s.startswith(p) for p in PERSISTENCE_PREFIXES):
         return "PERSISTENCE_CONFIG"
-    if s in SENSITIVE_AUTH_PATHS or s.endswith("/authorized_keys") or ".ssh/id_" in s:
+    if s in SENSITIVE_AUTH_PATHS or s.endswith("/authorized_keys") or ".ssh/id_" in s or s.endswith((".env", "wp-config.php", "credentials.ini", "settings.py")):
         return "SENSITIVE_AUTH_FILE"
     
     # 区分是否为被写入/创建的落地载荷客体
@@ -96,7 +107,7 @@ def evaluate_node_behavioral_role(node: str,
         return "SOCKET_ENDPOINT"
     if any(s.startswith(p) for p in PERSISTENCE_PREFIXES):
         return "PERSISTENCE_CONFIG"
-    if s in SENSITIVE_AUTH_PATHS or s.endswith("/authorized_keys") or ".ssh/id_" in s:
+    if s in SENSITIVE_AUTH_PATHS or s.endswith("/authorized_keys") or ".ssh/id_" in s or s.endswith((".env", "wp-config.php", "credentials.ini", "settings.py")):
         return "SENSITIVE_AUTH_FILE"
 
     is_written = tf.is_tainted(s) or any(e.get("syscall") in ("write", "create", "rename", "symlink") for e in in_edges.get(s, []))

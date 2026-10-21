@@ -51,34 +51,84 @@ _REL_CODE = {"p2f": 0, "f2p": 1, "p2n": 2, "n2p": 3, "p2p": 4}
 REL_BY_CODE = {v: k for k, v in _REL_CODE.items()}   # 公开：取数来源按编号还原关系名
 
 _VERTEX_QUERIES = {
-    "Process": ("MATCH (p:Process) RETURN p.process_id AS key, coalesce(p.exepath, p.name) AS content, "
-                "p.pid AS pid, p.name AS name, p.exepath AS exepath, p.args AS args, p.cwd AS cwd"),
-    "File": "MATCH (f:File) RETURN f.file_id AS key, f.path AS content",
-    "Network": ("MATCH (n:Network) RETURN n.network_id AS key, n.network_id AS content, "
-                "n.protocol AS protocol"),
+    "Process": (
+        "MATCH (p:Process) RETURN "
+        "coalesce(p.process_id, coalesce(p.host_id, '') + '|' + coalesce(p.container_id, '') + '|' + toString(p.pid) + '|' + toString(p.start_ns)) AS key, "
+        "coalesce(p.exe_path, p.exepath, p.name) AS content, "
+        "p.pid AS pid, coalesce(p.name, '') AS name, "
+        "coalesce(p.exe_path, p.exepath, p.name) AS exepath, "
+        "coalesce(p.cmdline, p.args, '') AS args, "
+        "coalesce(p.cwd, '') AS cwd"
+    ),
+    "File": (
+        "MATCH (f:File) RETURN "
+        "coalesce(f.file_id, CASE WHEN f.container_id IS NOT NULL AND f.container_id <> 'host' THEN f.container_id + '|' + f.path ELSE f.path END) AS key, "
+        "f.path AS content"
+    ),
+    "Network": (
+        "MATCH (n:Network) RETURN "
+        "coalesce(n.network_id, n.endpoints) AS key, "
+        "coalesce(n.endpoints, n.network_id) AS content, "
+        "coalesce(n.proto, n.protocol, '') AS protocol"
+    ),
 }
 
 _EDGE_QUERIES = {
-    "p2f": ("MATCH (a:Process)-[e:p2f]->(b:File) WHERE e.event_id > $last "
-            "RETURN e.event_id AS event_id, e.starttime AS starttime, e.endtime AS endtime, "
-            "e.syscall AS syscall, e.bytes AS bytes, a.process_id AS a_key, b.file_id AS b_key "
-            "ORDER BY e.event_id LIMIT $limit"),
-    "f2p": ("MATCH (a:File)-[e:f2p]->(b:Process) WHERE e.event_id > $last "
-            "RETURN e.event_id AS event_id, e.starttime AS starttime, e.endtime AS endtime, "
-            "e.syscall AS syscall, e.bytes AS bytes, a.file_id AS a_key, b.process_id AS b_key "
-            "ORDER BY e.event_id LIMIT $limit"),
-    "p2n": ("MATCH (a:Process)-[e:p2n]->(b:Network) WHERE e.event_id > $last "
-            "RETURN e.event_id AS event_id, e.starttime AS starttime, e.endtime AS endtime, "
-            "e.syscall AS syscall, e.bytes AS bytes, a.process_id AS a_key, b.network_id AS b_key "
-            "ORDER BY e.event_id LIMIT $limit"),
-    "n2p": ("MATCH (a:Network)-[e:n2p]->(b:Process) WHERE e.event_id > $last "
-            "RETURN e.event_id AS event_id, e.starttime AS starttime, e.endtime AS endtime, "
-            "e.syscall AS syscall, e.bytes AS bytes, a.network_id AS a_key, b.process_id AS b_key "
-            "ORDER BY e.event_id LIMIT $limit"),
-    "p2p": ("MATCH (a:Process)-[e:p2p]->(b:Process) WHERE e.event_id > $last "
-            "RETURN e.event_id AS event_id, e.starttime AS starttime, e.endtime AS endtime, "
-            "e.syscall AS syscall, e.bytes AS bytes, a.process_id AS a_key, b.process_id AS b_key "
-            "ORDER BY e.event_id LIMIT $limit"),
+    "p2f": (
+        "MATCH (a:Process)-[e:ProcessToFile|p2f]->(b:File) WHERE e.event_id > $last "
+        "RETURN e.event_id AS event_id, "
+        "coalesce(e.start_ns, e.starttime) AS starttime, "
+        "coalesce(e.end_ns, e.endtime) AS endtime, "
+        "coalesce(e.syscall, e.action) AS syscall, "
+        "CASE WHEN e.result > 0 THEN e.result WHEN e.bytes IS NOT NULL THEN e.bytes ELSE 0 END AS bytes, "
+        "coalesce(a.process_id, coalesce(a.host_id, '') + '|' + coalesce(a.container_id, '') + '|' + toString(a.pid) + '|' + toString(a.start_ns)) AS a_key, "
+        "coalesce(b.file_id, CASE WHEN b.container_id IS NOT NULL AND b.container_id <> 'host' THEN b.container_id + '|' + b.path ELSE b.path END) AS b_key "
+        "ORDER BY e.event_id LIMIT $limit"
+    ),
+    "f2p": (
+        "MATCH (a:File)-[e:FileToProcess|f2p]->(b:Process) WHERE e.event_id > $last "
+        "RETURN e.event_id AS event_id, "
+        "coalesce(e.start_ns, e.starttime) AS starttime, "
+        "coalesce(e.end_ns, e.endtime) AS endtime, "
+        "coalesce(e.syscall, e.action) AS syscall, "
+        "CASE WHEN e.result > 0 THEN e.result WHEN e.bytes IS NOT NULL THEN e.bytes ELSE 0 END AS bytes, "
+        "coalesce(a.file_id, CASE WHEN a.container_id IS NOT NULL AND a.container_id <> 'host' THEN a.container_id + '|' + a.path ELSE a.path END) AS a_key, "
+        "coalesce(b.process_id, coalesce(b.host_id, '') + '|' + coalesce(b.container_id, '') + '|' + toString(b.pid) + '|' + toString(b.start_ns)) AS b_key "
+        "ORDER BY e.event_id LIMIT $limit"
+    ),
+    "p2n": (
+        "MATCH (a:Process)-[e:ProcessToNetwork|p2n]->(b:Network) WHERE e.event_id > $last "
+        "RETURN e.event_id AS event_id, "
+        "coalesce(e.start_ns, e.starttime) AS starttime, "
+        "coalesce(e.end_ns, e.endtime) AS endtime, "
+        "coalesce(e.syscall, e.action) AS syscall, "
+        "CASE WHEN e.result > 0 THEN e.result WHEN e.bytes IS NOT NULL THEN e.bytes ELSE 0 END AS bytes, "
+        "coalesce(a.process_id, coalesce(a.host_id, '') + '|' + coalesce(a.container_id, '') + '|' + toString(a.pid) + '|' + toString(a.start_ns)) AS a_key, "
+        "coalesce(b.network_id, b.endpoints) AS b_key "
+        "ORDER BY e.event_id LIMIT $limit"
+    ),
+    "n2p": (
+        "MATCH (a:Network)-[e:NetworkToProcess|n2p]->(b:Process) WHERE e.event_id > $last "
+        "RETURN e.event_id AS event_id, "
+        "coalesce(e.start_ns, e.starttime) AS starttime, "
+        "coalesce(e.end_ns, e.endtime) AS endtime, "
+        "coalesce(e.syscall, e.action) AS syscall, "
+        "CASE WHEN e.result > 0 THEN e.result WHEN e.bytes IS NOT NULL THEN e.bytes ELSE 0 END AS bytes, "
+        "coalesce(a.network_id, a.endpoints) AS a_key, "
+        "coalesce(b.process_id, coalesce(b.host_id, '') + '|' + coalesce(b.container_id, '') + '|' + toString(b.pid) + '|' + toString(b.start_ns)) AS b_key "
+        "ORDER BY e.event_id LIMIT $limit"
+    ),
+    "p2p": (
+        "MATCH (a:Process)-[e:ProcessToProcess|p2p]->(b:Process) WHERE e.event_id > $last "
+        "RETURN e.event_id AS event_id, "
+        "coalesce(e.start_ns, e.starttime) AS starttime, "
+        "coalesce(e.end_ns, e.endtime) AS endtime, "
+        "coalesce(e.syscall, e.action) AS syscall, "
+        "CASE WHEN e.result > 0 THEN e.result WHEN e.bytes IS NOT NULL THEN e.bytes ELSE 0 END AS bytes, "
+        "coalesce(a.process_id, coalesce(a.host_id, '') + '|' + coalesce(a.container_id, '') + '|' + toString(a.pid) + '|' + toString(a.start_ns)) AS a_key, "
+        "coalesce(b.process_id, coalesce(b.host_id, '') + '|' + coalesce(b.container_id, '') + '|' + toString(b.pid) + '|' + toString(b.start_ns)) AS b_key "
+        "ORDER BY e.event_id LIMIT $limit"
+    ),
 }
 
 PAGE = 20000

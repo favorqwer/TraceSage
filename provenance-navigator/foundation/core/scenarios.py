@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -58,8 +59,10 @@ def load_scenario(name: str, path: Optional[Path] = None) -> Scenario:
     entry = raw[name]
     poi = entry["poi"]
     key_name = "file_id" if poi["kind"] == "file" else "network_id"
+    poi_key = poi.get("key") or poi.get(key_name) or poi.get("path") or poi.get("endpoints") or ""
+    db = os.environ.get("NAVIGATOR_DB_OVERRIDE") or (entry["database"] + os.environ.get("NAVIGATOR_DB_SUFFIX", ""))
     return Scenario(
         name=name,
-        database=entry["database"],
-        poi=Poi(kind=poi["kind"], rel=poi["rel"], syscall=poi["syscall"], key=poi[key_name]),
+        database=db,
+        poi=Poi(kind=poi["kind"], rel=poi["rel"], syscall=poi["syscall"], key=poi_key),
     )

@@ -17,6 +17,8 @@
 """
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
+from closure.facts import process_identity_variants
+from rules.motifs import SENSITIVE_AUTH_PATHS
 
 PKG_MANAGERS = frozenset({
     "dpkg", "dpkg-deb", "dpkg-split", "dpkg-preconfigure", "mandb", "ldconfig", "ldconfig.real"
@@ -31,9 +33,8 @@ PKG_INTERNAL_SINKS = (
 PSEUDO_PREFIXES = ('/sys/', '/proc/', 'pipe:', 'memfd:', 'tmpfile:', 'socket:', 'unix:', 'anon:', '/dev/')
 SYSTEM_LIB_PREFIXES = ('/lib', '/usr/lib', '/usr/share')
 
-AUTH_OR_CONFIG = frozenset({
-    '/etc/passwd', '/etc/shadow', '/etc/group', '/etc/gshadow', '/etc/sudoers',
-    '/etc/subuid', '/etc/subgid', '/etc/nshadow', '/etc/shadow+', '/etc/passwd+'
+AUTH_OR_CONFIG = SENSITIVE_AUTH_PATHS | frozenset({
+    '/etc/nshadow', '/etc/shadow+', '/etc/passwd+'
 })
 
 PERSISTENCE_PREFIXES = (
@@ -171,10 +172,11 @@ class CausalPivotRouter:
 
             if sc in ("execve", "clone", "fork"):
                 for _, p in e.get("src_identities", []):
-                    if pid: parent_of[pid].add(p)
-                    if d: parent_of[d].add(p)
-                    if pid: children_of[p].add(pid)
-                    if d: children_of[p].add(d)
+                    for pv in process_identity_variants(p):
+                        for cid in process_identity_variants(pid) | {d}:
+                            if cid:
+                                parent_of[cid].add(pv)
+                                children_of[pv].add(cid)
                 if s and d and s != d:
                     parent_of[d].add(s)
                     children_of[s].add(d)
@@ -187,10 +189,12 @@ class CausalPivotRouter:
             pid = str(e.get("process_id") or "")
             if any(term in s for term in ("bash", "sh", "sshd")):
                 interactive_session_procs.add(s)
-                if pid: interactive_session_procs.add(pid)
+                if pid:
+                    interactive_session_procs.update(process_identity_variants(pid))
             if any(term in d for term in ("bash", "sh")):
                 interactive_session_procs.add(d)
-                if pid: interactive_session_procs.add(pid)
+                if pid:
+                    interactive_session_procs.update(process_identity_variants(pid))
 
         # 3. 递归标记具备前向交付能力的主体
         proc_has_any_delivery = set(proc_has_net_outbound | proc_has_high_impact_mutation)

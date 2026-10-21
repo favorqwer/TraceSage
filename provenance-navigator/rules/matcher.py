@@ -8,7 +8,7 @@
 """
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
-from closure.facts import TopologyFacts
+from closure.facts import TopologyFacts, process_identity_variants
 from rules.motifs import evaluate_node_behavioral_role, LOGIN_MACHINERY_PREFIXES, SENSITIVE_AUTH_PATHS, PERSISTENCE_PREFIXES
 
 
@@ -32,6 +32,10 @@ class PatternMatcher:
         self.high_conf_pids: Set[str] = set()
         # 被放行门槛否决的匹配次数（按边计：1 跳否决计 1 条，2 跳链否决计 2 条，不去重）
         self.filtered_by_conf = 0
+
+    def _add_pid(self, pid: Any) -> None:
+        if pid:
+            self.high_conf_pids.update(process_identity_variants(pid))
 
     def match(self, candidate_pool: List[Dict[str, Any]], confirmed_seeds: Optional[Dict[Tuple, Dict[str, Any]]] = None) -> Dict[Tuple, Dict[str, Any]]:
         """执行完整的高纯度基模匹配与进程血缘拉直，返回 {边三元组: 命中的基模/原因字典}。"""
@@ -62,12 +66,11 @@ class PatternMatcher:
         if confirmed_seeds:
             for rec in confirmed_seeds.values():
                 pid = str(rec.get("process_id", ""))
-                if pid:
-                    self.high_conf_pids.add(pid)
+                self._add_pid(pid)
                 for _, p in rec.get("src_identities", []):
-                    self.high_conf_pids.add(p)
+                    self._add_pid(p)
                 for _, p in rec.get("dst_identities", []):
-                    self.high_conf_pids.add(p)
+                    self._add_pid(p)
 
         hop1_motifs = [m for m in self.patterns if m.get("hops") == 1]
         hop2_motifs = [m for m in self.patterns if m.get("hops") == 2]
@@ -94,12 +97,11 @@ class PatternMatcher:
                         conf = m.get("train_precision", 1.0)
                         if conf >= self.min_conf:
                             matched[k] = m
-                            if pid:
-                                self.high_conf_pids.add(pid)
+                            self._add_pid(pid)
                             for _, p in e.get("src_identities", []):
-                                self.high_conf_pids.add(p)
+                                self._add_pid(p)
                             for _, p in e.get("dst_identities", []):
-                                self.high_conf_pids.add(p)
+                                self._add_pid(p)
                         else:
                             self.filtered_by_conf += 1
                         break
@@ -144,18 +146,16 @@ class PatternMatcher:
                     if conf >= self.min_conf:
                         matched[k1] = m
                         matched[k2] = m
-                        if pid1:
-                            self.high_conf_pids.add(pid1)
-                        if pid2:
-                            self.high_conf_pids.add(pid2)
+                        self._add_pid(pid1)
+                        self._add_pid(pid2)
                         for _, p in e1.get("src_identities", []):
-                            self.high_conf_pids.add(p)
+                            self._add_pid(p)
                         for _, p in e1.get("dst_identities", []):
-                            self.high_conf_pids.add(p)
+                            self._add_pid(p)
                         for _, p in e2.get("src_identities", []):
-                            self.high_conf_pids.add(p)
+                            self._add_pid(p)
                         for _, p in e2.get("dst_identities", []):
-                            self.high_conf_pids.add(p)
+                            self._add_pid(p)
                     else:
                         self.filtered_by_conf += 2
 
@@ -163,14 +163,13 @@ class PatternMatcher:
         # 将已确诊三元组涉及的所有 PID 统一合并入高确信集合
         for e in candidate_pool:
             if _key(e) in matched:
-                if e.get("process_id"):
-                    self.high_conf_pids.add(str(e.get("process_id")))
+                self._add_pid(str(e.get("process_id") or ""))
                 for _, p in e.get("src_identities", []):
-                    self.high_conf_pids.add(p)
+                    self._add_pid(p)
                 for _, p in e.get("dst_identities", []):
-                    self.high_conf_pids.add(p)
+                    self._add_pid(p)
 
-        for _ in range(4):
+        for _ in range(6):
             added_pids = set()
             for e in candidate_pool:
                 k = _key(e)
@@ -182,21 +181,27 @@ class PatternMatcher:
                 if any(s.startswith(p) or d.startswith(p) for p in LOGIN_MACHINERY_PREFIXES):
                     continue
 
-                parent_pids = {p for _, p in e.get("src_identities", [])}
+                parent_pids = set()
+                for _, p in e.get("src_identities", []):
+                    parent_pids.update(process_identity_variants(p))
                 if e.get("via_key"):
-                    parent_pids.add(e.get("via_key"))
+                    parent_pids.update(process_identity_variants(e.get("via_key")))
 
-                if parent_pids.intersection(self.high_conf_pids):
-                    if sc in ("execve", "clone"):
+                child_pids = set(process_identity_variants(e.get("process_id")))
+                for _, cp in e.get("dst_identities", []):
+                    child_pids.update(process_identity_variants(cp))
+
+                is_downward = bool(parent_pids.intersection(self.high_conf_pids))
+                is_upward = bool(child_pids.intersection(self.high_conf_pids)) and sc in ("clone", "fork", "execve") and not any(s.startswith(p) for p in ["/lib", "/usr/lib", "/usr/sbin/sshd", "/usr/sbin/nginx", "/usr/lib/systemd/systemd"])
+
+                if is_downward or is_upward:
+                    if sc in ("execve", "clone", "fork"):
                         matched[k] = {
                             "id": "PROCESS_LINEAGE_SPAWN",
                             "name": "失陷会话命令派生血缘拉直",
                         }
-                        child_pid = str(e.get("process_id", ""))
-                        if child_pid:
-                            added_pids.add(child_pid)
-                        for _, cp in e.get("dst_identities", []):
-                            added_pids.add(cp)
+                        added_pids.update(child_pids)
+                        added_pids.update(parent_pids)
 
             if not added_pids:
                 break
@@ -210,9 +215,12 @@ class PatternMatcher:
             sc = e.get("syscall")
             s = str(e.get("src", ""))
             pid = str(e.get("process_id", ""))
+            pid_vars = process_identity_variants(pid)
+            for _, p in e.get("dst_identities", []):
+                pid_vars.update(process_identity_variants(p))
 
-            if sc in ("read", "open", "sendfile") and pid in self.high_conf_pids:
-                is_auth = (s in SENSITIVE_AUTH_PATHS or s.endswith("/authorized_keys") or ".ssh/id_" in s)
+            if sc in ("read", "open", "sendfile") and pid_vars.intersection(self.high_conf_pids):
+                is_auth = (s in SENSITIVE_AUTH_PATHS or s.endswith("/authorized_keys") or ".ssh/id_" in s or s.endswith((".env", "wp-config.php", "credentials.ini", "settings.py")))
                 is_persist = any(s.startswith(p) for p in PERSISTENCE_PREFIXES)
                 is_dropped = self.tf.is_tainted(s) and not any(s.startswith(p) for p in ["/lib", "/usr/lib", "/proc", "/sys", "/dev"])
                 if is_auth or is_persist or is_dropped:

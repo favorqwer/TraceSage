@@ -12,7 +12,7 @@ sys.path.insert(0, str(BASE_DIR))
 from closure import extract_raw_closure, list_scenarios
 from judge import LlmJudge
 from orchestrator import RouterOrchestrator, build_report, save_report
-from rules import OfflineDistiller
+from rules import OfflineDistiller, FrequentSubgraphMiner
 
 
 def make_pool_provider():
@@ -30,9 +30,13 @@ def make_pool_provider():
     return provider
 
 
-def run_single_fold(test_sc: str, train_scs: list, tmp_dir: Path, pool_provider, mode: str = "hybrid") -> dict:
+def run_single_fold(test_sc: str, train_scs: list, tmp_dir: Path, pool_provider,
+                    mode: str = "hybrid", tag: str = None,
+                    load_distilled: bool = False, gt_dir: str = "groundtruth") -> dict:
+    if tag is None:
+        tag = mode
     start_time = time.time()
-    gt_path = f"groundtruth/{test_sc}.groundtruth.json"
+    gt_path = os.path.join(gt_dir, f"{test_sc}.groundtruth.json")
 
     if not os.path.exists(gt_path):
         raise FileNotFoundError(f"未找到真值标准文件: {gt_path}")
@@ -57,14 +61,36 @@ def run_single_fold(test_sc: str, train_scs: list, tmp_dir: Path, pool_provider,
     patterns = []
     pool_sizes = {}
     if mode in ("rules", "hybrid"):
-        distiller = OfflineDistiller()
-        patterns = distiller.distill(train_scs, pool_provider=pool_provider)
-        distill_audit = tmp_dir / f"distill_fold_{test_sc}.json"
-        audit_payload = dict(distiller.last_report)
-        audit_payload["test_scenario"] = test_sc
-        with open(distill_audit, "w", encoding="utf-8") as f:
-            json.dump(audit_payload, f, indent=2, ensure_ascii=False)
-        pool_sizes = distiller.last_report.get("pool_sizes", {})
+        distill_audit = tmp_dir / f"distill_fold_{tag}_{test_sc}.json"
+        if load_distilled and distill_audit.exists():
+            with open(distill_audit, "r", encoding="utf-8") as f:
+                audit = json.load(f)
+            distilled_ids = set(audit.get("distilled_ids", []))
+            considered_map = {c["id"]: c for c in audit.get("considered", [])}
+            miner = FrequentSubgraphMiner(min_support=1)
+            raw_motifs = miner.mine(train_scs)
+            patterns = []
+            for m in raw_motifs:
+                if m["id"] in distilled_ids:
+                    c = considered_map.get(m["id"], {})
+                    full_m = dict(m)
+                    full_m.update({
+                        "train_precision": c.get("train_precision", 1.0),
+                        "bayes_precision": c.get("bayes_precision", 1.0),
+                        "bayes_lift": c.get("bayes_lift", 1.0),
+                    })
+                    patterns.append(full_m)
+            pool_sizes = audit.get("pool_sizes", {})
+            print(f"    [规则复用] 已从 {distill_audit.name} 复用留一蒸馏基模 {len(patterns)} 条")
+        else:
+            distiller = OfflineDistiller()
+            patterns = distiller.distill(train_scs, pool_provider=pool_provider)
+            distill_audit = tmp_dir / f"distill_fold_{tag}_{test_sc}.json"
+            audit_payload = dict(distiller.last_report)
+            audit_payload["test_scenario"] = test_sc
+            with open(distill_audit, "w", encoding="utf-8") as f:
+                json.dump(audit_payload, f, indent=2, ensure_ascii=False)
+            pool_sizes = distiller.last_report.get("pool_sizes", {})
 
     # 3. 神经符号混合路由（含 POI 锚点强制确认）
     t_route_0 = time.time()
@@ -93,11 +119,11 @@ def run_single_fold(test_sc: str, train_scs: list, tmp_dir: Path, pool_provider,
         mode=mode,
     )
 
-    report_out = tmp_dir / f"{mode}_{test_sc}.json"
+    report_out = tmp_dir / f"{tag}_{test_sc}.json"
     save_report(report, str(report_out))
 
     # 5. 执行官方工具评测打分
-    eval_out = tmp_dir / f"eval_{mode}_{test_sc}.json"
+    eval_out = tmp_dir / f"eval_{tag}_{test_sc}.json"
     cmd = [
         sys.executable,
         "tools/eval_agent_attack_path.py",
@@ -142,11 +168,18 @@ def main():
     parser.add_argument("--mode", choices=["rules", "hybrid", "llm-only"], default=None,
                         help="评测模式：rules (纯规则), hybrid (智能路由), llm-only (纯大模型)")
     parser.add_argument("--use-llm", action="store_true", help="兼容参数：等价于 --mode hybrid")
+    parser.add_argument("--db-suffix", default="", help="数据库后缀（例如 -v2）")
+    parser.add_argument("--load-distilled", action="store_true", help="复用已存在的逐折离线蒸馏基模审计文件，跳过耗时的基模重复挖掘与检验")
+    parser.add_argument("--gt-dir", default="groundtruth", help="GT 真值标准目录（默认为 groundtruth）")
     args = parser.parse_args()
 
     mode = args.mode
     if mode is None:
         mode = "hybrid" if args.use_llm else "rules"
+
+    if args.db_suffix:
+        os.environ["NAVIGATOR_DB_SUFFIX"] = args.db_suffix
+    tag = f"{mode}{args.db_suffix}"
 
     mode_name_map = {
         "rules": "纯蒸馏规则模式（0次大模型调用）",
@@ -162,7 +195,7 @@ def main():
     pool_provider = make_pool_provider()
 
     print("==========================================================================================")
-    print(f"       Provenance-Navigator 评测：{mode_name} [mode={mode}]")
+    print(f"       Provenance-Navigator 评测：{mode_name} [mode={mode}, tag={tag}]")
     print(f"       五折留一：每折训练集 = 其余 {len(all_scenarios) - 1} 个场景；训练候选池运行期内现算")
     print("==========================================================================================")
 
@@ -170,7 +203,8 @@ def main():
     for i, test_sc in enumerate(all_scenarios):
         train_scs = [s for s in all_scenarios if s != test_sc]
         print(f"[{i+1}/{len(all_scenarios)}] 正在测试场景: {test_sc} ...")
-        res = run_single_fold(test_sc, train_scs, tmp_dir, pool_provider, mode=mode)
+        res = run_single_fold(test_sc, train_scs, tmp_dir, pool_provider, mode=mode, tag=tag,
+                              load_distilled=args.load_distilled, gt_dir=args.gt_dir)
         results.append(res)
         print(f"  -> 原生候选: {res['raw_closure_edges']} | 锚点: {res['anchor_confirmed']} | "
               f"初筛剥离: {res['pruned_noise']} | "
@@ -209,7 +243,7 @@ def main():
           f"{tot_elapsed:.2f}s")
     print("="*115)
 
-    summary_file = tmp_dir / f"summary_{mode}.json"
+    summary_file = tmp_dir / f"summary_{tag}.json"
     with open(summary_file, "w", encoding="utf-8") as f:
         json.dump({
             "mode": mode_name,
