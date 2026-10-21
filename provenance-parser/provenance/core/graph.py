@@ -22,14 +22,14 @@ class Edge:
     action: str
     src: NodeKey
     dst: NodeKey
-    evt: int
-    seq: int
-    ts_ns: int
-    te_ns: int
-    res: int | None = None
-    head: str | None = None
-    old_path: str | None = None
-    target_path: str | None = None
+    event_id: int
+    start_ns: int
+    end_ns: int
+    # 家族名（read/write/sendto/rename/...）；原始 evt.type 用 event_id 回原始日志核对。
+    syscall: str = ""
+    result: int | None = None
+    payload_b64: str | None = None
+    to_path: str | None = None
     mode: str | None = None
 
 

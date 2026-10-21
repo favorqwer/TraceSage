@@ -7,13 +7,15 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from provenance.core import args as A  # noqa: E402
-from provenance.core.classify import Tables  # noqa: E402
+from provenance.adapters.config import load_classifier  # noqa: E402
 from provenance.core.events import Call, EventRow  # noqa: E402
 from provenance.core.kinds import Bucket, EdgeClass, FileKey, NetKey  # noqa: E402
 from provenance.core.options import EmitOptions  # noqa: E402
 from provenance.graph.context import EmitContext  # noqa: E402
 from provenance.graph.handlers import dispatch  # noqa: E402
+from provenance.graph.objects import ObjectResolver  # noqa: E402
 from provenance.graph.state import State  # noqa: E402
+from provenance.graph.state.fds import FdEntry  # noqa: E402
 
 DATA = ROOT / "data"
 
@@ -36,7 +38,7 @@ class EmitTest(unittest.TestCase):
     def setUp(self):
         self.st = State.build("h")
         self.ctx = EmitContext(self.st, EmitOptions())
-        self.t = Tables(DATA)
+        self.t = load_classifier(DATA)
         self._n = 10
 
     def run_call(self, c):
@@ -51,7 +53,7 @@ class EmitTest(unittest.TestCase):
         self.assertEqual((edge.cls, edge.action), (EdgeClass.P2F, "create"))
         self.assertEqual(edge.dst, FileKey("h", "host", "/tmp/x"))
         # res=5 是文件描述符（进程内局部编号），不是结果 -> 不落图
-        self.assertIsNone(edge.res)
+        self.assertIsNone(edge.result)
         self.assertIn(Bucket.COVERED, [b for _, b, _ in out.buckets])
         self.assertIsNotNone(self.st.fds.get("host", 100, 5))
 
@@ -59,7 +61,7 @@ class EmitTest(unittest.TestCase):
         """mkdir 成功返回 0：0 是实测结果，必须保留。"""
         out = self.run_call(call("mkdir", "name=/tmp/d", "res=0"))
         self.assertEqual(len(out.edges), 1)
-        self.assertEqual(out.edges[0].res, 0)
+        self.assertEqual(out.edges[0].result, 0)
 
     def test_create_failure_goes_to_attempts(self):
         out = self.run_call(call("openat", "", "res=-17(EEXIST) name=/tmp/x flags=577(O_CREAT)"))
@@ -75,8 +77,8 @@ class EmitTest(unittest.TestCase):
         edge = out.edges[0]
         self.assertEqual((edge.cls, edge.action), (EdgeClass.N2P, "recv"))
         self.assertEqual(edge.src, NetKey("h", "1.2.3.4:5->9.9.9.9:80"))
-        self.assertEqual(base64.b64decode(edge.head), b"abc")
-        self.assertEqual(edge.res, 10)
+        self.assertEqual(base64.b64decode(edge.payload_b64), b"abc")
+        self.assertEqual(edge.result, 10)
 
     def test_write_on_file(self):
         out = self.run_call(call(
@@ -90,7 +92,7 @@ class EmitTest(unittest.TestCase):
         self.assertEqual(len(out.edges), 1)
         self.assertEqual((out.edges[0].cls, out.edges[0].action),
                          (EdgeClass.P2N, "connect"))
-        self.assertEqual(out.edges[0].res, -115)
+        self.assertEqual(out.edges[0].result, -115)
 
     def test_connect_unusable_tuple_is_evidence_not_graph(self):
         out = self.run_call(call("connect", "fd=7(<4>)",
@@ -153,12 +155,18 @@ class EmitTest(unittest.TestCase):
         self.assertIn("exit_no_segment", [r for _, _, r in out.buckets])
         self.assertEqual(self.st.proc.counts["exit_no_segment"], 1)
 
-    def test_rename_keeps_old_path_on_edge(self):
+    def test_rename_emits_source_and_target_edges(self):
         out = self.run_call(call(
             "renameat", "", "res=0 oldpath=A(/old) newpath=b(/new)"))
-        edge = out.edges[0]
-        self.assertEqual((edge.action, edge.old_path), ("rename", "/old"))
-        self.assertEqual(edge.dst, FileKey("h", "host", "/new"))
+        self.assertEqual(len(out.edges), 2)
+        src_edge, dst_edge = out.edges
+        self.assertEqual((src_edge.cls, src_edge.action), (EdgeClass.F2P, "rename"))
+        self.assertEqual(src_edge.src, FileKey("h", "host", "/old"))
+        self.assertEqual((src_edge.dst.pid, src_edge.dst.start_ns), (100, 0))
+        self.assertEqual((dst_edge.cls, dst_edge.action), (EdgeClass.P2F, "rename"))
+        self.assertEqual(dst_edge.dst, FileKey("h", "host", "/new"))
+        self.assertEqual(src_edge.event_id, dst_edge.event_id)
+        self.assertFalse(hasattr(src_edge, "from_path"))
 
     def test_chmod_mode(self):
         out = self.run_call(call(
@@ -168,15 +176,15 @@ class EmitTest(unittest.TestCase):
     def test_access_probe(self):
         out = self.run_call(call("access", "mode=4(R_OK)", "res=0 name=/home"))
         self.assertEqual((out.edges[0].cls, out.edges[0].action),
-                         (EdgeClass.F2P, "probe"))
+                         (EdgeClass.F2P, "stat"))
 
     def test_exec_splits_identity_and_loads_image(self):
         out = self.run_call(call("execve", "filename=/bin/ls", "res=0 exe=/bin/ls"))
         actions = sorted(edge.action for edge in out.edges)
-        self.assertEqual(actions, ["exec", "load_image"])
+        self.assertEqual(actions, ["exec", "exec"])
         p2p = [e for e in out.edges if e.cls is EdgeClass.P2P][0]
-        self.assertEqual(p2p.src.born_ns, 0)
-        self.assertEqual(p2p.dst.born_ns, 1000)
+        self.assertEqual(p2p.src.start_ns, 0)
+        self.assertEqual(p2p.dst.start_ns, 1000)
 
     def test_proc_mem_derives_p2p_edge(self):
         self.st.proc.observe(row(9, "<", "read", "fd=3(<f>/x)", pid=123, ns=500))
@@ -185,6 +193,64 @@ class EmitTest(unittest.TestCase):
         self.assertEqual(len(out.edges), 2)
         self.assertEqual([e.cls for e in out.edges], [EdgeClass.F2P, EdgeClass.P2P])
         self.assertEqual(out.edges[1].action, "mem_read")
+        # 读内存：目标 -> 读取者
+        self.assertEqual(out.edges[1].src.pid, 123)
+        self.assertEqual(out.edges[1].dst.pid, 100)
+
+    def test_proc_maps_no_p2p(self):
+        self.st.proc.observe(row(9, "<", "read", "fd=3(<f>/x)", pid=123, ns=500))
+        out = self.run_call(call(
+            "read", "fd=4(<f>/proc/123/maps) size=8", "res=8 data=x"))
+        self.assertEqual([e.cls for e in out.edges], [EdgeClass.F2P])
+
+    def test_proc_mem_write_direction(self):
+        self.st.proc.observe(row(9, "<", "read", "fd=3(<f>/x)", pid=123, ns=500))
+        out = self.run_call(call(
+            "write", "fd=4(<f>/proc/123/mem) size=8", "res=8 data=x"))
+        p2p = [e for e in out.edges if e.cls is EdgeClass.P2P][0]
+        self.assertEqual(p2p.action, "mem_write")
+        self.assertEqual(p2p.src.pid, 100)
+        self.assertEqual(p2p.dst.pid, 123)
+
+    def test_proc_mem_mmap_direction(self):
+        self.st.proc.observe(row(9, "<", "read", "fd=3(<f>/x)", pid=123, ns=500))
+        out = self.run_call(call(
+            "mmap", "fd=4(<f>/proc/123/mem) length=4096 "
+            "prot=1(PROT_READ) flags=2(MAP_PRIVATE)", "res=7F00"))
+        p2p = [e for e in out.edges if e.cls is EdgeClass.P2P][0]
+        self.assertEqual(p2p.action, "mem_read")
+        self.assertEqual(p2p.src.pid, 123)
+        self.assertEqual(p2p.dst.pid, 100)
+
+    def test_process_vm_read_and_write_direction(self):
+        self.st.proc.observe(row(9, "<", "read", "fd=3(<f>/x)", pid=123, ns=500))
+        rd = self.run_call(call("process_vm_readv", "pid=123(x)", "res=1"))
+        wr = self.run_call(call("process_vm_writev", "pid=123(x)", "res=1"))
+        self.assertEqual((rd.edges[0].src.pid, rd.edges[0].dst.pid), (123, 100))
+        self.assertEqual((wr.edges[0].src.pid, wr.edges[0].dst.pid), (100, 123))
+
+    def test_ptrace_read_and_write_direction(self):
+        self.st.proc.observe(row(9, "<", "read", "fd=3(<f>/x)", pid=123, ns=500))
+        rd = self.run_call(call(
+            "ptrace", "request=2(PTRACE_PEEKDATA) pid=123(x)", "res=0"))
+        wr = self.run_call(call(
+            "ptrace", "request=5(PTRACE_POKEDATA) pid=123(x)", "res=0"))
+        self.assertEqual((rd.edges[0].src.pid, rd.edges[0].dst.pid), (123, 100))
+        self.assertEqual((wr.edges[0].src.pid, wr.edges[0].dst.pid), (100, 123))
+
+    def test_pidfd_getfd_and_wait_direction(self):
+        self.st.proc.observe(row(9, "<", "read", "fd=3(<f>/x)", pid=123, ns=500))
+        got = self.run_call(call("pidfd_getfd", "pid=123(x)", "res=4"))
+        waited = self.run_call(call("wait4", "pid=123(x)", "res=0"))
+        self.assertEqual((got.edges[0].src.pid, got.edges[0].dst.pid), (123, 100))
+        self.assertEqual((waited.edges[0].src.pid, waited.edges[0].dst.pid),
+                         (123, 100))
+
+    def test_exit_direction_child_to_parent(self):
+        parent = self.st.proc.observe(row(1, ">", "read", pid=1, ns=100))
+        self.st.proc.on_clone(parent, 100, 200, "/bin/sh", "sh")
+        out = self.run_call(call("exit_group", "", ""))
+        self.assertEqual((out.edges[0].src.pid, out.edges[0].dst.pid), (100, 1))
 
     def test_unknown_fd_is_bucketed(self):
         out = self.run_call(call("read", "fd=99(<4>) size=1", "res=1 data=x"))
@@ -197,6 +263,35 @@ class EmitTest(unittest.TestCase):
             "flags=34(MAP_PRIVATE|MAP_ANONYMOUS)", "res=7F00"))
         self.assertEqual(out.edges, [])
         self.assertIn(Bucket.NO_OBJECT, [b for _, b, _ in out.buckets])
+
+    def test_mmap_shared_write_is_p2f(self):
+        out = self.run_call(call(
+            "mmap", "fd=6(<f>/tmp/x) length=4096 "
+            "prot=2(PROT_WRITE) flags=1(MAP_SHARED)", "res=7F00"))
+        self.assertEqual(len(out.edges), 1)
+        self.assertEqual((out.edges[0].cls, out.edges[0].action),
+                         (EdgeClass.P2F, "mmap_write"))
+
+    def test_mmap_private_write_is_read_only(self):
+        out = self.run_call(call(
+            "mmap", "fd=6(<f>/tmp/x) length=4096 "
+            "prot=2(PROT_WRITE) flags=2(MAP_PRIVATE)", "res=7F00"))
+        self.assertEqual([(e.cls, e.action) for e in out.edges],
+                         [(EdgeClass.F2P, "mmap_read")])
+
+    def test_mmap_exec_is_f2p(self):
+        out = self.run_call(call(
+            "mmap", "fd=6(<f>/tmp/x) length=4096 "
+            "prot=5(PROT_READ|PROT_EXEC) flags=2(MAP_PRIVATE)", "res=7F00"))
+        self.assertEqual((out.edges[0].cls, out.edges[0].action),
+                         (EdgeClass.F2P, "mmap_exec"))
+
+    def test_mmap_shared_readwrite_has_two_edges(self):
+        out = self.run_call(call(
+            "mmap", "fd=6(<f>/tmp/x) length=4096 "
+            "prot=3(PROT_READ|PROT_WRITE) flags=1(MAP_SHARED)", "res=7F00"))
+        self.assertEqual({(e.cls, e.action) for e in out.edges},
+                         {(EdgeClass.F2P, "mmap_read"), (EdgeClass.P2F, "mmap_write")})
 
     def test_every_edge_endpoint_is_registered(self):
         """写库不变量：每条边的两端都必须在本 Outcome 的节点表里。
@@ -229,6 +324,90 @@ class EmitTest(unittest.TestCase):
         ):
             out = self.run_call(c)
             self.assertEqual(sorted(n for n, _, _ in out.buckets), [1, 2], c.call)
+
+    # ---------------------------------------------------------------- fd 状态
+    def test_open_readonly_registers_fd_without_edge(self):
+        out = self.run_call(call(
+            "openat", "",
+            "fd=5(<f>/etc/passwd) flags=0(O_RDONLY|O_CLOEXEC) res=5"))
+        self.assertEqual(out.edges, [])
+        self.assertIn(Bucket.HANDLE, [b for _, b, _ in out.buckets])
+        entry = self.st.fds.get("host", 100, 5)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.name, "/etc/passwd")
+        self.assertTrue(entry.cloexec)
+
+    def test_open_tmpfile_registers_anonymous_fd(self):
+        out = self.run_call(call(
+            "openat", "",
+            "fd=7(<f><UNKNOWN>7) flags=13377(O_TMPFILE|O_RDWR) res=7"))
+        self.assertEqual(out.edges, [])
+        entry = self.st.fds.get("host", 100, 7)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.name, "")
+
+    def test_dup2_alias_uses_exit_result(self):
+        self.st.fds.register("host", 100, 3, FdEntry("file", "/tmp/a"))
+        out = self.run_call(call("dup2", "fd=3(<f>/tmp/a)", "res=5(<f>/tmp/a)"))
+        self.assertEqual(out.edges, [])
+        entry = self.st.fds.get("host", 100, 5)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.name, "/tmp/a")
+
+    def test_fcntl_dupfd_and_setfd(self):
+        self.st.fds.register("host", 100, 3, FdEntry("file", "/tmp/a"))
+        self.run_call(call("fcntl", "fd=3(<f>/tmp/a) cmd=0(F_DUPFD)",
+                           "res=6(<f>/tmp/a)"))
+        self.assertEqual(self.st.fds.get("host", 100, 6).name, "/tmp/a")
+        self.run_call(call("fcntl", "fd=3(<f>/tmp/a) cmd=2(F_SETFD) arg=1(FD_CLOEXEC)",
+                           "res=0"))
+        self.assertTrue(self.st.fds.get("host", 100, 3).cloexec)
+        self.assertEqual(self.st.fds.prune_cloexec("host", 100), 1)
+        self.assertIsNone(self.st.fds.get("host", 100, 3))
+        self.assertIsNotNone(self.st.fds.get("host", 100, 6))
+
+    def test_dirfd_miss_does_not_fall_back_to_cwd(self):
+        st = State.build("h")
+        resolver = ObjectResolver(st)
+        c = call("openat", "dirfd=9 name=x", "res=0")
+        self.assertEqual(resolver.path_arg(c, "name", dirfd_key="dirfd"), "")
+        self.assertEqual(st.fds.counts["dirfd_miss"], 1)
+
+    def test_close_range_removes_range(self):
+        for fd in (3, 4, 5, 6):
+            self.st.fds.register("host", 100, fd, FdEntry("file", f"/{fd}"))
+        self.run_call(call("close_range", "first=3 last=5", "res=0"))
+        self.assertIsNone(self.st.fds.get("host", 100, 3))
+        self.assertIsNone(self.st.fds.get("host", 100, 5))
+        self.assertIsNotNone(self.st.fds.get("host", 100, 6))
+
+    def test_exit_destroys_fd_table(self):
+        self.st.fds.register("host", 100, 3, FdEntry("file", "/a"))
+        self.run_call(call("exit_group", "", ""))
+        self.assertIsNone(self.st.fds.get("host", 100, 3))
+
+    # ---------------------------------------------------------------- syscall
+    def test_edge_has_canonical_and_raw_syscall(self):
+        out = self.run_call(call(
+            "sendmsg", "fd=7(<4t>1.1.1.1:1->2.2.2.2:2) size=1",
+            "res=1 data=x"))
+        edge = out.edges[0]
+        self.assertEqual(edge.action, "send")
+        self.assertEqual(edge.syscall, "sendto")
+
+    def test_pread_keeps_read_family_and_raw_name(self):
+        out = self.run_call(call(
+            "pread", "fd=5(<f>/tmp/x) size=1", "res=1 data=x"))
+        edge = out.edges[0]
+        self.assertEqual(edge.action, "read")
+        self.assertEqual(edge.syscall, "read")
+
+    def test_mkdirat_keeps_mkdir_family(self):
+        out = self.run_call(call(
+            "mkdirat", "dirfd=-100(AT_FDCWD) name=/tmp/d", "res=0"))
+        edge = out.edges[0]
+        self.assertEqual(edge.action, "create")
+        self.assertEqual(edge.syscall, "mkdir")
 
 
 if __name__ == "__main__":

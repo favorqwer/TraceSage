@@ -6,7 +6,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from provenance.core import args as A  # noqa: E402
-from provenance.core.classify import DEFERRED_VERBS, Tables  # noqa: E402
+from provenance.core.classify import DEFERRED_VERBS  # noqa: E402
+from provenance.adapters.config import load_classifier  # noqa: E402
 from provenance.core.events import Call, EventRow  # noqa: E402
 from provenance.core.kinds import EdgeClass, ObjSource, Verdict  # noqa: E402
 from provenance.graph.handlers import HANDLERS  # noqa: E402
@@ -31,11 +32,12 @@ def call(name, enter="", exit="", pid=100, ns=1000):
 
 class TableTest(unittest.TestCase):
     def setUp(self):
-        self.t = Tables(DATA)
+        self.t = load_classifier(DATA)
 
-    def test_verb_enum_is_35(self):
-        # 原 30 个动词 + 新增 unmount = 31；另有 4 个按约定延后
-        self.assertEqual(self.t.verb_count() + len(DEFERRED_VERBS), 35)
+    def test_verb_enum_is_34(self):
+        # 原 31 个动词中 load_image 已并入 exec（同一 execve 的两条边共用动作名），
+        # 余 30 个；另有 4 个按约定延后
+        self.assertEqual(self.t.verb_count() + len(DEFERRED_VERBS), 34)
 
     def test_every_verb_has_handler(self):
         for name in self.t.verbs:
@@ -51,9 +53,9 @@ class TableTest(unittest.TestCase):
         d = self.t.decide(call("openat", "", "res=5 flags=577(O_CREAT|O_WRONLY)"))
         self.assertEqual((d.verdict, d.verb), (Verdict.EMIT, "create"))
         d = self.t.decide(call("openat", "", "res=5 flags=0(O_RDONLY)"))
-        self.assertEqual((d.verdict, d.reason), (Verdict.DROP, "open_readonly"))
+        self.assertEqual((d.verdict, d.reason), (Verdict.HANDLE, "open_readonly"))
         d = self.t.decide(call("openat", "", "res=5 flags=13377(O_DIRECTORY|O_TMPFILE)"))
-        self.assertEqual((d.verdict, d.reason), (Verdict.DROP, "open_tmpfile"))
+        self.assertEqual((d.verdict, d.reason), (Verdict.HANDLE, "open_tmpfile"))
         d = self.t.decide(call("creat", "", "res=5 flags=577(O_CREAT|O_WRONLY)"))
         self.assertEqual((d.verdict, d.verb), (Verdict.EMIT, "create"))
 

@@ -23,14 +23,14 @@ class ProcTest(unittest.TestCase):
 
     def test_observe_unknown_then_clone_then_exec(self):
         parent = self.p.observe(row(10, 100))
-        self.assertEqual((parent.born_ns, parent.born_src), (0, "unknown"))
+        self.assertEqual((parent.start_ns, parent.born_src), (0, "unknown"))
 
         child = self.p.on_clone(parent, 11, 200, "/bin/sh", "sh")
-        self.assertEqual((child.born_ns, child.born_src), (200, "clone"))
+        self.assertEqual((child.start_ns, child.born_src), (200, "clone"))
         self.assertEqual(self.p.resolve("host", 11, 250).key, child.key)
 
         new = self.p.on_exec(child, 300, "/bin/ls", "ls")
-        self.assertEqual((new.born_ns, new.born_src), (300, "exec"))
+        self.assertEqual((new.start_ns, new.born_src), (300, "exec"))
         self.assertEqual(self.p.resolve("host", 11, 350).key, new.key)
         self.assertEqual(self.p.resolve("host", 11, 250).key, child.key)
 
@@ -62,7 +62,7 @@ class ProcTest(unittest.TestCase):
         parent = self.p.observe(row(51, 90))
         child = self.p.on_clone(parent, 50, 95, "/bin/x", "x")
         self.assertIs(child, early)
-        self.assertEqual(child.key.born_ns, 95)
+        self.assertEqual(child.key.start_ns, 95)
         self.assertEqual(self.p.counts["late_clone_upgrade"], 1)
         self.assertNotEqual(old_key, child.key)
 
@@ -85,20 +85,20 @@ class ProcTest(unittest.TestCase):
 
     def test_args_keep_leading_dash(self):
         proc = self.p.observe(row(90, 100, proc_args="-f -P"))
-        self.assertEqual(proc.args, "-f -P")
+        self.assertEqual(proc.cmdline, "-f -P")
 
     def test_args_dash_placeholder_is_ignored(self):
         proc = self.p.observe(row(91, 100, proc_args="-"))
-        self.assertEqual(proc.args, "")
+        self.assertEqual(proc.cmdline, "")
         proc = self.p.observe(row(91, 200, proc_args="-n /run/x"))
-        self.assertEqual(proc.args, "-n /run/x")
+        self.assertEqual(proc.cmdline, "-n /run/x")
 
     def test_clone_and_exec_args_keep_leading_dash(self):
         parent = self.p.observe(row(92, 100))
         child = self.p.on_clone(parent, 93, 200, "/bin/sh", "-c foo")
-        self.assertEqual(child.args, "-c foo")
+        self.assertEqual(child.cmdline, "-c foo")
         new = self.p.on_exec(child, 300, "/bin/ls", "--color=auto")
-        self.assertEqual(new.args, "--color=auto")
+        self.assertEqual(new.cmdline, "--color=auto")
 
     def test_is_dead_after_last_exit(self):
         proc = self.p.observe(row(80, 100))
@@ -147,6 +147,17 @@ class FdTest(unittest.TestCase):
         self.assertIsNone(fds.get("host", 1, 3))
         self.assertIsNotNone(fds.get("host", 1, 5))
 
+    def test_lru_eviction_keeps_recently_used(self):
+        fds = State.build("h").fds
+        fds.cap = 2
+        fds.register("host", 1, 3, FdEntry("file", "/3"))
+        fds.register("host", 1, 4, FdEntry("file", "/4"))
+        self.assertIsNotNone(fds.get("host", 1, 3))  # 3 变成最近使用
+        fds.register("host", 1, 5, FdEntry("file", "/5"))
+        self.assertIsNone(fds.get("host", 1, 4))     # 淘汰 4，不是 3
+        self.assertIsNotNone(fds.get("host", 1, 3))
+        self.assertIsNotNone(fds.get("host", 1, 5))
+
 
 class ContainerTest(unittest.TestCase):
     def test_placeholder_is_not_a_conclusion(self):
@@ -167,7 +178,7 @@ class ContainerTest(unittest.TestCase):
     def test_missing_metadata_stays_unknown(self):
         st = State.build("h")
         self.assertEqual(st.containers.props_for("nope"),
-                         {"privileged": None, "host_root_rw": None})
+                         {"container_privileged": None, "container_host_root_rw": None})
 
 
 if __name__ == "__main__":

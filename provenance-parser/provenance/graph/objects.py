@@ -1,6 +1,6 @@
-"""客体解析与统一流向：fd/路径 -> 节点键 -> 边。
+"""客体解析：fd/路径 -> 节点键。
 
-这是“fd 是文件还是套接字、应该建 p2f 还是 p2n”的唯一入口。
+只回答“这个客体是哪个节点”；边方向由 graph/flow.py 负责。
 """
 
 from __future__ import annotations
@@ -10,8 +10,7 @@ from dataclasses import dataclass
 from ..core import args as A
 from ..core import paths as P
 from ..core.events import Call
-from ..core.graph import Outcome
-from ..core.kinds import Bucket, EdgeClass, FileKey, NetKey
+from ..core.kinds import Bucket, FileKey, NetKey
 from .state import State
 from .state.fds import FdEntry
 
@@ -54,14 +53,34 @@ class ObjectResolver:
             return value
         return P.normalize(prefix + value)
 
-    def _base_dir(self, call: Call, dirfd_key: str | None) -> str:
+    def _base_dir(self, call: Call, dirfd_key: str | None) -> str | None:
+        """返回相对路径的基目录。
+
+        ``None`` 表示调用了 dirfd 但无法解析（表里没有、token 里也没有路径）：
+        调用方必须放弃该路径，不能回退 cwd 去猜。
+        """
         if not dirfd_key:
             return self._cwd(call)
-        fd = A.int_of(call.args.get(dirfd_key))
-        if fd is None or fd == AT_FDCWD:
+        raw = call.args.get(dirfd_key)
+        if not raw:
+            return self._cwd(call)
+        fd = A.int_of(raw)
+        if fd is None:
+            self.st.fds.counts["dirfd_miss"] += 1
+            return None
+        if fd == AT_FDCWD:
             return self._cwd(call)
         path = self.st.fds.dir_path(call.container_id, call.pid, fd)
-        return path or self._cwd(call)
+        if path:
+            return path
+        # 表里没有，但 dirfd token 本身可能带 <d>/path：用它兜底。
+        token = A.fd_of(raw)
+        if (token is not None and token.kind == "directory"
+                and not A.is_unknown_name(token.name)):
+            self.st.fds.counts["dirfd_from_token"] += 1
+            return token.name
+        self.st.fds.counts["dirfd_miss"] += 1
+        return None
 
     def norm_path(self, raw: str, call: Call, dirfd_key: str | None = None) -> str:
         if not raw:
@@ -73,6 +92,10 @@ class ObjectResolver:
         if value.startswith("/"):
             return self._apply_root(P.normalize(value), root)
         base = self._base_dir(call, dirfd_key)
+        if base is None:
+            # dirfd 不可解析：不建节点，不拿 cwd 猜。
+            self.counts["path_unresolved"] += 1
+            return ""
         if not base:
             self.counts["path_unresolved"] += 1
             return "?" + value
@@ -105,9 +128,12 @@ class ObjectResolver:
         if fd is None:
             return None, None
         entry = self.st.fds.get(call.container_id, call.pid, fd.num)
-        if entry is None and fd.name and not A.is_unknown_name(fd.name):
+        if entry is not None:
+            self.st.fds.counts["fd_table_hit"] += 1
+        elif fd.name and not A.is_unknown_name(fd.name):
             entry = FdEntry(kind=fd.kind, name=fd.name, proto=fd.proto)
             self.counts["fd_from_token"] += 1
+            self.st.fds.counts["fd_from_token"] += 1
         return fd, entry
 
     def fd_entry(self, call: Call, key: str = "fd") -> tuple[A.Fd | None, FdEntry | None]:
@@ -140,6 +166,16 @@ class ObjectResolver:
                 FileKey(self.st.host_id, call.container_id, path),
                 node_kind="unix",
             )
+        if entry.kind == "memfd":
+            if A.is_unknown_name(entry.name):
+                return ResolvedObject("none", bucket=Bucket.OTHER, reason="unknown_name")
+            path = (entry.name if entry.name.startswith("memfd:")
+                    else f"memfd:{entry.name}")
+            return ResolvedObject(
+                "file",
+                FileKey(self.st.host_id, call.container_id, path),
+                node_kind="memfd",
+            )
         if A.is_unknown_name(entry.name):
             return ResolvedObject("none", bucket=Bucket.OTHER, reason="unknown_name")
         return ResolvedObject(
@@ -154,45 +190,3 @@ class ObjectResolver:
             return ResolvedObject("none", bucket=Bucket.UNKNOWN_FD, reason="fd_unknown")
         return self.from_entry(call, fd, entry)
 
-    # -- 统一流向 ------------------------------------------------------
-    def flow(self, ctx, out: Outcome, call: Call, obj: ResolvedObject,
-             action: str, head: bool, res: int | None) -> Bucket:
-        if obj.kind == "none":
-            return obj.bucket
-
-        if obj.kind == "network":
-            node = ctx.graph.net_node(obj.key.tuple, obj.proto)
-            if node is None:
-                return Bucket.OTHER
-            ctx.graph.attach(out, node)
-            if action in ("read", "recv"):
-                ctx.graph.add(out, ctx.graph.edge(
-                    EdgeClass.N2P, "recv", node.key, ctx.key(call),
-                    call, res=res, head=head,
-                ))
-            else:
-                ctx.graph.add(out, ctx.graph.edge(
-                    EdgeClass.P2N, "send", ctx.key(call), node.key,
-                    call, res=res, head=head,
-                ))
-            return Bucket.COVERED
-
-        node = ctx.graph.file_node(
-            call.container_id, obj.key.path, obj.node_kind
-        )
-        if node is None:
-            return Bucket.OTHER
-        ctx.graph.attach(out, node)
-        if action in ("read", "probe", "mmap", "load_image", "recv"):
-            ctx.graph.add(out, ctx.graph.edge(
-                EdgeClass.F2P, action, node.key, ctx.key(call),
-                call, res=res, head=head,
-            ))
-        else:
-            ctx.graph.add(out, ctx.graph.edge(
-                EdgeClass.P2F, action, ctx.key(call), node.key,
-                call, res=res, head=head,
-            ))
-        if action in ("read", "write"):
-            ctx.derive_proc(out, call, node.key, action, ctx.key(call))
-        return Bucket.COVERED

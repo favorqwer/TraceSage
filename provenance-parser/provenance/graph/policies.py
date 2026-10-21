@@ -9,8 +9,7 @@ from ..core.events import Call
 from ..core.graph import Outcome
 from ..core.kinds import Bucket, EdgeClass, FileKey, ProcKey
 
-_PROC_PATH = re.compile(r"^/proc/(\d+)/(mem|maps|environ|cmdline|fd)(?:/|$)")
-_READ_ACTIONS = {"read", "mmap", "probe", "load_image"}
+_PROC_MEM_PATH = re.compile(r"^/proc/(\d+)/mem(?:/|$)")
 
 
 class Policies:
@@ -26,13 +25,13 @@ class Policies:
 
     # -- 成功门 --------------------------------------------------------
     def gate(self, ctx, call: Call, gate: str) -> tuple[bool, int | None]:
-        res = ctx.res(call)
+        result = ctx.result(call)
         if gate == "always":
-            return True, res
-        if res is None:
+            return True, result
+        if result is None:
             self.counts["gate_missing_res"] += 1
             return False, None
-        return res >= 0, res
+        return result >= 0, result
 
     # -- 无客体 --------------------------------------------------------
     def no_object_bucket(self, fd: A.Fd | None) -> Bucket:
@@ -50,7 +49,7 @@ class Policies:
         code = fd.code if fd else "-"
         return out.settle(call, Bucket.UNKNOWN_FD, f"{call.call}:{code}")
 
-    # -- /proc/<pid> 派生边（§5.6）-------------------------------------
+    # -- /proc/<pid>/mem 派生边（只认真正的内存文件）-------------------
     def derive_proc(
         self,
         ctx,
@@ -60,21 +59,29 @@ class Policies:
         action: str,
         subject: ProcKey,
     ) -> None:
-        m = _PROC_PATH.match(file_key.path)
+        m = _PROC_MEM_PATH.match(file_key.path)
         if not m:
+            # maps/cmdline/environ/status/fd/* 是进程元数据，不是内存；
+            # 不再派生 mem_read 的 ProcessToProcess 边（File 边仍由 flow 保留）。
             return
         target_pid = int(m.group(1))
         if target_pid == subject.pid:
             return
         target = self.st.proc.resolve_or_none(
-            file_key.container_id, target_pid, call.ts_ns
+            file_key.container_id, target_pid, call.start_ns
         )
         if target is None:
             return
-        derived = action if action in ("mem_read", "mem_write") else (
-            "mem_write" if action in ("write", "create", "chmod") else "mem_read"
-        )
-        edge = self.graph.edge(EdgeClass.P2P, derived, subject, target, call)
+
+        # 读：目标内存/元数据 -> 读取者；写：写入者 -> 目标。
+        if action in ("read", "mmap_read", "mmap_exec"):
+            derived, src, dst = "mem_read", target, subject
+        elif action in ("write", "mmap_write"):
+            derived, src, dst = "mem_write", subject, target
+        else:
+            # stat/create/chmod 等不是实际内存读写，不派生。
+            return
+        edge = self.graph.edge(EdgeClass.P2P, derived, src, dst, call)
         if self.graph.add(out, edge):
             self.counts["proc_derived_edges"] += 1
 
@@ -86,16 +93,16 @@ class Policies:
         call: Call,
         verb: str,
         target: str,
-        res: int | None,
+        result: int | None,
     ) -> None:
         """只记录“目标 + 错误码”，不改变这一行的桶归属。
 
-        ``res`` 必须是被观测到的值：未知结果不能写成 0，因为 0 在整套口径里
-        是“成功 / 零字节”，会把“没有证据”读成“没有报错”。调用方遇到 res=None
+        ``result`` 必须是被观测到的值：未知结果不能写成 0，因为 0 在整套口径里
+        是“成功 / 零字节”，会把“没有证据”读成“没有报错”。调用方遇到 result=None
         时应自己落 OTHER 桶（reason ``result_unobserved:<verb>``）。
         """
-        if res is None:
+        if result is None:
             return
         key = ctx.key(call)
-        errno = -res if res < 0 else 0
-        out.attempts.append((key, verb, target or "-", errno, call.ts_ns))
+        errno = -result if result < 0 else 0
+        out.attempts.append((key, verb, target or "-", errno, call.start_ns))

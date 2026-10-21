@@ -32,8 +32,8 @@ class State:
                 "id": c.id,
                 "name": c.name,
                 "image": c.image,
-                "privileged": c.privileged,
-                "host_root_rw": c.host_root_rw,
+                "container_privileged": c.privileged,
+                "container_host_root_rw": c.host_root_rw,
                 "observations": c.observations,
                 "backfills": c.backfills,
             }

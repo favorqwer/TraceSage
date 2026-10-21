@@ -127,7 +127,7 @@ def int_of(value: str | None) -> int | None:
         return int(head, 10)
     except ValueError:
         try:
-            return int(head, 16)  # mmap 的 res 是十六进制地址
+            return int(head, 16)  # mmap 的 result 是十六进制地址
         except ValueError:
             return None
 

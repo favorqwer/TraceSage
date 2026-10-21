@@ -10,6 +10,7 @@ from ..core.graph import Outcome
 from ..core.kinds import Bucket
 from ..core.options import EmitOptions
 from .emitter import GraphEmitter
+from .flow import FlowRouter
 from .objects import ObjectResolver
 from .policies import Policies
 from .state import State
@@ -20,6 +21,7 @@ class EmitContext:
         self.st = state
         self.graph = GraphEmitter(state, options)
         self.objects = ObjectResolver(state)
+        self.flow_router = FlowRouter()
         self.policy = Policies(state, self.graph)
 
     # -- 身份与图 ------------------------------------------------------
@@ -29,7 +31,7 @@ class EmitContext:
     def seg(self, call: Call):
         return self.graph.seg(call)
 
-    def res(self, call: Call) -> int | None:
+    def result(self, call: Call) -> int | None:
         return call.result
 
     def proc_node(self, seg):
@@ -62,6 +64,10 @@ class EmitContext:
     def fd_entry(self, call: Call, key: str = "fd"):
         return self.objects.fd_entry(call, key)
 
+    def flow(self, out: Outcome, call: Call, obj, action: str,
+             payload: bool, result: int | None) -> Bucket:
+        return self.flow_router.flow(self, out, call, obj, action, payload, result)
+
     # -- 策略 ----------------------------------------------------------
     def gate(self, call: Call, gate: str):
         return self.policy.gate(self, call, gate)
@@ -79,12 +85,12 @@ class EmitContext:
     def give_up(self, out: Outcome, call: Call, bucket: Bucket, reason: str) -> Outcome:
         return out.settle(call, bucket, reason)
 
-    def note_attempt(self, out, call, verb, target, res) -> None:
-        self.policy.note_attempt(self, out, call, verb, target, res)
+    def note_attempt(self, out, call, verb, target, result) -> None:
+        self.policy.note_attempt(self, out, call, verb, target, result)
 
-    def attempt(self, out, call, verb, target, res) -> Outcome:
-        self.note_attempt(out, call, verb, target, res)
+    def attempt(self, out, call, verb, target, result) -> Outcome:
+        self.note_attempt(out, call, verb, target, result)
         return out.settle(call, Bucket.ATTEMPT, f"attempt:{verb}")
 
     def ops(self, out, call, name: str) -> None:
-        out.ops.append((self.key(call), name, call.ts_ns))
+        out.ops.append((self.key(call), name, call.start_ns))

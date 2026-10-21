@@ -14,7 +14,7 @@ from provenance.adapters.neo4j import Neo4jWriter  # noqa: E402
 from provenance.adapters.report import ReportCollector, ReportWriter  # noqa: E402
 from provenance.adapters.scap import ScapCapture  # noqa: E402
 from provenance.adapters.scap.backends import detect_available_backends  # noqa: E402
-from provenance.core.classify import Tables  # noqa: E402
+from provenance.adapters.config import load_classifier  # noqa: E402
 from provenance.graph.store import GraphStore  # noqa: E402
 from provenance.runtime.runner import run as run_pipeline  # noqa: E402
 from provenance.settings import Settings  # noqa: E402
@@ -39,9 +39,7 @@ def _build() -> argparse.ArgumentParser:
     ap.add_argument("--wsl-distro", default="")
     ap.add_argument("--detect-backends", action="store_true", help="探测并打印后端可用性后退出")
     ap.add_argument("--max-events", type=int, default=0, help="只读前 N 个事件（开发用）")
-    ap.add_argument("--audit", action="store_true", help="额外跑两趟采集端审计（默认跳过）")
-    ap.add_argument("--no-audit", action="store_true", help="兼容旧参数；默认已跳过审计")
-    ap.add_argument("--no-payload", action="store_true", help="边属性不写 head 载荷")
+    ap.add_argument("--no-payload", action="store_true", help="边属性不写 payload_b64 载荷")
     ap.add_argument("--dry-run", action="store_true", help="只解析，不写 Neo4j")
     ap.add_argument("--out-dir", default="", help="报告目录（默认 output/parser-v2/<scenario>）")
     ap.add_argument("--fd-cap", type=int, default=4096)
@@ -59,7 +57,6 @@ def _apply_args(settings: Settings, args: argparse.Namespace) -> Settings:
         backend=args.backend,
         sysdig_bin=args.sysdig_bin,
         max_events=args.max_events or None,
-        audit=bool(args.audit and not args.no_audit),
         ssh_host=args.ssh_host or settings.scap.ssh_host,
         ssh_user=args.ssh_user or settings.scap.ssh_user,
         ssh_port=args.ssh_port or settings.scap.ssh_port,
@@ -91,6 +88,7 @@ def _apply_args(settings: Settings, args: argparse.Namespace) -> Settings:
         dry_run=run.dry_run,
         out_dir=args.out_dir or settings.report.out_dir,
         node_registry_max=graph.node_registry_max,
+        data_dir=str(settings.data_dir),
     )
     return replace(
         settings,
@@ -112,9 +110,6 @@ def _print_summary(payload: dict) -> None:
     print(f"图：节点 {payload['nodes']['total']:,}，边 {edges['total']:,} {edges['by_class']}")
     gaps = payload["gaps"]
     print(f"事件号：末号 {gaps['max_event_num']:,}，缺号 {gaps['missing_numbers']:,}")
-    dropped = payload["collector"]["dropped_total"]
-    if dropped:
-        print(f"采集端不可打印：{dropped:,} 行 {payload['collector']['dropped_by_type']}")
     print(f"耗时：{payload['elapsed_s']}s　报告：{payload['report_dir']}")
 
 
@@ -150,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         settings.validate()
-        tables = Tables(settings.data_dir)
+        classifier = load_classifier(settings.data_dir)
         capture = ScapCapture(settings.scap)
         writer = None
         if not settings.run.dry_run:
@@ -166,21 +161,14 @@ def main(argv: list[str] | None = None) -> int:
             capture,
             graph,
             collector,
-            tables,
-            audit_enabled=settings.scap.audit,
+            classifier,
             scap=settings.scap.scap,
             database=settings.database,
         )
-        print("[4/4] 收尾：节点快照与报告…", flush=True)
+        print("[3/3] 收尾：节点快照与报告…", flush=True)
         payload = ReportWriter(settings.report).write(snapshot)
-        payload["blocked"] = bool(payload["transport"].get("ok") is False)
         payload["report_dir"] = str(settings.report_dir)
         _print_summary(payload)
-        if payload["blocked"]:
-            raise RuntimeError(
-                "对账失败：主趟接入行数与审计趟（同模板 + %proc.pid）不一致。"
-                "说明模板里有字段在成行丢失，按 report.json 的 transport.type_diff 定位。"
-            )
     except Exception as exc:
         print(f"\n[BLOCKED] {exc}", file=sys.stderr, flush=True)
         return 2

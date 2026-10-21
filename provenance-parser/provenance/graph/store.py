@@ -37,7 +37,7 @@ class GraphStore:
             for key, value in node.props.items():
                 if value is None:
                     continue
-                if (key == "kind" and value == "unknown"
+                if (key == "file_type" and value == "unknown"
                         and existing.props.get(key) not in (None, "unknown")):
                     continue
                 if existing.props.get(key) != value:

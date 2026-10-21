@@ -19,7 +19,6 @@ class ScapOptions:
     ssh_auto_sync: bool = True
     docker_image: str = "sysdig/sysdig:latest"
     max_events: int | None = None
-    audit: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +65,7 @@ class ReportOptions:
     dry_run: bool
     out_dir: str = ""
     node_registry_max: int = 3_000_000
+    data_dir: str = ""
 
     @property
     def report_dir(self) -> Path:

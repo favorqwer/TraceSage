@@ -1,7 +1,8 @@
 """主趟与容器模板：解码、`<NA>` 处理、续行判断。
 
 主趟使用 ``*`` 前缀：条件字段缺失时输出 ``<NA>``，不会整行消失。
-当前主趟 15 列：在 13 列基础上加 ``%proc.exepath``、``%evt.rawres``、``%evt.buffer``。
+当前主趟 16 列：在 13 列基础上加 ``%proc.exepath``、``%evt.rawres``、
+``%evt.latency``、``%evt.buffer``。
 容器预扫使用带序号的挂载字段，复合串 ``%container.mounts`` 只做兜底。
 """
 
@@ -25,6 +26,7 @@ FIELDS = (
     "%evt.args",
     "%proc.args",
     "%evt.rawres",
+    "%evt.latency",
     "%evt.buffer",
 )
 TEMPLATE = "\t".join(FIELDS)
@@ -32,9 +34,6 @@ STAR_TEMPLATE = "*" + TEMPLATE
 COLUMNS = len(FIELDS)
 NA = "<NA>"
 FIELD_NAMES = tuple(field.lstrip("%") for field in FIELDS)
-
-AUDIT_ALL_TEMPLATE = "%evt.num\t%evt.type"
-AUDIT_PID_TEMPLATE = "%evt.num\t%evt.type\t%proc.pid"
 
 # ------------------------------------------------------------------ 容器元数据
 
@@ -72,72 +71,91 @@ def ns_of(raw: str) -> int:
     return int(text)
 
 
+def _na_fields(parts: list[str]) -> frozenset[str]:
+    """只有真的出现 <NA> 时才建集合（整行解码只做一次，多数行无需组装）。"""
+    if NA not in parts:
+        return frozenset()
+    return frozenset(FIELD_NAMES[i] for i, value in enumerate(parts) if value == NA)
+
+
 def decode(line: bytes, host_id: str = "") -> EventRow:
-    parts = line.rstrip(b"\r\n").split(b"\t")
+    """整行只解码一次，再按 \\t 切列。
+
+    旧实现对 16 个字段各调一次 ``txt()``（每行 16 次 bytes.decode + 16 次函数
+    调用）；现在换成 1 次整行 decode + 1 次 str.split，字段语义与 <NA> 口径不变。
+    """
+    text = line.decode("utf-8", "replace")
+    if text.endswith("\n"):
+        text = text[:-1]
+        if text.endswith("\r"):
+            text = text[:-1]
+    parts = text.split("\t")
     if len(parts) < COLUMNS:
         raise ValueError(f"列数不足：{len(parts)} < {COLUMNS}")
     if len(parts) > COLUMNS:
-        parts = parts[: COLUMNS - 1] + [b"\t".join(parts[COLUMNS - 1 :])]
+        parts = parts[: COLUMNS - 1] + ["\t".join(parts[COLUMNS - 1 :])]
 
-    na: set[str] = set()
-
-    def txt(idx: int) -> str:
-        value = parts[idx].decode("utf-8", "replace")
-        if value == NA:
-            na.add(FIELD_NAMES[idx])
-            return ""
-        return value
-
-    def integer(idx: int) -> int:
-        value = txt(idx)
-        return int(value) if value else 0
-
-    num_text = txt(0)
-    rawtime_text = txt(1)
-    direction = txt(2)
-    call = txt(3)
-    if not num_text:
+    num_text = parts[0]
+    rawtime_text = parts[1]
+    direction = parts[2]
+    call = parts[3]
+    if not num_text or num_text == NA:
         raise ValueError("事件号缺失")
-    if not rawtime_text:
+    if not rawtime_text or rawtime_text == NA:
         raise ValueError("事件时间缺失")
     if direction not in (">", "<"):
         raise ValueError(f"方向非法：{direction!r}")
-    if not call:
+    if not call or call == NA:
         raise ValueError("调用名为空")
 
-    pid = integer(4)
-    container_id = txt(6)
-    if not container_id:
+    pid_text = parts[4]
+    pid = 0 if pid_text == NA or not pid_text else int(pid_text)
+    container_id = parts[6]
+    if container_id == NA or not container_id:
         # pid 缺失的 switch 行没有容器，归 host 即可（随后会进 NO_OWNER）。
         # 有 pid 却没有容器，说明这一行无法可靠归属，计异常行而不是猜 host。
         if pid > 0:
             raise ValueError("container.id 缺失")
         container_id = "host"
 
-    rawres_text = txt(13)
+    tid_text = parts[5]
+    ppid_text = parts[9]
+    ruid_text = parts[10]
+    args_text = parts[11]
+    proc_args_text = parts[12]
+    rawres_text = parts[13]
+    latency_text = parts[14]
+    exe_text = parts[7]
+    cwd_text = parts[8]
+    buffer_text = parts[15]
     return EventRow(
         num=int(num_text),
         ns=ns_of(rawtime_text),
         direction=direction,
         call=call,
         pid=pid,
-        tid=integer(5),
+        tid=0 if tid_text == NA or not tid_text else int(tid_text),
         container_id=container_id,
-        exe=txt(7),
-        cwd=txt(8),
-        ppid=integer(9),
-        ruid=txt(10),
-        proc_args=txt(12),
-        args=A.parse(txt(11)),
-        rawres=A.int_of(rawres_text) if rawres_text else None,
-        buffer_b64=txt(14),
-        na_fields=frozenset(na),
+        exe="" if exe_text == NA else exe_text,
+        cwd="" if cwd_text == NA else cwd_text,
+        ppid=0 if ppid_text == NA or not ppid_text else int(ppid_text),
+        ruid="" if ruid_text == NA else ruid_text,
+        proc_args="" if proc_args_text == NA else proc_args_text,
+        args=A.parse("" if args_text == NA else args_text),
+        rawres=A.int_of(rawres_text) if rawres_text and rawres_text != NA else None,
+        latency_ns=A.int_of(latency_text) if latency_text and latency_text != NA else None,
+        buffer_b64="" if buffer_text == NA else buffer_text,
+        na_fields=_na_fields(parts),
     )
 
 
 def is_record_start(line: bytes) -> bool:
-    head = line.split(b"\t", 1)
-    return len(head) == 2 and head[0].isdigit()
+    """续行（字段内含换行被 
+sysdig 折行）不以"纯数字 + \\t"开头。"""
+    tab = line.find(b"\t")
+    if tab <= 0:
+        return False
+    return line[:tab].isdigit()
 
 
 def decode_one(line: bytes, host_id: str = "") -> EventRow | BadRow:

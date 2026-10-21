@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Iterator, Protocol
 
-from .audit import Audit
 from .classify import Decision
 from .events import BadRow, Call, EventRow
 from .graph import Edge, Node, Outcome
@@ -16,8 +15,6 @@ class Capture(Protocol):
     def backend(self) -> str: ...
 
     def containers(self) -> list[dict[str, object]]: ...
-
-    def audit(self) -> Audit: ...
 
     def events(self) -> Iterator[EventRow | BadRow]: ...
 

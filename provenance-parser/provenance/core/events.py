@@ -30,6 +30,8 @@ class EventRow:
     args: dict[str, str]
     rawres: int | None = None
     buffer_b64: str = ""
+    # 退出行的 evt.latency（纳秒）；缺失为 None。配对用 end_ns - latency 反推开始时刻。
+    latency_ns: int | None = None
     na_fields: frozenset[str] = frozenset()
 
     @property
@@ -96,15 +98,15 @@ class Call:
         return self.head_row.container_id
 
     @property
-    def ts_ns(self) -> int:
+    def start_ns(self) -> int:
         return self.head_row.ns
 
     @property
-    def te_ns(self) -> int:
+    def end_ns(self) -> int:
         return self.exit.ns if self.exit is not None else self.head_row.ns
 
     @property
-    def evt(self) -> int:
+    def event_id(self) -> int:
         return self.head_row.num
 
     @property
@@ -122,7 +124,7 @@ class Call:
         return A.int_of(value) if value else None
 
     @property
-    def res_source(self) -> str | None:
+    def result_source(self) -> str | None:
         """结果取自哪个字段：rawres（%evt.rawres）/ args（evt.args 的 res=）/ 无。"""
         if self.rawres is not None:
             return "rawres"

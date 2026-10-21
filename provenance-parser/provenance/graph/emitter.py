@@ -7,7 +7,8 @@ from ..core.events import Call
 from ..core.graph import Edge, Node, Outcome
 from ..core.kinds import EdgeClass, FileKey, NetKey, ProcKey, file_kind_of
 from ..core.options import EmitOptions
-from ..core.results import norm_res
+from ..core.results import norm_result
+from ..core.syscalls import canonical_syscall
 from .state import State
 from .state.proc import Seg
 
@@ -17,7 +18,6 @@ class GraphEmitter:
         self.st = state
         self.options = options
         self.host = state.host_id
-        self._seq = 0
         self.counts = {"self_loop": 0}
 
     # -- 身份 ----------------------------------------------------------
@@ -34,12 +34,14 @@ class GraphEmitter:
         return None
 
     def proc_node(self, seg: Seg) -> Node:
+        # 图上的名字：exe_path / cmdline / uid（日志观测值）/ euid（geteuid 跟踪的
+        # 有效用户）。容器属性带 container_ 前缀，避免被读成“这个进程有特权”。
         props: dict[str, object] = {
-            "exe": seg.exe or None,
-            "args": seg.args or None,
+            "exe_path": seg.exe_path or None,
+            "cmdline": seg.cmdline or None,
             "ppid": seg.ppid,
-            "ruid": seg.ruid or None,
-            "uid": seg.uid,
+            "uid": seg.uid or None,
+            "euid": seg.euid,
         }
         props.update(self.st.containers.props_for(seg.key.container_id))
         return Node(seg.key, props)
@@ -50,7 +52,7 @@ class GraphEmitter:
         normalized = file_kind_of(kind)
         if normalized is None:
             return None
-        return Node(FileKey(self.host, cid, path), {"kind": normalized.value})
+        return Node(FileKey(self.host, cid, path), {"file_type": normalized.value})
 
     def net_node(self, name: str, proto: str = "") -> Node | None:
         if not name:
@@ -58,9 +60,6 @@ class GraphEmitter:
         return Node(NetKey(self.host, name), {"proto": proto or None})
 
     # -- 边 ------------------------------------------------------------
-    def reset_seq(self) -> None:
-        self._seq = 0
-
     def edge(
         self,
         cls: EdgeClass,
@@ -69,36 +68,33 @@ class GraphEmitter:
         dst: ProcKey | FileKey | NetKey,
         call: Call,
         *,
-        res: int | None = None,
-        head: bool = False,
-        old_path: str = "",
-        target_path: str = "",
+        result: int | None = None,
+        payload: bool = False,
+        to_path: str = "",
         mode: str = "",
     ) -> Edge | None:
         if src == dst:
             self.counts["self_loop"] += 1
             return None
         # 结果唯一出口：fd 号与内存地址不得当作 "字节数 / 错误码" 落图。
-        res = norm_res(action, call.call, res)
-        payload = None
-        if head and self.options.keep_payload and (res is None or res >= 0):
-            payload = A.payload_head_b64(call.buffer_b64, self.options.payload_max_bytes)
+        result = norm_result(action, call.call, result)
+        payload_b64 = None
+        if payload and self.options.keep_payload and (result is None or result >= 0):
+            payload_b64 = A.payload_head_b64(call.buffer_b64, self.options.payload_max_bytes)
         edge = Edge(
             cls=cls,
             action=action,
             src=src,
             dst=dst,
-            evt=call.evt,
-            seq=self._seq,
-            ts_ns=call.ts_ns,
-            te_ns=call.te_ns,
-            res=res,
-            head=payload,
-            old_path=old_path or None,
-            target_path=target_path or None,
+            event_id=call.event_id,
+            start_ns=call.start_ns,
+            end_ns=call.end_ns,
+            syscall=canonical_syscall(call.call),
+            result=result,
+            payload_b64=payload_b64,
+            to_path=to_path or None,
             mode=mode or None,
         )
-        self._seq += 1
         return edge
 
     def add(self, out: Outcome, edge: Edge | None) -> bool:

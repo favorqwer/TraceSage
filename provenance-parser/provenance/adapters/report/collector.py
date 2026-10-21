@@ -11,10 +11,10 @@ from ...core.snapshots import StatsSnapshot
 from ...core.stats import RunStats
 
 _EDGE_HEADER = [
-    "edge_class", "seq", "evt", "ts_ns", "te_ns", "action", "res", "head",
-    "old_path", "target_path", "mode",
-    "src_label", "src_host", "src_container", "src_pid", "src_born_ns", "src_path",
-    "dst_label", "dst_host", "dst_container", "dst_pid", "dst_born_ns", "dst_path",
+    "edge_class", "event_id", "start_ns", "end_ns", "action", "syscall",
+    "result", "payload_b64", "to_path", "mode",
+    "src_label", "src_host", "src_container", "src_pid", "src_start_ns", "src_path",
+    "dst_label", "dst_host", "dst_container", "dst_pid", "dst_start_ns", "dst_path",
 ]
 
 
@@ -48,9 +48,10 @@ class ReportCollector:
 
     def _write_edge(self, edge: Edge) -> None:
         self._edges_csv.writerow(
-            [edge.cls.value, edge.seq, edge.evt, edge.ts_ns, edge.te_ns, edge.action,
-             "" if edge.res is None else edge.res, edge.head or "",
-             edge.old_path or "", edge.target_path or "", edge.mode or "",
+            [edge.cls.value, edge.event_id, edge.start_ns, edge.end_ns, edge.action,
+             edge.syscall,
+             "" if edge.result is None else edge.result, edge.payload_b64 or "",
+             edge.to_path or "", edge.mode or "",
              *key_cells(edge.src), *key_cells(edge.dst)]
         )
 

@@ -6,7 +6,6 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from provenance.core import args as A  # noqa: E402
-from provenance.core.classify import Tables  # noqa: E402
 from provenance.core.events import Call, EventRow  # noqa: E402
 from provenance.core.kinds import Bucket  # noqa: E402
 from provenance.core.options import EmitOptions, GraphLimits  # noqa: E402
@@ -61,6 +60,13 @@ class FeatureTest(unittest.TestCase):
         st.proc.observe_fs(call("fchdir", "fd=7(<d>/tmp/dir)", "res=0"), st.fds)
         self.assertEqual(st.proc.observe(row(3, "<", "read", pid=100)).cwd, "/tmp/dir")
 
+    def test_fchdir_uses_token_when_table_misses(self):
+        st = State.build("h")
+        st.proc.observe(row(1, ">", "read", pid=100))
+        st.proc.observe_fs(call("fchdir", "fd=7(<d>/tmp/dir)", "res=0"), st.fds)
+        self.assertEqual(st.proc.live("host", 100).cwd, "/tmp/dir")
+        self.assertEqual(st.fds.counts["fchdir_from_token"], 1)
+
     def test_chroot_root_state(self):
         st = State.build("h")
         st.proc.observe(row(1, ">", "chroot", pid=100))
@@ -74,15 +80,15 @@ class FeatureTest(unittest.TestCase):
         st.proc.observe(row(1, ">", "geteuid", pid=100))
         get = call("geteuid", "", "euid=0(root)", pid=100)
         st.proc.observe_uid(get)
-        self.assertEqual(st.proc.observe(row(2, "<", "read", pid=100)).uid, 0)
+        self.assertEqual(st.proc.observe(row(2, "<", "read", pid=100)).euid, 0)
 
         setu = call("setuid", "uid=1000(user)", "res=0", pid=100, rawres=0)
         st.proc.observe_uid(setu)
-        self.assertEqual(st.proc.observe(row(3, "<", "read", pid=100)).uid, 1000)
+        self.assertEqual(st.proc.observe(row(3, "<", "read", pid=100)).euid, 1000)
 
         fail = call("setuid", "uid=0(root)", "res=-1(EPERM)", pid=100, rawres=-1)
         st.proc.observe_uid(fail)
-        self.assertEqual(st.proc.observe(row(4, "<", "read", pid=100)).uid, 1000)
+        self.assertEqual(st.proc.observe(row(4, "<", "read", pid=100)).euid, 1000)
 
     def test_rawres_precedence(self):
         c = call("renameat2", "", "res=0 flags=2(RENAME_EXCHANGE)", rawres=0)
@@ -99,15 +105,15 @@ class FeatureTest(unittest.TestCase):
         st = State.build("h")
         emitter = GraphEmitter(st, EmitOptions())
         node = emitter.file_node("host", "/x")
-        self.assertEqual(node.props["kind"], "unknown")
+        self.assertEqual(node.props["file_type"], "unknown")
         store = GraphStore(None, GraphLimits())
         from provenance.core.graph import Outcome
         store.add(Outcome(nodes=[node]))
         actual = emitter.file_node("host", "/x", "file")
         store.add(Outcome(nodes=[actual]))
-        self.assertEqual(store.nodes[node.key].props["kind"], "file")
+        self.assertEqual(store.nodes[node.key].props["file_type"], "file")
         store.add(Outcome(nodes=[emitter.file_node("host", "/x")]))
-        self.assertEqual(store.nodes[node.key].props["kind"], "file")
+        self.assertEqual(store.nodes[node.key].props["file_type"], "file")
 
     def test_container_indexed_mounts(self):
         st = ContainerState()

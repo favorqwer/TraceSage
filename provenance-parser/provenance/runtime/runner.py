@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from ..core.classify import Tables
+from ..core.classify import Classifier
 from ..core.events import BadRow, Call
 from ..core.graph import Outcome
 from ..core.kinds import Bucket
@@ -36,9 +36,8 @@ def run(
     capture: Capture,
     graph: GraphStore,
     observer: RunObserver,
-    tables: Tables,
+    classifier: Classifier,
     *,
-    audit_enabled: bool,
     scap: str,
     database: str,
 ) -> RunSnapshot:
@@ -47,7 +46,7 @@ def run(
     state = State.build(run_options.host_id, graph_limits.fd_table_max)
     ctx = EmitContext(state, emit_options)
 
-    print(f"[1/4] 容器元数据扫描（后端 {capture.backend}）…", flush=True)
+    print(f"[1/3] 容器元数据扫描（后端 {capture.backend}）…", flush=True)
     for meta in capture.containers():
         state.containers.observe(meta)
     infos = state.containers.listing()
@@ -59,19 +58,7 @@ def run(
     else:
         print("      本场景无容器事件", flush=True)
 
-    audit = None
-    if audit_enabled:
-        print("[2/4] 采集端审计（2 趟，用于对账与丢弃量化）…", flush=True)
-        audit = capture.audit()
-        print(
-            f"      全部可打印 {audit.total_rows:,} 行；可归属进程 {audit.pid_rows:,} 行；"
-            f"采集端丢弃 {audit.total_rows - audit.pid_rows:,} 行",
-            flush=True,
-        )
-    else:
-        print("[2/4] 跳过审计（--no-audit）", flush=True)
-
-    print("[3/4] 主解析…", flush=True)
+    print("[2/3] 主解析…", flush=True)
     ledger = Ledger()
     pool = PairingPool(run_options.pair_timeout_ns, run_options.pair_pool_max)
     last_report = time.monotonic()
@@ -104,7 +91,7 @@ def run(
 
             if (call.call not in ("exit", "exit_group", "procexit")
                     and state.proc.is_dead(call.container_id, call.pid)):
-                decision = tables.decide(call)
+                decision = classifier.decide(call)
                 outcome = Outcome()
                 outcome.settle(call, Bucket.OTHER, "late_event_after_exit")
                 state.proc.counts["late_event_after_exit"] += 1
@@ -115,7 +102,7 @@ def run(
 
             if call.call not in ("exit", "exit_group", "procexit"):
                 state.proc.observe(call.head_row)
-            decision = tables.decide(call)
+            decision = classifier.decide(call)
             outcome = dispatch(call, decision, ctx)
             state.proc.observe_uid(call)
             state.proc.observe_fs(call, state.fds)
@@ -144,12 +131,12 @@ def run(
             dry_run=run_options.dry_run,
             database=database,
             elapsed_s=elapsed,
-            coverage=tables.coverage(),
+            coverage=classifier.coverage(),
             ledger=ledger.snapshot(),
             stats=observer.snapshot(),
             graph=graph.snapshot(),
             state=state.snapshot(),
-            audit=audit,
+            pairing=dict(pool.counts),
             node_registry_max=graph_limits.node_registry_max,
         )
     finally:

@@ -32,9 +32,9 @@ class StoreQueryTest(unittest.TestCase):
 
     def test_page_shape_matches_node_keys(self):
         # Process 4 段、File 3 段、Network 2 段
-        self.assertIn("born_ns: x.k[3]", _NODE_QUERIES["Process"])
+        self.assertIn("start_ns: x.k[3]", _NODE_QUERIES["Process"])
         self.assertIn("path: x.k[2]", _NODE_QUERIES["File"])
-        self.assertIn("tuple: x.k[1]", _NODE_QUERIES["Network"])
+        self.assertIn("endpoints: x.k[1]", _NODE_QUERIES["Network"])
 
 
 if __name__ == "__main__":

@@ -1,11 +1,12 @@
 # 动词表：设计文档 §4.2 + §4.6 的唯一转录点。
 #
 # 字段：
-#   name   —— 动词名（进边属性 action）
-#   edge   —— 边类（p2p / p2f / f2p / p2n / n2p）
+#   name   —— 动词名 = 分派键（mmap 一族另有三个独立动作值，见该条 note）
+#   edge   —— 关系类型（ProcessToProcess / ProcessToFile / FileToProcess /
+#             ProcessToNetwork / NetworkToProcess）
 #   source —— 客体来源（fd / path / pid / tuple）
 #   gate   —— always = 对象在调用前已存在，成功失败都建边（§4.1-4）
-#              success = 对象由本次调用产生，只在退出行 res 达标时建边（§4.6）
+#              success = 对象由本次调用产生，只在退出行 result 达标时建边（§4.6）
 #   calls  —— 归入该动词的系统调用名（evt.type 原样）
 #
 # 约定：module / bpf / io_uring / shm 四个内核对象动词本版延后，
@@ -13,23 +14,23 @@
 
 [[verb]]
 name = "clone"
-edge = "p2p"
+edge = "ProcessToProcess"
 source = "pid"
 gate = "success"
 calls = ["clone", "clone3", "fork", "vfork"]
-note = "res>0 取子 pid；flags 含 CLONE_THREAD 属线程，不建边"
+note = "result>0 取子 pid；flags 含 CLONE_THREAD 属线程，不建边"
 
 [[verb]]
 name = "exec"
-edge = "p2p"
+edge = "ProcessToProcess"
 source = "path"
 gate = "success"
 calls = ["execve", "execveat"]
-note = "旧身份 -> 新身份；同一事件另出 f2p load_image"
+note = "旧身份 -> 新身份；同一事件另出 FileToProcess 的 exec 边（可执行映像 -> 新进程）"
 
 [[verb]]
 name = "exit"
-edge = "p2p"
+edge = "ProcessToProcess"
 source = "pid"
 gate = "always"
 calls = ["exit", "exit_group", "procexit"]
@@ -37,7 +38,7 @@ note = "父进程 -> 退出进程；克隆边优先，回退 ppid"
 
 [[verb]]
 name = "signal"
-edge = "p2p"
+edge = "ProcessToProcess"
 source = "pid"
 gate = "always"
 calls = ["kill", "tgkill", "tkill", "pidfd_send_signal"]
@@ -45,35 +46,35 @@ note = "目标按 §5.7 解析；自信号与 pid<=0 不建边"
 
 [[verb]]
 name = "ptrace"
-edge = "p2p"
+edge = "ProcessToProcess"
 source = "pid"
 gate = "always"
 calls = ["ptrace"]
 
 [[verb]]
 name = "wait"
-edge = "p2p"
+edge = "ProcessToProcess"
 source = "pid"
 gate = "always"
 calls = ["wait4", "waitid", "waitpid"]
 
 [[verb]]
 name = "mem_read"
-edge = "p2p"
+edge = "ProcessToProcess"
 source = "pid"
 gate = "always"
 calls = ["process_vm_readv"]
 
 [[verb]]
 name = "mem_write"
-edge = "p2p"
+edge = "ProcessToProcess"
 source = "pid"
 gate = "always"
 calls = ["process_vm_writev"]
 
 [[verb]]
 name = "pidfd_getfd"
-edge = "p2p"
+edge = "ProcessToProcess"
 source = "pid"
 gate = "always"
 calls = ["pidfd_getfd"]
@@ -82,52 +83,52 @@ calls = ["pidfd_getfd"]
 # 这里只登记不需要看 flags 的创建类调用。
 [[verb]]
 name = "create"
-edge = "p2f"
+edge = "ProcessToFile"
 source = "path"
 gate = "success"
 calls = ["mkdir", "mkdirat", "mknod", "mknodat", "memfd_create"]
 
 [[verb]]
 name = "link"
-edge = "p2f"
+edge = "ProcessToFile"
 source = "path"
 gate = "success"
 calls = ["link", "linkat", "symlink", "symlinkat"]
-note = "客体=新路径；target_path=源文件路径或符号链接目标"
+note = "客体=新路径；to_path=源文件路径或符号链接目标"
 
 [[verb]]
 name = "rename"
-edge = "p2f"
+edge = "ProcessToFile"
 source = "path"
 gate = "success"
 calls = ["rename", "renameat", "renameat2"]
-note = "客体=新路径；old_path=源路径"
+note = "客体=新路径；同一次调用另出 FileToProcess（源路径 -> 进程）"
 
 [[verb]]
 name = "unlink"
-edge = "p2f"
+edge = "ProcessToFile"
 source = "path"
 gate = "always"
 calls = ["unlink", "unlinkat", "rmdir"]
 
 [[verb]]
 name = "truncate"
-edge = "p2f"
+edge = "ProcessToFile"
 source = "path"
 gate = "always"
 calls = ["truncate"]
 
 [[verb]]
 name = "write"
-edge = "p2f"
+edge = "ProcessToFile"
 source = "fd"
 gate = "always"
 calls = ["write", "writev", "pwrite", "pwrite64", "pwritev", "pwritev2", "sendfile", "sendfile64", "splice", "tee", "vmsplice", "copy_file_range"]
-note = "套接字上的写由 emit 改投 send；sendfile/splice 两个 fd 各出一条"
+note = "result=字节数；套接字上的写由 emit 改投 send；sendfile/splice 两个 fd 各出一条"
 
 [[verb]]
 name = "chmod"
-edge = "p2f"
+edge = "ProcessToFile"
 source = "path"
 gate = "always"
 calls = ["chmod", "fchmod", "fchmodat", "fchmodat2"]
@@ -135,15 +136,15 @@ note = "mode 落边属性（八进制串）"
 
 [[verb]]
 name = "mount"
-edge = "p2f"
+edge = "ProcessToFile"
 source = "path"
 gate = "always"
 calls = ["mount"]
 note = "客体=挂载点；fstype 进 ops 台账"
 
 [[verb]]
-name = "unmount"
-edge = "p2f"
+name = "umount"
+edge = "ProcessToFile"
 source = "path"
 gate = "success"
 calls = ["umount", "umount2"]
@@ -151,21 +152,21 @@ note = "客体=挂载点；成功才建边（失败时挂载点可能不存在�
 
 [[verb]]
 name = "chroot"
-edge = "p2f"
+edge = "ProcessToFile"
 source = "path"
 gate = "always"
 calls = ["chroot", "pivot_root"]
 
 [[verb]]
-name = "ns"
-edge = "p2f"
+name = "setns"
+edge = "ProcessToFile"
 source = "fd"
 gate = "always"
 calls = ["setns"]
 
 [[verb]]
 name = "ioctl"
-edge = "p2f"
+edge = "ProcessToFile"
 source = "fd"
 gate = "always"
 calls = ["ioctl"]
@@ -173,38 +174,31 @@ note = "请求码不落图，进 ops 台账"
 
 [[verb]]
 name = "read"
-edge = "f2p"
+edge = "FileToProcess"
 source = "fd"
 gate = "always"
 calls = ["read", "readv", "pread", "pread64", "preadv", "preadv2"]
 
 [[verb]]
-name = "load_image"
-edge = "f2p"
-source = "path"
-gate = "success"
-calls = []
-note = "不独立分派；由 exec 的 emitter 在同一事件内产出"
-
-[[verb]]
 name = "mmap"
-edge = "f2p"
+edge = "FileToProcess"
 source = "fd"
 gate = "always"
 calls = ["mmap", "mmap2"]
-note = "匿名映射无客体：PROT_EXEC 记 exec_mem，否则记 anon_mmap"
+note = "动作值三态：mmap_read / mmap_write（MAP_SHARED|PROT_WRITE）/ mmap_exec（PROT_EXEC），由 prot/flags 决定；flags 不落图"
 
 [[verb]]
-name = "probe"
-edge = "f2p"
+name = "stat"
+edge = "FileToProcess"
 source = "path"
 gate = "always"
-calls = ["access", "faccessat", "faccessat2", "getdents", "getdents64", "statfs", "fstatfs", "readlink", "readlinkat", "newfstatat", "stat", "lstat", "fstat", "statx"]
-note = "有客体才建边；本批多数调用参数为空，落无客体桶"
+calls = ["access", "faccessat", "faccessat2", "getdents", "getdents64", "statfs", "fstatfs", "readlink", "readlinkat", "newfstatat", "stat", "lstat", "fstat", "statx",
+         "stat64", "lstat64", "fstat64"]
+note = "stat 家族（stat/fstat/access/readlink/getdents）：有客体才建边，本批多数调用参数为空，落无客体桶"
 
 [[verb]]
 name = "connect"
-edge = "p2n"
+edge = "ProcessToNetwork"
 source = "tuple"
 gate = "always"
 calls = ["connect"]
@@ -212,21 +206,21 @@ note = "元组良构即建边（不看 res）；失败由 res<0 表达"
 
 [[verb]]
 name = "bind"
-edge = "p2n"
+edge = "ProcessToNetwork"
 source = "tuple"
 gate = "success"
 calls = ["bind"]
 
 [[verb]]
 name = "listen"
-edge = "p2n"
+edge = "ProcessToNetwork"
 source = "tuple"
 gate = "success"
 calls = ["listen"]
 
 [[verb]]
 name = "send"
-edge = "p2n"
+edge = "ProcessToNetwork"
 source = "fd"
 gate = "always"
 calls = ["sendto", "sendmsg", "sendmmsg", "send"]
@@ -234,14 +228,14 @@ note = "res=字节；unix 套接字按客体类型改投 p2f"
 
 [[verb]]
 name = "accept"
-edge = "n2p"
+edge = "NetworkToProcess"
 source = "tuple"
 gate = "success"
 calls = ["accept", "accept4"]
 
 [[verb]]
 name = "recv"
-edge = "n2p"
+edge = "NetworkToProcess"
 source = "fd"
 gate = "always"
 calls = ["recvfrom", "recvmsg", "recvmmsg", "recv"]

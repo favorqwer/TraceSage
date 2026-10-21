@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from ...core.audit import Audit
 from ...core.events import BadRow, EventRow
 from ...core.options import ScapOptions
-from .audit import run_audit
 from .backends import choose_backend, create_scap_source, detect_available_backends
 from .template import (
     CONTAINER_MOUNT_START,
@@ -131,30 +129,28 @@ class ScapCapture:
                 )
         return out
 
-    def audit(self) -> Audit:
-        return run_audit(lambda template: self._source(template))
-
     def events(self) -> Iterator[EventRow | BadRow]:
         self._ensure_star()
         line_no = 0
-        pending: bytearray | None = None
+        pending: bytes | None = None
         with self._source(STAR_TEMPLATE, base64_buffer=True) as source:
-            for raw in source.stream_lines():
-                if not raw:
-                    continue
-                line_no += 1
-                line = as_bytes(raw).rstrip(b"\r\n")
-                if is_record_start(line):
-                    if pending is not None:
-                        yield decode_one(bytes(pending))
-                    pending = bytearray(line)
-                elif pending is not None:
-                    pending += b"\n" + line
-                else:
-                    yield BadRow(
-                        line_no,
-                        "OrphanContinuation",
-                        line[:200].decode("utf-8", "replace"),
-                    )
+            for chunk in source.stream_chunks():
+                for raw in chunk:
+                    if not raw:
+                        continue
+                    line_no += 1
+                    line = raw[:-1] if raw.endswith(b"\r") else raw
+                    if is_record_start(line):
+                        if pending is not None:
+                            yield decode_one(pending)
+                        pending = line
+                    elif pending is not None:
+                        pending = pending + b"\n" + line
+                    else:
+                        yield BadRow(
+                            line_no,
+                            "OrphanContinuation",
+                            line[:200].decode("utf-8", "replace"),
+                        )
             if pending is not None:
-                yield decode_one(bytes(pending))
+                yield decode_one(pending)

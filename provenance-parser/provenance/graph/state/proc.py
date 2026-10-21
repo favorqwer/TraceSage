@@ -1,12 +1,12 @@
-"""进程身份：born_ns / born_src / exec 分裂 / 退出 / §5.7 的唯一 pid 解析。
+"""进程身份：start_ns / born_src / exec 分裂 / 退出 / §5.7 的唯一 pid 解析。
 
-全项目只有 `resolve()` 回答"这个 pid 在 T 时刻是哪个节点"，任何动词
+全项目只有 `resolve()` 回答“这个 pid 在 T 时刻是哪个节点”，任何动词
 都不得自己实现一套（设计文档 §5.7）。
 
 身份规则（§2.1/§5.8）：
-  clone 成功 -> 子进程 born_ns = 该事件进入行时刻，born_src=clone
-  exec 成功  -> 旧段在 exec 时刻结束；同 pid 新段 born_ns = exec 时刻，born_src=exec
-  首次观测且无 clone/exec 记录 -> born_ns=0（未知），born_src=unknown
+  clone 成功 -> 子进程 start_ns = 该事件进入行时刻，born_src=clone
+  exec 成功  -> 旧段在 exec 时刻结束；同 pid 新段 start_ns = exec 时刻，born_src=exec
+  首次观测且无 clone/exec 记录 -> start_ns=0（未知），born_src=unknown
   同 pid 两个 unknown 段会撞主键 -> 第二段改用事件时刻，born_src=collision，并计数
 """
 
@@ -24,28 +24,29 @@ from ...core.kinds import ProcKey
 class Seg:
     key: ProcKey
     born_src: str
-    seq: int
+    order: int
     parent: ProcKey | None = None
     exited_ns: int | None = None
-    exe: str = ""
-    args: str = ""
+    exe_path: str = ""
+    cmdline: str = ""
     ppid: int | None = None
-    ruid: str = ""
-    uid: int | None = None
+    # uid = 日志列 %user.uid 的原始观测值；euid = 从 geteuid/setuid 跟踪的有效用户 id。
+    uid: str = ""
+    euid: int | None = None
     cwd: str = ""
     root: str = "/"
     threads: set[int] = field(default_factory=set)
 
     @property
-    def born_ns(self) -> int:
-        return self.key.born_ns
+    def start_ns(self) -> int:
+        return self.key.start_ns
 
 
-def _remember_args(seg: Seg, value: str) -> None:
-    """统一 args 写入：只丢空值和单独一个 '-'，保留 -f/-n/-c/--wait 等真实参数。"""
+def _remember_cmdline(seg: Seg, value: str) -> None:
+    """统一 cmdline 写入：只丢空值和单独一个 '-'，保留 -f/-n/-c/--wait 等真实参数。"""
     text = (value or "").strip()
     if text and text != "-":
-        seg.args = text
+        seg.cmdline = text
 
 
 class ProcState:
@@ -54,7 +55,7 @@ class ProcState:
         self._segs: dict[tuple[str, int], list[Seg]] = {}
         self._by_key: dict[ProcKey, Seg] = {}
         self._cid_by_pid: dict[int, set[str]] = {}
-        self._seq = 0
+        self._order = 0
         self.exec_destinations: set[ProcKey] = set()
         self.clone_destinations: set[ProcKey] = set()
         self.counts = {
@@ -68,6 +69,7 @@ class ProcState:
             "target_pid_other_ns": 0,
             "uid_observed": 0,
             "fs_state_updates": 0,
+            "fchdir_miss": 0,
             "thread_clone": 0,
             "thread_exit": 0,
             "thread_untracked": 0,
@@ -77,10 +79,10 @@ class ProcState:
         }
 
     # -- 建段 ----------------------------------------------------------
-    def _new(self, cid: str, pid: int, born_ns: int, src: str,
+    def _new(self, cid: str, pid: int, start_ns: int, src: str,
              parent: ProcKey | None = None) -> Seg:
-        self._seq += 1
-        seg = Seg(key=ProcKey(self.host_id, cid, pid, born_ns), born_src=src, seq=self._seq,
+        self._order += 1
+        seg = Seg(key=ProcKey(self.host_id, cid, pid, start_ns), born_src=src, order=self._order,
                   parent=parent)
         seg.threads.add(pid)
         self._segs.setdefault((cid, pid), []).append(seg)
@@ -111,18 +113,18 @@ class ProcState:
         seg = self._live(row.container_id, row.pid)
         if seg is None:
             segs = self._segs.get((row.container_id, row.pid), [])
-            born = 0
+            start_ns = 0
             src = "unknown"
-            # 主键碰撞：前一个 unknown 段也占着 born_ns=0
-            if segs and segs[-1].key.born_ns == 0:
-                born = row.ns
+            # 主键碰撞：前一个 unknown 段也占着 start_ns=0
+            if segs and segs[-1].key.start_ns == 0:
+                start_ns = row.ns
                 src = "collision"
-            seg = self._new(row.container_id, row.pid, born, src)
+            seg = self._new(row.container_id, row.pid, start_ns, src)
         if row.exe:
-            seg.exe = row.exe
-        _remember_args(seg, row.proc_args)
+            seg.exe_path = row.exe
+        _remember_cmdline(seg, row.proc_args)
         if row.ruid:
-            seg.ruid = row.ruid
+            seg.uid = row.ruid
         if seg.ppid is None and row.ppid > 0:
             seg.ppid = row.ppid
         if not seg.cwd and row.cwd:
@@ -130,50 +132,50 @@ class ProcState:
         return seg
 
     # -- 身份事件 ------------------------------------------------------
-    def on_clone(self, parent: Seg, child_pid: int, ts_ns: int,
-                 exe: str, proc_args: str) -> Seg:
+    def on_clone(self, parent: Seg, child_pid: int, start_ns: int,
+                 exe_path: str, cmdline: str) -> Seg:
         cid = parent.key.container_id
         live = self._live(cid, child_pid)
         if live is not None and live.born_src == "unknown":
             # 子进程的事件早于 clone 退出行到达：把已建的 unknown 段升级成 clone 段。
-            # 旧键已经产出过的边会留下一个 born_ns=0 的节点；计入 late_clone_upgrade。
+            # 旧键已经产出过的边会留下一个 start_ns=0 的节点；计入 late_clone_upgrade。
             self._by_key.pop(live.key, None)
-            live.key = ProcKey(self.host_id, cid, child_pid, ts_ns)
+            live.key = ProcKey(self.host_id, cid, child_pid, start_ns)
             self._by_key[live.key] = live
             live.born_src = "clone"
             live.parent = parent.key
             live.cwd = live.cwd or parent.cwd
             live.root = parent.root
             live.threads.add(child_pid)
-            _remember_args(live, proc_args)
-            if live.uid is None:
-                live.uid = parent.uid
+            _remember_cmdline(live, cmdline)
+            if live.euid is None:
+                live.euid = parent.euid
             self.counts["born_clone"] += 1
             self.counts["born_unknown"] = max(0, self.counts["born_unknown"] - 1)
             self.counts["late_clone_upgrade"] += 1
             self.clone_destinations.add(live.key)
             return live
-        seg = self._new(cid, child_pid, ts_ns, "clone", parent=parent.key)
+        seg = self._new(cid, child_pid, start_ns, "clone", parent=parent.key)
         self.clone_destinations.add(seg.key)
         seg.ppid = parent.key.pid
-        seg.exe = exe
-        _remember_args(seg, proc_args)
+        seg.exe_path = exe_path
+        _remember_cmdline(seg, cmdline)
         seg.cwd = parent.cwd
         seg.root = parent.root
-        seg.uid = parent.uid
+        seg.euid = parent.euid
         return seg
 
-    def on_exec(self, seg: Seg, ts_ns: int, exe: str, proc_args: str) -> Seg:
-        self.on_exit(seg, ts_ns)
-        new = self._new(seg.key.container_id, seg.key.pid, ts_ns, "exec", parent=seg.parent)
+    def on_exec(self, seg: Seg, start_ns: int, exe_path: str, cmdline: str) -> Seg:
+        self.on_exit(seg, start_ns)
+        new = self._new(seg.key.container_id, seg.key.pid, start_ns, "exec", parent=seg.parent)
         self.exec_destinations.add(new.key)
         new.ppid = seg.ppid
-        new.ruid = seg.ruid
         new.uid = seg.uid
+        new.euid = seg.euid
         new.cwd = seg.cwd
         new.root = seg.root
-        new.exe = exe
-        _remember_args(new, proc_args)
+        new.exe_path = exe_path
+        _remember_cmdline(new, cmdline)
         return new
 
     # -- 线程身份 ------------------------------------------------------
@@ -181,7 +183,7 @@ class ProcState:
         parent.threads.add(tid)
         self.counts["thread_clone"] += 1
 
-    def on_thread_exit(self, seg: Seg, tid: int, ts_ns: int) -> bool:
+    def on_thread_exit(self, seg: Seg, tid: int, start_ns: int) -> bool:
         """返回 True 表示最后一个线程退出，进程应结束。"""
         if tid in seg.threads:
             seg.threads.discard(tid)
@@ -190,7 +192,7 @@ class ProcState:
         if seg.threads:
             self.counts["thread_exit"] += 1
             return False
-        self.on_exit(seg, ts_ns)
+        self.on_exit(seg, start_ns)
         return True
 
     # -- 身份属性（uid/euid）与路径状态 ---------------------------------
@@ -204,7 +206,7 @@ class ProcState:
             row = call.exit or call.head_row
             value = A.int_of(row.args.get("euid"))
             if value is not None and value >= 0:
-                seg.uid = value
+                seg.euid = value
                 self.counts["uid_observed"] += 1
             return
 
@@ -220,7 +222,7 @@ class ProcState:
         for key in keys:
             value = A.int_of(call.args.get(key))
             if value is not None and value >= 0:
-                seg.uid = value
+                seg.euid = value
                 self.counts["uid_observed"] += 1
                 return
 
@@ -236,11 +238,21 @@ class ProcState:
 
         if name == "fchdir":
             fd = A.fd_of(call.args.get("fd"))
+            path = ""
             if fd is not None and fds is not None:
                 path = fds.dir_path(call.container_id, call.pid, fd.num)
-                if path:
-                    seg.cwd = path
-                    self.counts["fs_state_updates"] += 1
+                if not path and (fd.kind == "directory"
+                                 and not A.is_unknown_name(fd.name)):
+                    # 表里没有，但事件 token 带 <d>/path：用它兜底。
+                    path = fd.name
+                    fds.counts["fchdir_from_token"] += 1
+            if path:
+                seg.cwd = path
+                self.counts["fs_state_updates"] += 1
+            elif fds is not None:
+                fds.counts["fchdir_miss"] += 1
+            else:
+                self.counts["fchdir_miss"] = self.counts.get("fchdir_miss", 0) + 1
             return
 
         path = (
@@ -260,9 +272,9 @@ class ProcState:
             seg.root = value
         self.counts["fs_state_updates"] += 1
 
-    def on_exit(self, seg: Seg, ts_ns: int) -> None:
+    def on_exit(self, seg: Seg, start_ns: int) -> None:
         if seg.exited_ns is None:
-            seg.exited_ns = ts_ns
+            seg.exited_ns = start_ns
         seg.threads.clear()
 
     # -- 解析（§5.7）---------------------------------------------------
@@ -270,12 +282,12 @@ class ProcState:
         best: Seg | None = None
         ties = 0
         for seg in self._segs.get((cid, pid), ()):
-            if seg.key.born_ns > at_ns:
+            if seg.key.start_ns > at_ns:
                 continue
             if seg.exited_ns is not None and seg.exited_ns <= at_ns:
                 continue
-            if best is None or (seg.key.born_ns, seg.seq) > (best.key.born_ns, best.seq):
-                if best is not None and seg.key.born_ns == best.key.born_ns:
+            if best is None or (seg.key.start_ns, seg.order) > (best.key.start_ns, best.order):
+                if best is not None and seg.key.start_ns == best.key.start_ns:
                     ties += 1
                 best = seg
         if best is None:
@@ -299,9 +311,9 @@ class ProcState:
         if seg.parent is not None:
             return seg.parent
         if seg.ppid and seg.ppid > 0:
-            # 解析时刻取调用时刻：born_src=unknown 的段 born_ns=0，
+            # 解析时刻取调用时刻：born_src=unknown 的段 start_ns=0，
             # 若拿 0 去解析，会把"捕获内出生、实际更晚"的父进程排除掉。
-            at = at_ns if at_ns is not None else (seg.exited_ns or seg.key.born_ns)
+            at = at_ns if at_ns is not None else (seg.exited_ns or seg.key.start_ns)
             parent = self.resolve(seg.key.container_id, seg.ppid, at)
             return parent.key if parent else None
         return None
@@ -327,18 +339,18 @@ class ProcState:
             multi += 1
             has_clone = any(s.key in self.clone_destinations for s in segs)
             for seg in segs:
-                if (seg.key.born_ns == 0
+                if (seg.key.start_ns == 0
                         and seg.key not in self.clone_destinations
                         and seg.key not in self.exec_destinations
                         and has_clone):
                     placeholders += 1
-            for seg in sorted(segs, key=lambda s: s.key.born_ns)[1:]:
+            for seg in sorted(segs, key=lambda s: s.key.start_ns)[1:]:
                 extra += 1
                 if seg.key in self.exec_destinations:
                     extra_exec += 1
                 elif seg.key in self.clone_destinations:
                     extra_clone += 1
-                elif seg.key.born_ns != 0 or not has_clone:
+                elif seg.key.start_ns != 0 or not has_clone:
                     unexplained += 1
 
         return {

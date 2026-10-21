@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .audit import Audit
 from .graph import Node
 from .kinds import NodeKey
 
@@ -28,6 +27,7 @@ class StatsSnapshot:
     attempts: dict[Any, list[int]]
     unmapped: dict[str, int]
     edges_by_action: dict[str, int]
+    edges_by_syscall: dict[str, int]
     edges_by_class: dict[str, int]
     bad: dict[str, int]
     bad_samples: dict[str, list[str]]
@@ -37,8 +37,8 @@ class StatsSnapshot:
     no_owner_rows: int
     single_line_rows: int
     edge_rows: int
-    res_source: dict[str, dict[str, int]]
-    edge_res: dict[str, list[int]]
+    result_source: dict[str, dict[str, int]]
+    edge_result: dict[str, list[int]]
     emit_calls: dict[str, int]
     emit_calls_with_edge: dict[str, int]
     emit_no_edge_reason: dict[str, str]
@@ -46,7 +46,6 @@ class StatsSnapshot:
     endpoint_total: int
     endpoint_with_edge: int
     pid_present_rows: int
-    pid_present_by_type: dict[str, int]
     missing_by_field: dict[str, dict[str, int]]
 
 
@@ -82,5 +81,5 @@ class RunSnapshot:
     stats: StatsSnapshot
     graph: GraphSnapshot
     state: StateSnapshot
-    audit: Audit | None
+    pairing: dict[str, int]
     node_registry_max: int

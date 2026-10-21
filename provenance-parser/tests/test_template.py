@@ -23,6 +23,7 @@ LINE = "\t".join([
     "fd=5(<f>/tmp/x) res=1",
     "<NA>",
     "1",
+    "1000",
     "",
 ])
 
@@ -45,6 +46,7 @@ class TemplateTest(unittest.TestCase):
         self.assertEqual(row.proc_args, "")
         self.assertEqual(row.args["fd"], "5(<f>/tmp/x)")
         self.assertEqual(row.rawres, 1)
+        self.assertEqual(row.latency_ns, 1000)
         self.assertEqual(row.buffer_b64, "")
         self.assertIn("proc.pid", row.na_fields)
         self.assertIn("container.id", row.na_fields)

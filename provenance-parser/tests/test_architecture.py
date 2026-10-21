@@ -63,6 +63,30 @@ class ArchitectureTest(unittest.TestCase):
                     violations.append(f"{module} -> {target}")
         self.assertEqual(violations, [])
 
+    def test_core_has_no_filesystem_io(self):
+        """core 只做纯逻辑：不得读 TOML/文件，也不得直接 open。"""
+        forbidden_calls = {"open", "read_text", "write_text"}
+        forbidden_imports = {"tomllib", "csv"}
+        violations = []
+        for path in (PACKAGE / "core").rglob("*.py"):
+            if "__pycache__" in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+                    if name in forbidden_calls:
+                        violations.append(f"{_module(path)} calls {name}")
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name.split(".")[0] in forbidden_imports:
+                            violations.append(f"{_module(path)} imports {alias.name}")
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    if node.module.split(".")[0] in forbidden_imports:
+                        violations.append(f"{_module(path)} imports {node.module}")
+        self.assertEqual(violations, [])
+
 
 if __name__ == "__main__":
     unittest.main()

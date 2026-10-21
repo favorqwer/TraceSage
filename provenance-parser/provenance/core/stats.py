@@ -16,6 +16,7 @@ class RunStats:
         self.attempts: dict[tuple, list[int]] = {}
         self.unmapped: dict[str, int] = {}
         self.edges_by_action: dict[str, int] = {}
+        self.edges_by_syscall: dict[str, int] = {}
         self.edges_by_class: dict[str, int] = {}
         self.bad: dict[str, int] = {}
         self.bad_samples: dict[str, list[str]] = {}
@@ -25,9 +26,9 @@ class RunStats:
         self.no_owner_rows = 0
         self.single_line_rows = 0
         self.edge_rows = 0
-        self.res_source: dict[str, dict[str, int]] = {}
-        # action -> [null, negative, zero, positive] 四分类（报告里的 res 哨兵）
-        self.edge_res: dict[str, list[int]] = {}
+        self.result_source: dict[str, dict[str, int]] = {}
+        # action -> [null, negative, zero, positive] 四分类（报告里的 result 哨兵）
+        self.edge_result: dict[str, list[int]] = {}
         # 登记为建边的调用：总次数 vs 真正产出边的次数
         self.emit_calls: dict[str, int] = {}
         self.emit_calls_with_edge: dict[str, int] = {}
@@ -39,14 +40,12 @@ class RunStats:
         self.endpoint_total = 0
         self.endpoint_with_edge = 0
         self.pid_present_rows = 0
-        self.pid_present_by_type: dict[str, int] = {}
         self.missing_by_field: dict[str, dict[str, int]] = {}
 
     def count_row(self, row) -> None:
         self.by_type[row.call] = self.by_type.get(row.call, 0) + 1
         if row.pid > 0:
             self.pid_present_rows += 1
-            self.pid_present_by_type[row.call] = self.pid_present_by_type.get(row.call, 0) + 1
         for field in row.na_fields:
             by_type = self.missing_by_field.setdefault(field, {})
             by_type[row.call] = by_type.get(row.call, 0) + 1
@@ -70,9 +69,9 @@ class RunStats:
         # 否则报告里的“能取到返回值的条数”永远无法与 edges.csv 对账。
         if call.result is not None:
             slot[1] += 1
-            origin = call.res_source
+            origin = call.result_source
             if origin is not None:
-                per = self.res_source.setdefault(
+                per = self.result_source.setdefault(
                     call.call, {"rawres": 0, "args": 0}
                 )
                 per[origin] += 1
@@ -118,14 +117,15 @@ class RunStats:
 
         for edge in outcome.edges:
             self.edges_by_action[edge.action] = self.edges_by_action.get(edge.action, 0) + 1
+            self.edges_by_syscall[edge.syscall] = self.edges_by_syscall.get(edge.syscall, 0) + 1
             self.edges_by_class[edge.cls.value] = self.edges_by_class.get(edge.cls.value, 0) + 1
             self.edge_rows += 1
-            bins = self.edge_res.setdefault(edge.action, [0, 0, 0, 0])
-            if edge.res is None:
+            bins = self.edge_result.setdefault(edge.action, [0, 0, 0, 0])
+            if edge.result is None:
                 bins[0] += 1
-            elif edge.res < 0:
+            elif edge.result < 0:
                 bins[1] += 1
-            elif edge.res == 0:
+            elif edge.result == 0:
                 bins[2] += 1
             else:
                 bins[3] += 1
@@ -137,6 +137,7 @@ class RunStats:
             attempts=dict(self.attempts),
             unmapped=dict(self.unmapped),
             edges_by_action=dict(self.edges_by_action),
+            edges_by_syscall=dict(self.edges_by_syscall),
             edges_by_class=dict(self.edges_by_class),
             bad=dict(self.bad),
             bad_samples={k: list(v) for k, v in self.bad_samples.items()},
@@ -146,8 +147,8 @@ class RunStats:
             no_owner_rows=self.no_owner_rows,
             single_line_rows=self.single_line_rows,
             edge_rows=self.edge_rows,
-            res_source={k: dict(v) for k, v in self.res_source.items()},
-            edge_res={k: list(v) for k, v in self.edge_res.items()},
+            result_source={k: dict(v) for k, v in self.result_source.items()},
+            edge_result={k: list(v) for k, v in self.edge_result.items()},
             emit_calls=dict(self.emit_calls),
             emit_calls_with_edge=dict(self.emit_calls_with_edge),
             emit_no_edge_reason=dict(self.emit_no_edge_reason),
@@ -155,6 +156,5 @@ class RunStats:
             endpoint_total=self.endpoint_total,
             endpoint_with_edge=self.endpoint_with_edge,
             pid_present_rows=self.pid_present_rows,
-            pid_present_by_type=dict(self.pid_present_by_type),
             missing_by_field={k: dict(v) for k, v in self.missing_by_field.items()},
         )

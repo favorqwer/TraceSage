@@ -22,7 +22,7 @@ def connect(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
     fd = A.fd_of(call.args.get("fd"))
     raw = call.text("tuple") or (fd.name if fd else "")
-    res = ctx.res(call)
+    result = ctx.result(call)
     proto = fd.proto if fd else ""
 
     if fd is not None and fd.kind == "unix":
@@ -35,7 +35,7 @@ def connect(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
         node = ctx.file_node(call.container_id, path, "unix")
         ctx.attach(out, node)
         ctx.add(out, ctx.edge(EdgeClass.P2F, "connect", ctx.key(call), node.key,
-                              call, res=res))
+                              call, result=result))
         return ctx.covered(out, call)
 
     if not raw or not A.tuple_usable(raw, session=True):
@@ -46,7 +46,7 @@ def connect(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     node = ctx.net_node(raw, proto)
     ctx.attach(out, node)
     ctx.add(out, ctx.edge(EdgeClass.P2N, "connect", ctx.key(call), node.key,
-                          call, res=res))
+                          call, result=result))
     return ctx.covered(out, call)
 
 
@@ -62,11 +62,11 @@ def _endpoint(ctx: EmitContext, call: Call) -> tuple[str, str, A.Fd | None]:
 def bind(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
     raw, proto, fd = _endpoint(ctx, call)
-    ok, res = ctx.gate(call, "success")
+    ok, result = ctx.gate(call, "success")
     if not ok:
-        if res is None:
+        if result is None:
             return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:bind")
-        return ctx.attempt(out, call, "bind", raw, res)
+        return ctx.attempt(out, call, "bind", raw, result)
     if not raw or not A.endpoint_usable(raw):
         ctx.ops(out, call, f"bind:{raw or '-'}")
         return ctx.give_up(out, call, Bucket.OTHER, "tuple_unusable")
@@ -74,18 +74,18 @@ def bind(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     node = ctx.net_node(raw, proto)
     ctx.attach(out, node)
     ctx.add(out, ctx.edge(EdgeClass.P2N, "bind", ctx.key(call), node.key,
-                          call, res=res))
+                          call, result=result))
     return ctx.covered(out, call)
 
 
 def listen(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
     raw, proto, fd = _endpoint(ctx, call)
-    ok, res = ctx.gate(call, "success")
+    ok, result = ctx.gate(call, "success")
     if not ok:
-        if res is None:
+        if result is None:
             return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:listen")
-        return ctx.attempt(out, call, "listen", raw, res)
+        return ctx.attempt(out, call, "listen", raw, result)
     if not raw or not A.endpoint_usable(raw):
         ctx.ops(out, call, f"listen:{raw or '-'}")
         return ctx.give_up(out, call, Bucket.OTHER, "tuple_unusable")
@@ -93,7 +93,7 @@ def listen(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     node = ctx.net_node(raw, proto)
     ctx.attach(out, node)
     ctx.add(out, ctx.edge(EdgeClass.P2N, "listen", ctx.key(call), node.key,
-                          call, res=res))
+                          call, result=result))
     return ctx.covered(out, call)
 
 
@@ -101,25 +101,22 @@ def accept(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     out = Outcome()
     fd = A.fd_of(call.args.get("fd"))
     raw = call.text("tuple") or (fd.name if fd else "")
-    ok, res = ctx.gate(call, "success")
-    if not ok and res is None and fd is not None:
+    ok, result = ctx.gate(call, "success")
+    if not ok and result is None and fd is not None:
         ok = True
     if not ok:
-        if res is None:
+        if result is None:
             return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:accept")
-        return ctx.attempt(out, call, "accept", raw, res)
+        return ctx.attempt(out, call, "accept", raw, result)
     if fd is not None and fd.kind == "unix":
         path = A.unix_path(fd.name) or A.unix_path(raw)
         if not path:
             ctx.ops(out, call, f"accept:{raw or '-'}")
             return ctx.give_up(out, call, Bucket.OTHER, "unix_unusable")
+        # 只登记 fd；unix 的 accept 不建边。数据流由 send/recv 覆盖。
         ctx.st.fds.register(call.container_id, call.pid, fd.num,
                             FdEntry(kind="unix", name=path))
-        node = ctx.file_node(call.container_id, path, "unix")
-        ctx.attach(out, node)
-        ctx.add(out, ctx.edge(EdgeClass.F2P, "accept", node.key, ctx.key(call),
-                              call, res=res))
-        return ctx.covered(out, call)
+        return out.settle(call, Bucket.HANDLE, "accept_unix_fd_only")
 
     if not raw or not A.tuple_usable(raw, session=True):
         ctx.ops(out, call, f"accept:{raw or '-'}")
@@ -130,7 +127,7 @@ def accept(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     node = ctx.net_node(raw, proto)
     ctx.attach(out, node)
     ctx.add(out, ctx.edge(EdgeClass.N2P, "accept", node.key, ctx.key(call),
-                          call, res=res))
+                          call, result=result))
     return ctx.covered(out, call)
 
 
@@ -148,10 +145,10 @@ def _data(ctx: EmitContext, call: Call, action: str) -> Outcome:
         ctx.attach(out, node)
         if action == "recv":
             ctx.add(out, ctx.edge(EdgeClass.N2P, "recv", node.key, subject,
-                                  call, res=ctx.res(call), head=True))
+                                  call, result=ctx.result(call), payload=True))
         else:
             ctx.add(out, ctx.edge(EdgeClass.P2N, "send", subject, node.key,
-                                  call, res=ctx.res(call), head=True))
+                                  call, result=ctx.result(call), payload=True))
         return ctx.covered(out, call)
 
     obj = ctx.objects.from_entry(call, fd, entry, unix_bucket=Bucket.NO_OBJECT)
@@ -161,8 +158,8 @@ def _data(ctx: EmitContext, call: Call, action: str) -> Outcome:
         reason = "tuple_unusable" if obj.reason == "tuple_unusable" else "unusable_object"
         return ctx.give_up(out, call, obj.bucket, reason)
 
-    bucket = ctx.objects.flow(
-        ctx, out, call, obj, action, head=True, res=ctx.res(call)
+    bucket = ctx.flow(
+        out, call, obj, action, payload=True, result=ctx.result(call)
     )
     if bucket is Bucket.COVERED:
         return ctx.covered(out, call)

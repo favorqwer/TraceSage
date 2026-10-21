@@ -17,7 +17,8 @@ name = "handle"
 verdict = "handle"
 reason = "fd_table_only"
 value = "L3"
-calls = ["close", "dup", "dup2", "dup3", "fcntl", "fcntl64", "lseek", "pipe", "pipe2"]
+calls = ["close", "close_range", "dup", "dup2", "dup3", "fcntl", "fcntl64", "lseek", "llseek",
+         "pipe", "pipe2"]
 
 [[group]]
 name = "attr"

@@ -25,8 +25,8 @@ class ContainerInfo:
 
     def props(self) -> dict[str, object]:
         return {
-            "privileged": self.privileged,
-            "host_root_rw": self.host_root_rw,
+            "container_privileged": self.privileged,
+            "container_host_root_rw": self.host_root_rw,
         }
 
 
@@ -142,7 +142,7 @@ class ContainerState:
     def props_for(self, cid: str) -> dict[str, object]:
         info = self._items.get(cid)
         if info is None:
-            return {"privileged": None, "host_root_rw": None}
+            return {"container_privileged": None, "container_host_root_rw": None}
         return info.props()
 
     def listing(self) -> list[ContainerInfo]:

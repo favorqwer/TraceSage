@@ -1,23 +1,17 @@
 """系统调用分类：调用名(+flags) -> Decision。
 
-唯一真源是 data/verbs.toml 与 data/calls.toml。本模块只做查表与两条特判：
-open 家族按 O_CREAT/O_TRUNC/O_TMPFILE 分流；creat 天然等于 O_CREAT。
-
-纯逻辑：不碰图、不碰状态、不碰 IO。``Tables`` 由调用方注入，不使用全局缓存。
+本模块是纯逻辑：不读 TOML、不碰图、不碰状态、不碰 IO。
+分类表由装配层加载后注入 ``Classifier``。
 """
 
 from __future__ import annotations
 
-import tomllib
 from dataclasses import dataclass
-from pathlib import Path
 
 from . import args as A
 from .events import Call
 from .kinds import EdgeClass, ObjSource, Verdict
-
-OPEN_FAMILY = {"open", "openat", "openat2", "open64", "openat64"}
-CREATE_ALWAYS = {"creat"}
+from .syscalls import CREATE_ALWAYS, OPEN_FAMILY
 
 # 本版按约定延后的内核对象动词（客体无稳定名字，R3）。
 DEFERRED_VERBS = ("module", "bpf", "io_uring", "shm")
@@ -48,50 +42,27 @@ class Decision:
     value: str = ""
 
 
-class Tables:
-    def __init__(self, data_dir: str | Path) -> None:
-        data = Path(data_dir)
-        verbs_doc = tomllib.loads((data / "verbs.toml").read_text(encoding="utf-8"))
-        calls_doc = tomllib.loads((data / "calls.toml").read_text(encoding="utf-8"))
+class Classifier:
+    """已加载好的分类表；构造时只接收内存字典，不做 IO。"""
 
-        self.verbs: dict[str, VerbSpec] = {}
-        self.by_call: dict[str, VerbSpec] = {}
-        for item in verbs_doc.get("verb", []):
-            spec = VerbSpec(
-                name=item["name"],
-                edge=EdgeClass(item["edge"]),
-                source=ObjSource(item["source"]),
-                gate=item.get("gate", "always"),
-                calls=tuple(item.get("calls", [])),
-                note=item.get("note", ""),
-            )
-            if spec.name in self.verbs:
-                raise ValueError(f"动词重复：{spec.name}")
-            self.verbs[spec.name] = spec
-            for call in spec.calls:
-                if call in self.by_call:
-                    raise ValueError(f"调用名重复归属：{call}")
-                self.by_call[call] = spec
-
-        self.ledger: dict[str, tuple[Verdict, str, str]] = {}
-        self.ledger_value: dict[str, str] = {}
-        for item in calls_doc.get("group", []):
-            group = item["name"]
-            verdict = Verdict(item["verdict"])
-            reason = item.get("reason", "")
-            value = item.get("value", "L3")
-            for call in item.get("calls", []):
-                if call in self.ledger or call in self.by_call:
-                    raise ValueError(f"调用名重复归属：{call}")
-                self.ledger[call] = (verdict, reason, group)
-                self.ledger_value[call] = value
-
-        overlap = (set(self.ledger) | set(self.by_call)) & OPEN_FAMILY
-        if overlap:
-            raise ValueError(f"open 家族必须走分流规则，不应出现在表里：{sorted(overlap)}")
+    def __init__(
+        self,
+        verbs: dict[str, VerbSpec],
+        by_call: dict[str, VerbSpec],
+        ledger: dict[str, tuple[Verdict, str, str]],
+        ledger_value: dict[str, str],
+    ) -> None:
+        self.verbs = verbs
+        self.by_call = by_call
+        self.ledger = ledger
+        self.ledger_value = ledger_value
 
     def decide(self, call: Call) -> Decision:
         name = call.call
+        # 采集端不认识的调用会渲染成 <unknown>，参数全空：连名字都没有，
+        # 无法归属。它和「账本表没登记」是两件事，所以单独一个 verdict。
+        if name == "<unknown>":
+            return Decision(Verdict.BLIND, reason="collector_unknown", value="L0")
         entry = self.ledger.get(name)
         if entry is not None:
             verdict, reason, _group = entry
@@ -109,15 +80,21 @@ class Tables:
         if name in OPEN_FAMILY:
             flags = A.flags_of(call.args.get("flags"))
             if "O_TMPFILE" in flags:
-                return Decision(Verdict.DROP, reason="open_tmpfile", value="L3")
+                # 匿名临时文件：不建 File 节点，但 fd 必须进句柄表。
+                return Decision(Verdict.HANDLE, reason="open_tmpfile", value="L3")
             if "O_CREAT" in flags or "O_TRUNC" in flags:
                 return Decision(Verdict.EMIT, verb="create", value="L1")
-            return Decision(Verdict.DROP, reason="open_readonly", value="L3")
+            # 只读/只写/只打开：不建边，但 fd 必须进句柄表。
+            return Decision(Verdict.HANDLE, reason="open_readonly", value="L3")
 
         spec = self.by_call.get(name)
         if spec is not None:
             return Decision(Verdict.EMIT, verb=spec.name, value="L1")
         return Decision(Verdict.UNMAPPED, reason="unmapped", value="L2")
+
+    def is_known_syscall(self, name: str) -> bool:
+        """未归类项是否为已知系统调用（用于报告区分「漏登记」与「真的没登记」）。"""
+        return name in self.by_call or name in self.ledger or name in OPEN_FAMILY
 
     # -- 供测试与报告 --------------------------------------------------
     def verb_count(self) -> int:
