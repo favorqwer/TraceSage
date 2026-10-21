@@ -51,7 +51,7 @@ TraceSage 使用 Sysdig 生成的主机系统调用事件流（SCAP 二进制文
 - 关系边：五种带方向与时间戳的系统调用事件边。
 - 核心边界：系统默认面向企业级多主机环境建模；节点以 `host_id` 作为命名空间属性与复合主键前缀，支持单机独立溯源与跨主机网络横向移动关联。字段规范见 `docs/MULTI_OS_LOG_PARSER_DESIGN.md` 与 `docs/多主机环境系统调用图物理级不可见与拓扑盲区攻击清单.md`。
 
-## 第四部分：四系统主干资产全景
+## 第四部分：主干资产全景
 
 ```
 TraceSage/
@@ -69,7 +69,6 @@ TraceSage/
 ├── tmp/                      # 临时文件与诊断数据区（随时可清）
 ├── tools/                    # 评测与检查工具（如 eval_agent_attack_path.py）
 ├── scap-parser/              # SCAP 捕获流式解析与 Neo4j 溯源图构建入库
-├── provenance-agent/         # 基于大语言模型的多阶段迭代图调查智能体
 ├── provenance-navigator/     # 神经符号因果拓扑与离线蒸馏双向因果导航系统
 └── provenance-engine/        # 调查引擎（基于 Neo4j 与 GQL 的纯图路径遍历）
 ```
@@ -99,7 +98,6 @@ TraceSage/
 ### 场景测试标准流程
 - 用户触发测试时，直接在项目虚拟环境下运行对应系统的入口脚本：
   - 图数据流式导入：`python scap-parser/main.py --scap attack/data/<场景>/capture.scap --scenario <场景全名>`
-  - 智能体调查：`provenance-agent/main.py --scenario <场景全名>`
   - 导航器评测：`provenance-navigator/main.py --scenario <场景全名>` 或 `provenance-navigator/run_five_fold.py`
   - 引擎测试：`provenance-engine/baseline/run-baseline.sh`
 - 执行完毕后立即调用评测脚本：`tools/eval_agent_attack_path.py --report <输出路径> --gt groundtruth/<场景全名>.groundtruth.json`。

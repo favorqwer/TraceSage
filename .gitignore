@@ -9,3 +9,17 @@ tmp/
 tmp.md
 provenance-agent/tests/
 attack/
+
+# Java 编译产物与字节码
+*.class
+provenance-engine/build/
+provenance-engine/.baseline-classes/
+provenance-engine/.baseline-build/
+
+# 数据库快照与二进制转储文件
+attack-*-v2*
+*.dump
+*.scap
+
+# 工具运行期临时缓存
+gt-annotator/tmp/
