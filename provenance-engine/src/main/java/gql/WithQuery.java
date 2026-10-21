@@ -4,7 +4,6 @@ public class WithQuery extends Clause {
    Variable variable;
    Where where;
    Match match;
-   LlmClause llmClause;
    BFS bfs;
    Yield yield;
    Return ret;
@@ -14,10 +13,9 @@ public class WithQuery extends Clause {
       this.where = where;
    }
 
-   public WithQuery(Variable variable, Match match, LlmClause llmClause, BFS bfs, Yield yield, Return ret) {
+   public WithQuery(Variable variable, Match match, BFS bfs, Yield yield, Return ret) {
       this.variable = variable;
       this.match = match;
-      this.llmClause = llmClause;
       this.bfs = bfs;
       this.yield = yield;
       this.ret = ret;
@@ -41,14 +39,6 @@ public class WithQuery extends Clause {
 
    public BFS getBfs() {
       return this.bfs;
-   }
-
-   public LlmClause getLlmClause() {
-      return this.llmClause;
-   }
-
-   public void setLlmClause(LlmClause llmClause) {
-      this.llmClause = llmClause;
    }
 
    public void setBfs(BFS bfs) {
@@ -87,7 +77,6 @@ public class WithQuery extends Clause {
             + this.variable.toString()
             + " = "
             + this.match.toString()
-            + (this.llmClause != null ? " " + this.llmClause.toString() : "")
             + (this.bfs != null ? " " + this.bfs.toString() : "")
             + (this.yield != null ? " " + this.yield.toString() : "")
             + (this.ret != null ? " " + this.ret.toString() : "");

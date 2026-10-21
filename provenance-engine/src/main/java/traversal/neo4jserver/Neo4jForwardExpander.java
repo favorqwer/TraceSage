@@ -212,32 +212,41 @@ public class Neo4jForwardExpander {
       String label = curNode.getF() != null
          ? Neo4jNodeRegistry.LABEL_FILE
          : curNode.getP() != null ? Neo4jNodeRegistry.LABEL_PROCESS : Neo4jNodeRegistry.LABEL_NETWORK;
-      String keyProp = Neo4jNodeRegistry.keyProperty(label);
       String key = this.registry.keyOf(curNode.getId());
-      String edgeColumns = "r.event_id AS eventid, r.starttime AS starttime, r.endtime AS endtime, "
-         + "r.syscall AS optype, coalesce(r.bytes, 0) AS amount, \"\" AS hostname";
+      Map<String, Object> params = new HashMap<>();
+      String curMatch = Neo4jNodeRegistry.matchCurClause("cur", label, key, params);
+      String edgeColumns = "r.event_id AS eventid, coalesce(r.start_ns, r.starttime) AS starttime, "
+         + "coalesce(r.end_ns, r.endtime) AS endtime, coalesce(r.syscall, r.action) AS optype, "
+         + "CASE WHEN coalesce(r.result, r.bytes, 0) > 0 THEN coalesce(r.result, r.bytes, 0) ELSE 0 END AS amount, \"\" AS hostname";
 
       StringBuilder cypher = new StringBuilder();
       if (Neo4jNodeRegistry.LABEL_PROCESS.equals(label)) {
-         cypher.append("MATCH (cur:Process {").append(keyProp).append(": $key})-[r:p2p]->(child:Process) ")
-            .append("RETURN ").append(edgeColumns).append(", child.process_id AS childkey, 'Process' AS childlabel ")
+         cypher.append("MATCH ").append(curMatch).append("-[r:ProcessToProcess|p2p]->(child:Process) ")
+            .append("RETURN ").append(edgeColumns).append(", ")
+            .append(Neo4jNodeRegistry.keyProjection("child", Neo4jNodeRegistry.LABEL_PROCESS))
+            .append(" AS childkey, 'Process' AS childlabel ")
             .append("UNION ALL ")
-            .append("MATCH (cur:Process {").append(keyProp).append(": $key})-[r:p2f]->(child:File) ")
-            .append("RETURN ").append(edgeColumns).append(", child.file_id AS childkey, 'File' AS childlabel ")
+            .append("MATCH ").append(curMatch).append("-[r:ProcessToFile|p2f]->(child:File) ")
+            .append("RETURN ").append(edgeColumns).append(", ")
+            .append(Neo4jNodeRegistry.keyProjection("child", Neo4jNodeRegistry.LABEL_FILE))
+            .append(" AS childkey, 'File' AS childlabel ")
             .append("UNION ALL ")
-            .append("MATCH (cur:Process {").append(keyProp).append(": $key})-[r:p2n]->(child:Network) ")
-            .append("RETURN ").append(edgeColumns).append(", child.network_id AS childkey, 'Network' AS childlabel ");
+            .append("MATCH ").append(curMatch).append("-[r:ProcessToNetwork|p2n]->(child:Network) ")
+            .append("RETURN ").append(edgeColumns).append(", ")
+            .append(Neo4jNodeRegistry.keyProjection("child", Neo4jNodeRegistry.LABEL_NETWORK))
+            .append(" AS childkey, 'Network' AS childlabel ");
       } else if (Neo4jNodeRegistry.LABEL_FILE.equals(label)) {
-         cypher.append("MATCH (cur:File {").append(keyProp).append(": $key})-[r:f2p]->(child:Process) ")
-            .append("RETURN ").append(edgeColumns).append(", child.process_id AS childkey, 'Process' AS childlabel ");
+         cypher.append("MATCH ").append(curMatch).append("-[r:FileToProcess|f2p]->(child:Process) ")
+            .append("RETURN ").append(edgeColumns).append(", ")
+            .append(Neo4jNodeRegistry.keyProjection("child", Neo4jNodeRegistry.LABEL_PROCESS))
+            .append(" AS childkey, 'Process' AS childlabel ");
       } else {
-         cypher.append("MATCH (cur:Network {").append(keyProp).append(": $key})-[r:n2p]->(child:Process) ")
-            .append("RETURN ").append(edgeColumns).append(", child.process_id AS childkey, 'Process' AS childlabel ");
+         cypher.append("MATCH ").append(curMatch).append("-[r:NetworkToProcess|n2p]->(child:Process) ")
+            .append("RETURN ").append(edgeColumns).append(", ")
+            .append(Neo4jNodeRegistry.keyProjection("child", Neo4jNodeRegistry.LABEL_PROCESS))
+            .append(" AS childkey, 'Process' AS childlabel ");
       }
       cypher.append("ORDER BY eventid");
-
-      Map<String, Object> params = new HashMap<>();
-      params.put("key", key);
 
       List<Map<String, Object>> rows = new ArrayList<>();
       for (org.neo4j.driver.Record record : this.sessions.run(cypher.toString(), params)) {

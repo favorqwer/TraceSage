@@ -54,9 +54,9 @@ import org.json.JSONObject;
 import traversal.neo4jserver.Neo4jServerTraversal;
 import util.CausalityPreserve;
 import util.ExpressionUtils;
+import util.ForwardAnalysis;
 import util.GQLBackwardPropagate;
 import util.GraphOperations;
-import util.llm.LlmConfig;
 
 /**
  * Deterministic re-execution of the investigation flow of the ProGQL query layer,
@@ -91,17 +91,18 @@ public class BaselineRunner {
    private static String poiSrcPort = "";
    private static String poiDstIp = "";
    private static String poiDstPort = "";
+   private static String poiEndpoints = null;
    private static String poiOptype = "write";
    private static String poiFile = null;
    private static final Map<Long, Double> entryCompositeScores = new HashMap<>();
-   private static double entryImpactWeight = 0.7;
-   private static double entryTimeWeight = 0.3;
+   private static double entryImpactWeight = 1.0;
+   private static double entryTimeWeight = 0.0;
 
    public static void main(String[] args) throws Exception {
       if (args.length == 0 || args[0].isEmpty()) {
          throw new IllegalArgumentException("usage: <scenarioName> [outDir] "
             + "[--poi-srcip v --poi-srcport v --poi-dstip v --poi-dstport v --poi-optype v] "
-            + "[--poi-file path] [--entry-limit N]（POI 无默认值，必须显式给）");
+            + "[--poi-endpoints ep] [--poi-file path] [--entry-limit N]（POI 无默认值，必须显式给）");
       }
       String dbName = args[0];
       String outDirArg = args.length > 1 ? args[1] : "output/engine-baseline/" + dbName;
@@ -112,7 +113,7 @@ public class BaselineRunner {
          if (!(key.startsWith("--poi-") || key.equals("--entry-limit")) || i + 1 >= args.length) {
             throw new IllegalArgumentException("Unknown argument: " + key
                + " (usage: <dbName> <outDir> [--poi-srcip v --poi-srcport v --poi-dstip v --poi-dstport v --poi-optype v]"
-               + " [--poi-file path] [--entry-limit N])");
+               + " [--poi-endpoints ep] [--poi-file path] [--entry-limit N])");
          }
          String value = args[++i];
          switch (key) {
@@ -120,6 +121,7 @@ public class BaselineRunner {
             case "--poi-srcport": poiSrcPort = value; break;
             case "--poi-dstip": poiDstIp = value; break;
             case "--poi-dstport": poiDstPort = value; break;
+            case "--poi-endpoints": poiEndpoints = value; break;
             case "--poi-optype": poiOptype = value; break;
             case "--poi-file": poiFile = value; break;
             case "--entry-limit": entryLimit = Integer.parseInt(value); break;
@@ -128,9 +130,9 @@ public class BaselineRunner {
          }
       }
 
-      if (poiFile == null
+      if (poiFile == null && poiEndpoints == null
             && (poiSrcIp.isEmpty() || poiSrcPort.isEmpty() || poiDstIp.isEmpty() || poiDstPort.isEmpty())) {
-         throw new IllegalArgumentException("需要 --poi-file <路径>，或四个网络 POI 参数 "
+         throw new IllegalArgumentException("需要 --poi-file <路径>，或 --poi-endpoints <endpoints>，或四个网络 POI 参数 "
             + "--poi-srcip/--poi-srcport/--poi-dstip/--poi-dstport");
       }
 
@@ -138,9 +140,10 @@ public class BaselineRunner {
       Files.createDirectories(outDir);
 
       Neo4jServerTraversal traversal = new Neo4jServerTraversal();
-      traversal.initial(dbName);
+      try {
+         traversal.initial(dbName);
 
-      // Step 1: POI match + backward causal traversal (g_raw)
+         // Step 1: POI match + backward causal traversal (g_raw)
       Main.poiEdge = new POIEdge("st");
       Match poiMatch = buildPoiMatch();
       String poiPattern = poiMatch.getPattern().toString();
@@ -176,9 +179,6 @@ public class BaselineRunner {
       Expression countExpression = new Expression("count(in(n))=0");
       CandidateLsts candidates = getEntryLstByCountExpr(bCpr, countExpression);
       Map<EntityNode, BigDecimal> entryTimes = findEarliestCausalEntryTimes(bCpr);
-      double[] rankingWeights = LlmConfig.loadEntryRankingWeightsOrDefault();
-      entryImpactWeight = rankingWeights[0];
-      entryTimeWeight = rankingWeights[1];
       entryCompositeScores.clear();
       sortEntryCandidates(candidates.networkLst, entryTimes, "desc");
       sortEntryCandidates(candidates.fileLst, entryTimes, "desc");
@@ -186,18 +186,24 @@ public class BaselineRunner {
       List<EntityNode> topEntries = selectEntryCandidatesByQuota(candidates.networkLst, candidates.fileLst, candidates.processLst, entryLimit);
       System.out.println("entry candidates: network=" + candidates.networkLst.size() + " file=" + candidates.fileLst.size() + " process=" + candidates.processLst.size() + ", selected top " + topEntries.size());
 
-      // Step 5: forward expansion from the selected entries, unioned
-      Edge forwardEdge = new Edge("re");
-      Expression forwardWhere = buildCausalityExpression(
-         "re.endtime>min(collect(uin IN in(u) | uin.starttime))", "uin", "u", "in", "starttime", false
-      );
+      // Step 5: forward expansion from the selected entries (in-memory subgraph, aligned with DepImpact)
+      BigDecimal poiTime = null;
+      if (Main.poiEventInfo != null && Main.poiEventInfo.getEndTime() != null) {
+         poiTime = Main.poiEventInfo.getEndTime();
+      } else {
+         for (EventEdge e : bCpr.edgeSet()) {
+            if (e.getEndTime() != null && (poiTime == null || e.getEndTime().compareTo(poiTime) > 0)) {
+               poiTime = e.getEndTime();
+            }
+         }
+      }
+
+      ForwardAnalysis forwardAnalysis = new ForwardAnalysis(bCpr);
       DirectedPseudograph<EntityNode, EventEdge> forwardUnion = new DirectedPseudograph(EventEdge.class);
       JSONArray perEntry = new JSONArray();
       int entryRank = 1;
       for (EntityNode entry : topEntries) {
-         String pattern = "(n{id:" + entry.getId() + "})-[]->()";
-         DirectedPseudograph<EntityNode, EventEdge> internal =
-            applyCpr(traversal.traverse(pattern, entry, forwardEdge, "forward", forwardWhere, true, null));
+         DirectedPseudograph<EntityNode, EventEdge> internal = forwardAnalysis.forwardLimitedByTime(entry, poiTime);
          JSONObject item = new JSONObject()
             .put("rank", entryRank)
             .put("id", entry.getId())
@@ -215,8 +221,14 @@ public class BaselineRunner {
       }
       System.out.println("forward_union: " + forwardUnion.vertexSet().size() + "v/" + forwardUnion.edgeSet().size() + "e");
 
-      // Step 6: final result = INTERSECT(g1, g2)
-      DirectedPseudograph<EntityNode, EventEdge> finalGraph = GraphOperations.intersection(bCpr, forwardUnion);
+      // Step 6: final result = INTERSECT(bCpr, forwardUnion) (with DepImpact fallback if forwardUnion is empty)
+      DirectedPseudograph<EntityNode, EventEdge> finalGraph;
+      if (forwardUnion.edgeSet().isEmpty()) {
+         System.out.println("forward_union is empty; fallback to b_cpr (aligned with DepImpact fallback)");
+         finalGraph = bCpr;
+      } else {
+         finalGraph = GraphOperations.intersection(bCpr, forwardUnion);
+      }
       System.out.println("final: " + finalGraph.vertexSet().size() + "v/" + finalGraph.edgeSet().size() + "e");
 
       // --- baseline artifact ---
@@ -229,6 +241,10 @@ public class BaselineRunner {
          .put("entry_limit", entryLimit)
          .put("entry_order", "desc")
          .put("cpr_merge_window", CPR_MERGE_WINDOW)
+         .put("unsupervised_mode", true)
+         .put("prior_knowledge", "none")
+         .put("entry_ranking_policy", "pure_reputation")
+         .put("forward_analysis_scope", "in_memory_subgraph")
          .put("entry_ranking_weights", new JSONArray(Arrays.asList(entryImpactWeight, entryTimeWeight))));
 
       PoiEventInfo poi = Main.poiEventInfo;
@@ -315,10 +331,12 @@ public class BaselineRunner {
       }
       root.put("b_score_edges", bScoreEdges);
 
-      Path jsonPath = outDir.resolve("baseline.json");
-      Files.write(jsonPath, root.toString(2).getBytes(StandardCharsets.UTF_8));
-      System.out.println("baseline written: " + jsonPath.toAbsolutePath());
-      traversal.close();
+         Path jsonPath = outDir.resolve("baseline.json");
+         Files.write(jsonPath, root.toString(2).getBytes(StandardCharsets.UTF_8));
+         System.out.println("baseline written: " + jsonPath.toAbsolutePath());
+      } finally {
+         traversal.close();
+      }
    }
 
    // --- query reconstruction (programmatic equivalent of the parsed query file) ---
@@ -335,15 +353,21 @@ public class BaselineRunner {
          );
          relationshipType = ":FileEvent";
       } else {
+         List<Property> netProps = new ArrayList<>();
+         if (poiEndpoints != null && !poiEndpoints.isEmpty()) {
+            netProps.add(new Property("endpoints", "\"" + poiEndpoints + "\""));
+         } else if (!poiSrcIp.isEmpty() && !poiSrcPort.isEmpty() && !poiDstIp.isEmpty() && !poiDstPort.isEmpty()) {
+            String ep = poiSrcIp + ":" + poiSrcPort + "->" + poiDstIp + ":" + poiDstPort;
+            netProps.add(new Property("endpoints", "\"" + ep + "\""));
+            netProps.add(new Property("srcip", "\"" + poiSrcIp + "\""));
+            netProps.add(new Property("srcport", "\"" + poiSrcPort + "\""));
+            netProps.add(new Property("dstip", "\"" + poiDstIp + "\""));
+            netProps.add(new Property("dstport", "\"" + poiDstPort + "\""));
+         }
          dst = new NodePattern(
             new Variable("net"),
             new NodeLabel("Network"),
-            Arrays.asList(
-               new Property("srcip", "\"" + poiSrcIp + "\""),
-               new Property("srcport", "\"" + poiSrcPort + "\""),
-               new Property("dstip", "\"" + poiDstIp + "\""),
-               new Property("dstport", "\"" + poiDstPort + "\"")
-            )
+            netProps
          );
          relationshipType = ":NetworkEvent";
       }
@@ -526,39 +550,28 @@ public class BaselineRunner {
          return;
       }
 
-      double minimumReputation = Double.POSITIVE_INFINITY;
-      double maximumReputation = Double.NEGATIVE_INFINITY;
-      BigDecimal earliestEntryTime = null;
-      BigDecimal latestEntryTime = null;
       for (EntityNode candidate : candidates) {
-         minimumReputation = Math.min(minimumReputation, candidate.getReputation());
-         maximumReputation = Math.max(maximumReputation, candidate.getReputation());
-         BigDecimal entryTime = entryTimes.get(candidate);
-         if (entryTime != null) {
-            earliestEntryTime = earliestEntryTime == null || entryTime.compareTo(earliestEntryTime) < 0 ? entryTime : earliestEntryTime;
-            latestEntryTime = latestEntryTime == null || entryTime.compareTo(latestEntryTime) > 0 ? entryTime : latestEntryTime;
-         }
-      }
-
-      final double minReputation = minimumReputation;
-      final double maxReputation = maximumReputation;
-      final BigDecimal earliest = earliestEntryTime;
-      final BigDecimal latest = latestEntryTime;
-      for (EntityNode candidate : candidates) {
-         entryCompositeScores.put(
-            candidate.getId(),
-            calculateEntryCompositeScore(candidate, entryTimes.get(candidate), minReputation, maxReputation, earliest, latest)
-         );
+         // Pure reputation ranking aligned with DepImpact (sortedSignatureBasedOnRP)
+         entryCompositeScores.put(candidate.getId(), candidate.getReputation());
       }
       Comparator<EntityNode> comparator = (left, right) -> {
-         double leftScore = getEntryCompositeScore(left);
-         double rightScore = getEntryCompositeScore(right);
-         int comparison = Double.compare(rightScore, leftScore);
+         double leftRep = left.getReputation();
+         double rightRep = right.getReputation();
+         int comparison = Double.compare(rightRep, leftRep); // descending by reputation
          if (orderBy != null && orderBy.equalsIgnoreCase("asc")) {
             comparison = -comparison;
          }
          if (comparison != 0) {
             return comparison;
+         }
+         // Deterministic tie-breakers: earliest entry time, then node ID
+         BigDecimal leftTime = entryTimes.get(left);
+         BigDecimal rightTime = entryTimes.get(right);
+         if (leftTime != null && rightTime != null) {
+            int timeComp = leftTime.compareTo(rightTime);
+            if (timeComp != 0) {
+               return timeComp;
+            }
          }
          return Long.compare(left.getId(), right.getId());
       };
@@ -710,7 +723,7 @@ public class BaselineRunner {
 
    private static double round(double value, int scale) {
       if (Double.isNaN(value) || Double.isInfinite(value)) {
-         return value;
+         return 0.0;
       }
       return BigDecimal.valueOf(value).setScale(scale, RoundingMode.HALF_UP).doubleValue();
    }

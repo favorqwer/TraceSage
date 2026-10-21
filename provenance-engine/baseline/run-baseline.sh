@@ -10,9 +10,7 @@
 #   baseline.BaselineRunner: --poi-srcip v --poi-srcport v --poi-dstip v
 #   --poi-dstport v --poi-optype v, or --poi-file path
 #
-# The engine sources are compiled WITHOUT src/main/java/main/Main.java, which
-# still references the removed ProGQL parser. A stub main.Main (baseline/stub)
-# provides the static members the engine reads; see README.md.
+# The engine sources are compiled against src/main/java and baseline/BaselineRunner.java.
 set -euo pipefail
 
 BASELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,12 +31,6 @@ fi
 M2_REPO="${M2_REPO:-$HOME/.m2/repository}"
 if command -v cygpath >/dev/null 2>&1; then
    M2_REPO="$(cygpath -m "$M2_REPO")"
-fi
-
-# Canonical entry-ranking weights (impact 0.55 / time 0.45), see README.md.
-CFG_PATH="$BASELINE_DIR/progql-llm.properties"
-if command -v cygpath >/dev/null 2>&1; then
-   CFG_PATH="$(cygpath -m "$CFG_PATH")"
 fi
 
 # Compile with paths relative to PROGQL_DIR so that POSIX/Windows path
@@ -78,16 +70,13 @@ CP="$CP;$M2_REPO/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar"
 
 (
    cd "$PROGQL_DIR"
-   find src/main/java -name '*.java' ! -name 'BreadthFirstIterator.java' ! -path '*main/Main.java' > "$BUILD_DIR/sources.txt"
-   {
-      echo "baseline/stub/main/Main.java"
-      echo "baseline/BaselineRunner.java"
-   } >> "$BUILD_DIR/sources.txt"
+   find src/main/java -name '*.java' ! -name 'BreadthFirstIterator.java' > "$BUILD_DIR/sources.txt"
+   echo "baseline/BaselineRunner.java" >> "$BUILD_DIR/sources.txt"
 
    MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' javac -encoding UTF-8 -nowarn \
       -d "$BUILD_DIR/classes" -cp "$CP" "@$BUILD_DIR/sources.txt"
 )
 
 cd "$PROGQL_DIR"
-MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' java -Dprogql.llm.config="$CFG_PATH" \
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' java \
    -cp "$BUILD_DIR/classes;$CP" baseline.BaselineRunner "$DB_NAME" "$OUT_DIR_ARG" ${POI_ARGS[@]+"${POI_ARGS[@]}"}

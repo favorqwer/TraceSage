@@ -189,34 +189,66 @@ public class Neo4jServerTraversal implements DBTraversal {
          String neoEventKey = mapEventProperty(eventKey);
 
          Map<String, Object> vertexParams = new HashMap<>();
-         StringBuilder vertexMatch = new StringBuilder();
+         String endpointValue = null;
+         String pathValue = null;
+         String lip = null, lport = null, rip = null, rport = null;
+
          List<Property> props = dstPattern.getPropertyLst();
          if (props != null) {
-            int paramIndex = 0;
             for (Property p : props) {
-               String neoKey = mapVertexProperty(p.getPropertyKeyname());
-               if (neoKey == null) {
-                  continue;
+               String k = p.getPropertyKeyname().toLowerCase();
+               String val = p.getExpression().replaceAll("^\"|\"$", "");
+               if (k.endsWith("ip")) {
+                  val = stripCidrSuffix(val);
                }
-               String value = p.getExpression().replaceAll("^\"|\"$", "");
-               if (neoKey.endsWith("ip")) {
-                  value = stripCidrSuffix(value);
+               if ("endpoints".equals(k)) {
+                  endpointValue = val;
+               } else if ("srcip".equals(k) || "lip".equals(k)) {
+                  lip = val;
+               } else if ("srcport".equals(k) || "lport".equals(k)) {
+                  lport = val;
+               } else if ("dstip".equals(k) || "rip".equals(k)) {
+                  rip = val;
+               } else if ("dstport".equals(k) || "rport".equals(k)) {
+                  rport = val;
+               } else if ("name".equals(k) || "path".equals(k)) {
+                  pathValue = val;
                }
-               String paramName = "vp" + paramIndex++;
-               vertexMatch.append(neoKey).append(": $").append(paramName).append(", ");
-               vertexParams.put(paramName, value);
-            }
-            if (vertexMatch.length() > 0) {
-               vertexMatch.setLength(vertexMatch.length() - 2);
             }
          }
 
-         String poiCypher = "MATCH (src:" + srcLabel + ")-[st:" + relationshipType + "]->(dst:" + dstLabel
-            + " {" + vertexMatch + "}) WHERE st." + neoEventKey + " = $eventValue "
-            + "RETURN st.event_id AS eventid, st.syscall AS optype, coalesce(st.bytes, 0) AS amount, "
-            + "st.starttime AS starttime, st.endtime AS endtime, "
-            + "src." + Neo4jNodeRegistry.keyProperty(srcLabel) + " AS srckey, "
-            + "dst." + Neo4jNodeRegistry.keyProperty(dstLabel) + " AS dstkey "
+         StringBuilder whereDst = new StringBuilder();
+         if (Neo4jNodeRegistry.LABEL_FILE.equals(dstLabel)) {
+            if (pathValue != null) {
+               whereDst.append("(dst.path = $dstPath OR dst.file_id = $dstPath)");
+               vertexParams.put("dstPath", pathValue);
+            }
+         } else if (Neo4jNodeRegistry.LABEL_NETWORK.equals(dstLabel)) {
+            if (endpointValue == null && lip != null && lport != null && rip != null && rport != null) {
+               endpointValue = lip + ":" + lport + "->" + rip + ":" + rport;
+            }
+            if (endpointValue != null) {
+               whereDst.append("(dst.endpoints = $dstEndpoint OR dst.network_id = $dstEndpoint ");
+               if (lip != null && lport != null && rip != null && rport != null) {
+                  whereDst.append("OR (dst.lip = $lip AND dst.lport = $lport AND dst.rip = $rip AND dst.rport = $rport)");
+                  vertexParams.put("lip", lip);
+                  vertexParams.put("lport", lport);
+                  vertexParams.put("rip", rip);
+                  vertexParams.put("rport", rport);
+               }
+               whereDst.append(")");
+               vertexParams.put("dstEndpoint", endpointValue);
+            }
+         }
+
+         String dstFilter = whereDst.length() > 0 ? " AND " + whereDst.toString() : "";
+         String poiCypher = "MATCH (src:" + srcLabel + ")-[st:" + relationshipType + "]->(dst:" + dstLabel + ") "
+            + "WHERE (st.action = $eventValue OR st.syscall = $eventValue)" + dstFilter + " "
+            + "RETURN st.event_id AS eventid, coalesce(st.syscall, st.action) AS optype, "
+            + "CASE WHEN coalesce(st.result, st.bytes, 0) > 0 THEN coalesce(st.result, st.bytes, 0) ELSE 0 END AS amount, "
+            + "coalesce(st.start_ns, st.starttime) AS starttime, coalesce(st.end_ns, st.endtime) AS endtime, "
+            + Neo4jNodeRegistry.keyProjection("src", srcLabel) + " AS srckey, "
+            + Neo4jNodeRegistry.keyProjection("dst", dstLabel) + " AS dstkey "
             + "ORDER BY eventid";
          vertexParams.put("eventValue", eventValue);
 
@@ -292,9 +324,11 @@ public class Neo4jServerTraversal implements DBTraversal {
 
          String label = this.registry.labelOf(nodeId);
          String key = this.registry.keyOf(nodeId);
-         String thresholdCypher = "MATCH (n:" + label + " {" + Neo4jNodeRegistry.keyProperty(label)
-            + ": $key})-[r]->() RETURN r.starttime AS starttime, r.endtime AS endtime";
-         for (Record record : this.sessions.run(thresholdCypher, "key", key)) {
+         Map<String, Object> thresholdParams = new HashMap<>();
+         String matchNode = Neo4jNodeRegistry.matchCurClause("n", label, key, thresholdParams);
+         String thresholdCypher = "MATCH " + matchNode + "-[r]->() "
+            + "RETURN coalesce(r.start_ns, r.starttime) AS starttime, coalesce(r.end_ns, r.endtime) AS endtime";
+         for (Record record : this.sessions.run(thresholdCypher, thresholdParams)) {
             long candidate = record.get(property).asLong();
             if (hasMaxTraversal && edgeTime < candidate) {
                edgeTime = candidate;
@@ -309,22 +343,22 @@ public class Neo4jServerTraversal implements DBTraversal {
       return jg;
    }
 
-   /** Label pair -> one of the five directed sysdig relationship types. */
+   /** Label pair -> one of the five directed sysdig relationship types (matches both new and legacy). */
    static String mapRelationType(String srcLabel, String dstLabel) {
       if (Neo4jNodeRegistry.LABEL_PROCESS.equals(srcLabel) && Neo4jNodeRegistry.LABEL_PROCESS.equals(dstLabel)) {
-         return "p2p";
+         return "ProcessToProcess|p2p";
       }
       if (Neo4jNodeRegistry.LABEL_PROCESS.equals(srcLabel) && Neo4jNodeRegistry.LABEL_FILE.equals(dstLabel)) {
-         return "p2f";
+         return "ProcessToFile|p2f";
       }
       if (Neo4jNodeRegistry.LABEL_FILE.equals(srcLabel) && Neo4jNodeRegistry.LABEL_PROCESS.equals(dstLabel)) {
-         return "f2p";
+         return "FileToProcess|f2p";
       }
       if (Neo4jNodeRegistry.LABEL_PROCESS.equals(srcLabel) && Neo4jNodeRegistry.LABEL_NETWORK.equals(dstLabel)) {
-         return "p2n";
+         return "ProcessToNetwork|p2n";
       }
       if (Neo4jNodeRegistry.LABEL_NETWORK.equals(srcLabel) && Neo4jNodeRegistry.LABEL_PROCESS.equals(dstLabel)) {
-         return "n2p";
+         return "NetworkToProcess|n2p";
       }
       throw new IllegalArgumentException("Unsupported pattern endpoints: (" + srcLabel + ")-[]->(" + dstLabel + ")");
    }
@@ -333,11 +367,15 @@ public class Neo4jServerTraversal implements DBTraversal {
    static String mapEventProperty(String columnName) {
       switch (columnName.toLowerCase()) {
          case "optype":
-            return "syscall";
+            return "action";
          case "amount":
-            return "bytes";
+            return "result";
          case "eventno":
             return "event_id";
+         case "starttime":
+            return "start_ns";
+         case "endtime":
+            return "end_ns";
          default:
             return columnName;
       }
@@ -354,10 +392,12 @@ public class Neo4jServerTraversal implements DBTraversal {
             return "rip";
          case "dstport":
             return "rport";
+         case "endpoints":
+            return "endpoints";
          case "name":
             return "path";
          case "exename":
-            return "exepath";
+            return "exe_path";
          default:
             return columnName;
       }
