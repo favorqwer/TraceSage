@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """
-运行并对比 provenance-engine 在 5 个攻击场景新旧图库上的全量测试与评测。
-遵循 AGENTS.md 四大工程法则与对比实验底线。
+运行 provenance-engine 在 10 个攻击场景 -v2 图库上的全量测试，并用当前 GT 评测。
+产出直接写入 output/engine-baseline/<场景名>/（基线位置，见 AGENTS.md）。
+遵循 AGENTS.md 四大工程法则与对比实验底线（只跑 -v2 图，不碰旧库）。
 """
 
 import argparse
@@ -19,34 +20,54 @@ M2_REPO = Path(os.environ.get("USERPROFILE", "C:/Users/Favor")) / ".m2" / "repos
 
 SCENARIOS = {
     "1_Web_Exploit_Ransomware": {
-        "db_old": "attack-1-web-exploit-ransomware",
         "db_new": "attack-1-web-exploit-ransomware-v2",
         "poi_args": ["--poi-file", "/srv/data/README_RESTORE.txt", "--poi-optype", "write"],
         "gt": "groundtruth/1_Web_Exploit_Ransomware.groundtruth.json",
     },
     "2_SSH_Spray_Lateral_Exfiltration": {
-        "db_old": "attack-2-ssh-spray-lateral-exfiltration",
         "db_new": "attack-2-ssh-spray-lateral-exfiltration-v2",
         "poi_args": ["--poi-endpoints", "100.116.135.31:45794->100.86.108.4:22", "--poi-optype", "write"],
         "gt": "groundtruth/2_SSH_Spray_Lateral_Exfiltration.groundtruth.json",
     },
     "3_Phishing_Beacon_Cryptomining": {
-        "db_old": "attack-3-phishing-beacon-cryptomining",
         "db_new": "attack-3-phishing-beacon-cryptomining-v2",
         "poi_args": ["--poi-endpoints", "100.86.108.4:59062->100.84.151.2:8080", "--poi-optype", "sendto"],
         "gt": "groundtruth/3_Phishing_Beacon_Cryptomining.groundtruth.json",
     },
     "4_Repo_Poisoning_Backdoor": {
-        "db_old": "attack-4-repo-poisoning-backdoor",
         "db_new": "attack-4-repo-poisoning-backdoor-v2",
         "poi_args": ["--poi-endpoints", "100.74.213.15:53648->100.86.108.4:22", "--poi-optype", "write"],
         "gt": "groundtruth/4_Repo_Poisoning_Backdoor.groundtruth.json",
     },
     "5_Exposed_Service_Pivot": {
-        "db_old": "attack-5-exposed-service-pivot",
         "db_new": "attack-5-exposed-service-pivot-v2",
         "poi_args": ["--poi-endpoints", "100.86.108.4:52972->100.116.135.31:6379", "--poi-optype", "write"],
         "gt": "groundtruth/5_Exposed_Service_Pivot.groundtruth.json",
+    },
+    "6_Web_SQLi_Data_Exfiltration": {
+        "db_new": "attack-6-web-sqli-data-exfiltration-v2",
+        "poi_args": ["--poi-endpoints", "100.74.213.15:40316->100.86.108.4:80", "--poi-optype", "write"],
+        "gt": "groundtruth/6_Web_SQLi_Data_Exfiltration.groundtruth.json",
+    },
+    "7_DB_Bruteforce_Datawipe": {
+        "db_new": "attack-7-db-bruteforce-datawipe-v2",
+        "poi_args": ["--poi-file", "/srv/bizapp/logs/bizapp-sync.log", "--poi-optype", "unlink"],
+        "gt": "groundtruth/7_DB_Bruteforce_Datawipe.groundtruth.json",
+    },
+    "8_FTP_WeakCreds_WebShell_Exfiltration": {
+        "db_new": "attack-8-ftp-weakcreds-webshell-exfiltration-v2",
+        "poi_args": ["--poi-endpoints", "100.86.108.4:48182->100.74.213.15:8888", "--poi-optype", "sendto"],
+        "gt": "groundtruth/8_FTP_WeakCreds_WebShell_Exfiltration.groundtruth.json",
+    },
+    "9_Exposed_Container_Escape": {
+        "db_new": "attack-9-exposed-container-escape-v2",
+        "poi_args": ["--poi-endpoints", "172.17.0.2:56186->100.74.213.15:8808", "--poi-optype", "sendto"],
+        "gt": "groundtruth/9_Exposed_Container_Escape.groundtruth.json",
+    },
+    "10_Tomcat_Weakcreds_DNS_Exfiltration": {
+        "db_new": "attack-10-tomcat-weakcreds-dns-exfiltration-v2",
+        "poi_args": ["--poi-endpoints", "100.74.213.15:48370->100.86.108.4:8080", "--poi-optype", "write"],
+        "gt": "groundtruth/10_Tomcat_Weakcreds_DNS_Exfiltration.groundtruth.json",
     },
 }
 
@@ -134,7 +155,7 @@ def run_engine(scenario_name, db_name, out_dir, poi_args):
 def eval_result(baseline_json, gt_path):
     cmd = [
         sys.executable,
-        str(ROOT / "tools" / "evaluate_gt.py"),
+        str(ROOT / "tools" / "score_graph_product.py"),
         str(baseline_json),
         "--gt", str(gt_path),
     ]
@@ -146,7 +167,7 @@ def eval_result(baseline_json, gt_path):
     for line in res.stdout.splitlines():
         if "召回（按步骤）" in line:
             recall_str = line.strip()
-        elif "查准（按边）" in line:
+        elif "查准（按" in line:
             prec_str = line.strip()
     return recall_str, prec_str, res.stdout
 
@@ -166,50 +187,39 @@ def main():
 
     for name in target_scenarios:
         info = SCENARIOS[name]
-        out_dir = ROOT / "output" / "engine-runs" / "new-parser-v2" / name
-        baseline_new = out_dir / "baseline.json"
-        baseline_old = ROOT / "output" / "engine-baseline" / name / "baseline.json"
+        out_dir = ROOT / "output" / "engine-baseline" / name
+        baseline = out_dir / "baseline.json"
         gt_path = ROOT / info["gt"]
 
         wall_time = 0.0
-        need_run = (not args.skip_run) and (args.force or not baseline_new.exists())
+        need_run = (not args.skip_run) and (args.force or not baseline.exists())
         if need_run:
             success, wall_time, _ = run_engine(name, info["db_new"], out_dir, info["poi_args"])
             if not success:
                 print(f"FAILED on {name}")
                 continue
-        elif baseline_new.exists():
-            print(f"[{name}] Reusing existing {baseline_new}")
-        
-        # Evaluate New
-        rec_new, prec_new, _ = eval_result(baseline_new, gt_path)
-        # Evaluate Old
-        rec_old, prec_old, _ = eval_result(baseline_old, gt_path)
+        elif baseline.exists():
+            print(f"[{name}] Reusing existing {baseline}")
 
-        data_new = json.loads(baseline_new.read_text(encoding="utf-8"))
-        data_old = json.loads(baseline_old.read_text(encoding="utf-8"))
+        recall, precision, _ = eval_result(baseline, gt_path)
+        data = json.loads(baseline.read_text(encoding="utf-8"))
 
         results.append({
             "scenario": name,
             "wall_time": wall_time,
-            "old_stages": data_old.get("stages", {}),
-            "new_stages": data_new.get("stages", {}),
-            "old_recall": rec_old,
-            "new_recall": rec_new,
-            "old_prec": prec_old,
-            "new_prec": prec_new,
+            "stages": data.get("stages", {}),
+            "recall": recall,
+            "precision": precision,
         })
 
     # Summary table
     print("\n" + "=" * 80)
-    print("全场景新旧基线评测对比汇总")
+    print("-v2 图基线评测汇总")
     print("=" * 80)
     for r in results:
-        print(f"\n场景: {r['scenario']} (新图运行耗时: {r['wall_time']:.1f}s)")
-        print(f"  旧基线阶段: b_raw={r['old_stages'].get('b_raw')}, final={r['old_stages'].get('final')}")
-        print(f"  新图阶段:   b_raw={r['new_stages'].get('b_raw')}, final={r['new_stages'].get('final')}")
-        print(f"  旧基线评分: {r['old_recall']} | {r['old_prec']}")
-        print(f"  新图评分:   {r['new_recall']} | {r['new_prec']}")
+        print(f"\n场景: {r['scenario']} (运行耗时: {r['wall_time']:.1f}s)")
+        print(f"  阶段: b_raw={r['stages'].get('b_raw')}, final={r['stages'].get('final')}")
+        print(f"  评分: {r['recall']} | {r['precision']}")
 
 
 if __name__ == "__main__":

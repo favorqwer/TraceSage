@@ -2,10 +2,10 @@
 
 用法（在仓库根目录）：
 
-    python tools/l1_index.py --database attack-3-phishing-beacon-cryptomining
-    python tools/l1_index.py --database attack-3-phishing-beacon-cryptomining --force
+    python tools/l1_index.py --database attack-3-phishing-beacon-cryptomining-v2
+    python tools/l1_index.py --database attack-3-phishing-beacon-cryptomining-v2 --force
 
-正常跑导航器时不用手动建：索引缺失或过期会自动重建（见 `foundation/layers/l1_reach/graph_index.py`
+正常跑导航器时不用手动建：索引缺失或过期会自动重建（见 `closure/walk.py`
 的 `ensure_snapshot`）。这个脚本只用于「先建好再看，或者强制重建」。
 """
 
@@ -19,9 +19,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "provenance-navigator"))
 
-from foundation.core import settings  # noqa: E402
-from foundation.core.db import ReadOnlyGraph  # noqa: E402
-from foundation.layers.l1_reach import graph_index as snap  # noqa: E402
+from common import config as settings  # noqa: E402
+from common.graph import ReadOnlyGraph  # noqa: E402
+import closure.walk as snap  # noqa: E402
 
 
 def main() -> int:
