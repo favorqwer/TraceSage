@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import unittest
 
-from foundation.layers.l1_reach import graph_index as snap
-from foundation.layers.l1_reach import walk as C
-from foundation.layers.l1_reach.walk import SnapshotReader
+import closure.walk as snap
+import closure.walk as C
+from closure.walk import SnapshotReader
 from tests.foundation.db_source import DbSource
 
 DB = "unit-test-index"

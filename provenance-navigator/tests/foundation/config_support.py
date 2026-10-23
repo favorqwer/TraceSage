@@ -1,6 +1,6 @@
 """单测用的参数文件小工具：把 {段: {键: 值}} 写成一份临时 TOML，并在用例里临时换用它。
 
-生产代码读参数只有一个入口（`foundation/core/settings.py`），换文件也只有 `settings.use_config`；
+生产代码读参数只有一个入口（`common/config.py`），换文件也只有 `settings.use_config`；
 测试用它来构造"某一项写成别的值"的场景，退出时自动回到默认那份。
 """
 
@@ -31,7 +31,7 @@ def write_config(path: pathlib.Path, sections: dict) -> pathlib.Path:
 @contextlib.contextmanager
 def temp_config(sections: dict):
     """临时换一份参数文件跑一段代码，退出时回到默认那份。"""
-    from foundation.core import settings
+    from common import config as settings
 
     with tempfile.TemporaryDirectory() as folder:
         path = write_config(pathlib.Path(folder) / "agent.toml", sections)

@@ -12,8 +12,8 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-from foundation.layers.l2_judge import bundles  # noqa: E402
-from foundation.layers.l2_judge import items as items_mod  # noqa: E402
+import llm.judge as bundles  # noqa: E402
+import llm.judge as items_mod  # noqa: E402
 
 
 def record(src, syscall, dst, *, src_label="Process", dst_label="File", rels=("f2p",),

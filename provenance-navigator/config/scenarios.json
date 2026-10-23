@@ -1,5 +1,5 @@
 {
-  "_comment": "POI 与攻击入口由本文件指定（D5）：必填内容是 database + poi.{kind, rel, syscall, key}；新最小数据集五个场景另给 entry（攻击入口＝攻击在受害机上最早、可归属、且是攻击路径起点的那个事件）。key 是图上实体内容（file_id 或 network_id），必须与图内容完全一致；实例数、时间范围、event_id 等派生量一律由 intake 现算，不写进配置。当前代码只读 poi，entry 供评测与人工核对使用。",
+  "_comment": "POI 与攻击入口由本文件指定（D5）：必填内容是 database + poi.{kind, rel, syscall, key}；当前 10 个场景另给 entry（攻击入口＝攻击在受害机上最早、可归属、且是攻击路径起点的那个事件）。key 是图上实体内容（file_id 或 network_id），必须与图内容完全一致；实例数、时间范围、event_id 等派生量一律由 intake 现算，不写进配置。当前代码只读 poi，entry 供评测与人工核对使用。",
   "scenarios": {
     "1_Web_Exploit_Ransomware": {
       "_note": "新最小数据集场景 1。攻击链：公网 Web 应用插件上传漏洞 -> 网页载荷 -> 网站账号身份 -> 配置错误提权（最高权限定时任务执行 web 账号可写的脚本）-> 持久化 -> 勒索加密。锚点取攻击的最终产物：勒索说明文件（全部加密完成后写入）。",
@@ -84,6 +84,91 @@
         "syscall": "accept",
         "network_id": "100.74.213.15:50574->100.86.108.4:6379",
         "_why": "攻击的最早动作，也是攻击真正落进来的那一下：外部第一条连接被无认证、以最高权限运行的缓存服务接受（event_id=1054，15:41:01.059，协调世界时）。本场景两条口径重合，无备选。"
+      }
+    },
+    "6_Web_SQLi_Data_Exfiltration": {
+      "_note": "场景 6。攻击链：外部对 80 端口做站点资产指纹识别（首页、robots.txt、后台入口、version.xml、语言包、README）→ 报错回显 SQL 注入点探测 → 用破解出来的管理员凭据登录后台 → 复用后台会话逐页慢速巡检并做会话复核；全程只读，没有在受害机上落地任何文件。锚点取最后一次会话复核的响应写出（event_id=5132328，17:54:51.234，18994 字节，紧接着还有一笔 5 字节收尾写出，两笔都算命中）。本场攻击判别面在现有图模型下不可表达：注入在受害机上只表现为 apache2 的普通收发与它对数据库套接字的普通读写，与正常 Web 请求同形，因此没有更窄的锚点可选。注意：网络实体内容里含攻击机的临时源端口，每采集一次都要按新库回填。",
+      "database": "attack-6-web-sqli-data-exfiltration-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "write",
+        "network_id": "100.74.213.15:40316->100.86.108.4:80"
+      },
+      "entry": {
+        "kind": "network",
+        "rel": "n2p",
+        "syscall": "accept",
+        "network_id": "100.74.213.15:47740->100.86.108.4:80",
+        "_why": "攻击在受害机上的最早可归属动作：外部攻击机对 80 端口站点探测的第一条连接被 Web 服务接受（event_id=408937，17:41:28.465），随后是 robots.txt、后台入口、版本描述等一连串指纹请求。"
+      }
+    },
+    "7_DB_Bruteforce_Datawipe": {
+      "_note": "场景 7。攻击链：外部探测 5432 → 三轮共 489 次弱口令喷洒命中 postgres 超级用户 → 元数据枚举 → 用数据库内置命令执行派生 shell、以 find/sort/head 找到备份目录 → DROP TABLE 级联删表 → 投递 base64 编码的破坏脚本，用 dd 覆写并 rm 删除 4 份全量备份、3 份导出文件、2 份日志。锚点取破坏脚本里最后一个物理删除：同步日志的 unlink（event_id=1961450，22:00:58.583，/usr/bin/rm，pid 45984）。22:00:58.894 的 find 复核在锚点之后，属于 post-POI 验证，不计入路径。syscall 取 unlink（不是 write），图上的关系类型是 ProcessToFile。",
+      "database": "attack-7-db-bruteforce-datawipe-v2",
+      "poi": {
+        "kind": "file",
+        "rel": "p2f",
+        "syscall": "unlink",
+        "file_id": "/srv/bizapp/logs/bizapp-sync.log"
+      },
+      "entry": {
+        "kind": "network",
+        "rel": "n2p",
+        "syscall": "accept",
+        "network_id": "100.74.213.15:35790->100.86.108.4:5432",
+        "_why": "攻击在受害机上的最早可归属动作：外部攻击机对 5432 端口做服务探测的第一条连接被数据库服务接受（event_id=50137，21:51:18.606），随后是版本横幅与协议指纹的收发。"
+      }
+    },
+    "8_FTP_WeakCreds_WebShell_Exfiltration": {
+      "_note": "场景 8。攻击链：外部慢速 FTP 弱口令字典喷洒（300 次）→ 弱口令鉴权登录成功 → 经由 FTP 会话上传 PHP WebShell 木马（cache.php）→ 外部 HTTP 请求触发 WebShell 权限验证与反弹 Bash 会话（4444 端口）→ 内部资产探测、站点凭据窃取（db.ini）与本地数据库连接验证（MySQL 3306 端口）→ 低慢速流式分块数据外传（36 块业务 CSV 数据，共 905MB）。POI 取第 36 块业务数据（records-2025-12.csv）外传至攻击机 8888 端口的末字节发送事件。",
+      "database": "attack-8-ftp-weakcreds-webshell-exfiltration-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "sendto",
+        "network_id": "100.86.108.4:48182->100.74.213.15:8888"
+      },
+      "entry": {
+        "kind": "network",
+        "rel": "n2p",
+        "syscall": "accept",
+        "network_id": "100.74.213.15:35976->100.86.108.4:21",
+        "_why": "攻击在受害机上的最早可归属动作：外部攻击机向 21 端口建立首条慢速口令喷洒入网连接（event_id=59393，10:41:55.343）。"
+      }
+    },
+    "9_Exposed_Container_Escape": {
+      "_note": "场景 9。攻击链：外部直接连上无认证、无鉴权的 2375 容器管理接口 → 起特权容器并把宿主根目录挂进容器做逃逸 → 下载后门程序与进程隐藏源码、用宿主编译器现场编译隐藏库 → 把后门、定时任务、预加载库写进宿主完成双重持久化 → 宿主侧定时任务拉起后门并回连控制端 → 再起自愈容器建立第二信道 → 控制端下发侦察 → 起四个容器把业务数据 tar 打包后经 nc 外传 → 最后验证自愈策略：旧后门容器被退出后新实例重新回连。锚点取这次自愈回连的心跳写出（容器 f8734eba3971 的 /usr/sbin/svc-watchdog，event_id=5345223，10:41:05.753，63 字节，label=ctr-backdoor），是本场最后一个攻击动作。注意：网络实体内容里含容器侧的临时源端口，每采集一次都要按新库回填。",
+      "database": "attack-9-exposed-container-escape-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "sendto",
+        "network_id": "172.17.0.2:56186->100.74.213.15:8808"
+      },
+      "entry": {
+        "kind": "network",
+        "rel": "n2p",
+        "syscall": "accept",
+        "network_id": "100.74.213.15:44120->100.86.108.4:2375",
+        "_why": "攻击在受害机上的最早可归属动作：外部攻击机对裸奔的 2375 容器管理接口的第一条连接被容器引擎接受（event_id=573774，10:25:36.799），随后是 7 项系统与容器资源侦察请求。"
+      }
+    },
+    "10_Tomcat_Weakcreds_DNS_Exfiltration": {
+      "_note": "场景 10。攻击链：外部探测 8080 管理台 → 34 轮低速弱口令猜测命中 admin:admin123 → 上传木马应用包并命令执行验证 → 下发引导脚本落地隐蔽隧道客户端与看门狗 → 经隧道侦察业务数据目录 → 打包压缩转 base64 后按 32KB 分片经隧道外传 → 通过 WebShell 备用通道杀掉隧道客户端、验证看门狗自愈 → 静默驻留结束时再做一次存活复核。锚点取这次存活复核的响应写出（java 进程，event_id=37425242，18:01:59.960，152 字节 HTTP 200），是本场最后一个攻击动作。闭包里必然同时包含该端口上的正常管理台流量与 34 轮口令猜测，这是场景本身的形态，锚点不做取舍。注意：网络实体内容里含攻击机的临时源端口，每采集一次都要按新库回填。",
+      "database": "attack-10-tomcat-weakcreds-dns-exfiltration-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "write",
+        "network_id": "100.74.213.15:48370->100.86.108.4:8080"
+      },
+      "entry": {
+        "kind": "network",
+        "rel": "n2p",
+        "syscall": "accept",
+        "network_id": "100.74.213.15:40352->100.86.108.4:8080",
+        "_why": "攻击在受害机上的最早可归属动作：外部攻击机对 8080 管理台探测的第一条连接被 Java 服务接受（event_id=169587，17:34:29.885），同批还有一条探测连接与首组口令猜测验证。"
       }
     }
   }

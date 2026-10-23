@@ -31,7 +31,7 @@
    在传统的应急取证中，安全分析人员面对海量日志往往只能事后猜测攻击意图，导致漏标与错标。而在本体系中具备**全知先验条件**：标注者完全掌握攻击方在每一个时间戳下发起的具体执行逻辑、涉及的进程标识符、创建的文件对象与目标网络连接。
    标注者据此对照底层系统调用日志进行精确对齐与因果回溯，标注出没有主观猜测成分、因果闭环的**真实攻击路径标准答案（Ground Truth）**；标准答案里的每一条可能集合规则还要求在场景图上实测验证（纯度／互斥／两不相交三条硬约束），实测条数与验证结论如实写进标准答案文件。
 3. **演进机制现状（诚实边界）**：
-   新增一个场景需要人工重新完成“编排攻击 → 采集 → 标注 → 在图上验证规则”四步，**目前不是自动闭环**。仓库现有 5 个已标注场景（`attack/data/1..5`），另有 `attack/data/6`、`7`、`9`、`10` 四个场景只有采集产物、尚无标准答案，因此既不参与蒸馏也不参与评测。
+   新增一个场景需要人工重新完成“编排攻击 → 采集 → 标注 → 在图上验证规则”四步，**目前不是自动闭环**。仓库现有 10 个已标注场景（序号 1..10，标准答案在 `groundtruth/`），全部参与蒸馏与评测。
 
 ---
 
@@ -78,7 +78,7 @@
                                    │
                                    ▼
         ┌──────────────────────────────────────────────────┐
-        │ 4. orchestrator (协同编排与调查报告)             │
+        │ 4. routing (路由编排与调查报告)                   │
         │                                                  │
         │ ┌──────────────────────────────────────────────┐ │
         │ │ 通道一：静态只读因果初筛 (filter.py)         │ │
@@ -127,7 +127,7 @@
 - **创新点二：去字面化的抽象图因果拓扑基模离线蒸馏方法**
   攻克了传统规则强依赖字面量导致泛化性差、以及大语言模型计算开销巨大的双重困境。提出了面向图因果关系的语义角色抽象与弱监督对抗修剪算法，实现了从对抗日志中全自动挖掘跨场景通用、抗背景噪声的抽象图拓扑因果基模。**边界**：去字面化覆盖的是“角色抽象 + 基模挖掘 + 统计准入”这一段；系统其它环节仍含少量固定字面量知识，完整清单与用途见 2.1 节。
 - **创新点三：解耦拓扑确定性与深层语义的神经符号双通道导航架构**
-  攻克了图溯源调查中静态库依赖爆炸与上下文过载难题。创立了由因果初筛和蒸馏规则构成的毫秒级快速符号通道，协同基于因果上下文增强的大语言模型慢速语义通道，实现了在大模型调用量极低乃至为零的极限约束下，兼顾高吞吐率与高查准率的端到端自主调查。**边界**：泛化能力目前只在同一实验环境的 5 个场景上按跨场景留一协议验证过，跨发行版、跨环境尚未测量（残留字面量清单与已知泛化风险点见 2.1 节）。
+  攻克了图溯源调查中静态库依赖爆炸与上下文过载难题。创立了由因果初筛和蒸馏规则构成的毫秒级快速符号通道，协同基于因果上下文增强的大语言模型慢速语义通道，实现了在大模型调用量极低乃至为零的极限约束下，兼顾高吞吐率与高查准率的端到端自主调查。**边界**：泛化能力目前只在同一实验环境的 10 个场景上按跨场景留一协议验证过，跨发行版、跨环境尚未测量（残留字面量清单与已知泛化风险点见 2.1 节）。
 
 ---
 
@@ -138,10 +138,10 @@
 ### 2.1 声明边界：输入来源与当前运行范围
 
 - **数据源现状**：
-  - 目前代码库用于离线蒸馏与测试验证的数据源，为本地归档的 5 个基准网络威胁场景日志（覆盖 Web 漏洞利用勒索、SSH 暴力破解横向移动、钓鱼邮件挖矿木马、代码仓库投毒后门、暴露服务横向枢纽）以及对应的人工标注标准答案；
+  - 目前代码库用于离线蒸馏与测试验证的数据源，为本地归档的 10 个基准网络威胁场景日志（覆盖 Web 漏洞利用勒索、SSH 暴力破解横向移动、钓鱼邮件挖矿木马、代码仓库投毒后门、暴露服务横向枢纽等）以及对应的人工标注标准答案；
   - **场景的产生环节不在本仓库**：攻击由编排代理经 SSH 在实验网内驱动真实攻击、受害机由人工启停 Sysdig 录制，过程记录见 `attack/AGENTS.md`；本仓库只落采集产物（`capture.scap`）与标注；
   - **单机边界**：采集只覆盖受害者一台机器、不含 `host_id`，跨主机横向移动关联不在当前数据范围内；
-  - `attack/data/6`、`7`、`9`、`10` 四个场景只有采集产物、没有标准答案，不参与蒸馏与评测；
+  - 10 个场景全部有标准答案（`groundtruth/`），均参与蒸馏与评测；
   - 系统直连本地 Neo4j 图数据库，全自主展开反向因果闭包。
 - **调查起点（目标异常事件）**：
   - 场景清单与调查起点（POI 事件）的唯一真源为 `provenance-navigator/config/scenarios.json`（人工指定，属外部前置输入）；导航器直连底层 Neo4j 图数据库，自锚点起全自主展开反向因果闭包。
@@ -149,41 +149,47 @@
 
 | 位置 | 字面量 | 用途 | 性质 |
 |---|---|---|---|
-| `closure/facts.py:94` | 12 项可执行名（`sh` `bash` `dash` `zsh` `python` `python3` `perl` `php` `tar` `curl` `wget` `socat`） | 入站会话派生进程的污染传播：命中即把父子进程标记为受污染 | 可执行名列表，不区分攻防用途，但含 `curl`／`wget`／`socat` 等攻防两用名 |
-| `rules/motifs.py`、`orchestrator/bridge.py` | 共享守护进程名（`sshd` `nginx` `apache2` `httpd` `systemd` `cron` `dbus-daemon` `rsyslogd`） | 活跃会话网络桥接时，避免按外部地址盲目扩散导致误报 | 服务名常量 |
-| `rules/motifs.py`、`orchestrator/bridge.py` | 系统敏感认证路径、持久化路径前缀、系统库前缀 | 节点角色抽象与静态只读噪声排除 | POSIX／FHS 标准领域常识 |
-| `orchestrator/filter.py` | 静态只读路径前缀（`/proc/`、`/sys/`、`/lib/`、`/usr/lib/`、`/usr/share/`、`/etc/ld.so.`、`/etc/locale`、`/usr/include/`、`/dev/urandom`、`/dev/null`） | 第一级因果初筛，剥离无污染的静态读取 | Linux 惯例路径 |
-| `rules/motifs.py`、`orchestrator/bridge.py` | 登录机制路径前缀（`/etc/update-motd.d`、`/usr/lib/update-notifier`、`/usr/lib/ubuntu-release-upgrader`、`/snap/snapd-desktop-integration`） | 排除发行版自带的登录横幅等常态机制噪声 | **Ubuntu 22.04 特有**，换发行版需重新核对 |
+| `common/facts.py` | 20 项可执行名（`sh` `bash` `dash` `zsh` `python` `python3` `perl` `php` `tar` `curl` `wget` `socat` `nc` `netcat` `ncat` `busybox` `awk` `sed` `ruby` `lua`） | 入站会话派生进程的污染传播：命中即把父子进程标记为受污染 | 可执行名列表，不区分攻防用途，但含 `curl`／`wget`／`socat` 等攻防两用名 |
+| `common/facts.py`、`rules/online.py` | 共享守护进程名（`sshd` `nginx` `apache2` `httpd` `systemd` `cron` `dbus-daemon` `rsyslogd`） | 活跃会话网络桥接时，避免按外部地址盲目扩散导致误报 | 服务名常量 |
+| `common/facts.py`、`rules/online.py` | 系统敏感认证路径、持久化路径前缀、系统库前缀 | 节点角色抽象与静态只读噪声排除 | POSIX／FHS 标准领域常识 |
+| `routing/filters.py` | 静态只读路径前缀（`/proc/`、`/sys/`、`/lib/`、`/usr/lib/`、`/usr/share/`、`/etc/ld.so.`、`/etc/locale`、`/usr/include/`、`/dev/urandom`、`/dev/null`） | 第一级因果初筛，剥离无污染的静态读取 | Linux 惯例路径 |
+| `common/facts.py`、`rules/online.py` | 登录机制路径前缀（`/etc/update-motd.d`、`/usr/lib/update-notifier`、`/usr/lib/ubuntu-release-upgrader`、`/snap/snapd-desktop-integration`） | 排除发行版自带的登录横幅等常态机制噪声 | **Ubuntu 22.04 特有**，换发行版需重新核对 |
 
 ---
 
-### 2.2 四大子模块职责划分
+### 2.2 四大功能模块与共用基础层
 
 ```
 provenance-navigator/
-├── README.md                      # 本系统设计哲学、理论依据与运维完整指南（本文件）
-├── main.py                        # 单场景独立运行入口脚本（支持 --mode {rules, hybrid, llm-only}）
-├── run_five_fold.py               # 全自动化五折留一交叉验证与基线对比运行器
-├── closure/                       # 【模块一：因果闭包抽取与事实抽象】
-│   ├── __init__.py
-│   ├── extractor.py               # 直连 Neo4j 反向展开因果图谱（含 POI 锚点事实提取）
-│   └── facts.py                   # 拓扑事实索引器（入度前序写入与出度外部交付建模）
-├── rules/                         # 【模块二：因果子图挖掘、对抗蒸馏与模式匹配】
-│   ├── __init__.py
-│   ├── miner.py                   # 全自动频繁因果子图挖掘器 (FrequentSubgraphMiner)
-│   ├── motifs.py                  # Linux 标准本体常量与客观拓扑行为抽象器
-│   ├── distiller.py               # 离线知识蒸馏器 (纯对抗信噪比筛选与审计流水)
-│   └── matcher.py                 # 真·2-跳图连通匹配与 Unix 进程血缘树传递引擎
-├── judge/                         # 【模块三：大模型深层语义仲裁】
-│   ├── __init__.py
-│   └── client.py                  # 大语言模型接口封装与结构化语义研判
-└── orchestrator/                  # 【模块四：多模式协同编排与调查报告】
-    ├── __init__.py
-    ├── filter.py                  # 第一级因果初筛器（毫秒级剥离无害只读静态库）
-    ├── bridge.py                  # 会话级活跃网络连接桥接器 (SessionActiveBridge)
-    ├── boundary_story.py          # 边界穿越故事通道 (BoundaryStoryOperator，默认开启，只增不减)
-    ├── orchestrator.py            # 协同调度引擎（调度 rules / hybrid / llm-only 三大工作模式）
-    └── report.py                  # 三段式标准化评测报告组装与持久化
+├── README.md
+├── main.py                        # 单场景 CLI（--mode {rules, hybrid, llm-only}）
+├── run_leave_one_out.py           # 留一交叉运行器（每折训练集 = 其余场景）
+├── pipeline.py                    # 单次调查装配：闭包 → 规则库 → 路由 → 报告
+├── common/                        # 四块共用的基础层
+│   ├── config.py                  # 参数、场景、路径、提示词、判据表加载
+│   ├── graph.py                   # 只读 Neo4j、边语义、端点键、调查记录
+│   ├── facts.py                   # 路径本体、系统调用分类、污染事实、对象/网络/角色
+│   └── model.py                   # 模型接入、预算、JSON 调用、重试
+├── closure/                       # 【一、闭包】
+│   ├── walk.py                    # POI 定位、顶点-时间索引、取数判据、反向闭包、前向补链
+│   ├── fold.py                    # 折叠、进程身份摘要、展开编排
+│   └── extractor.py               # 装配 Deps 并导出候选边
+├── rules/                         # 【二、规则模式】
+│   ├── offline.py                 # 挖掘、蒸馏、规则库、标准答案端点
+│   └── online.py                  # 匹配谓词 + 基模/桥接/边界故事通道
+├── llm/                           # 【三、LLM 模式】
+│   └── judge.py                   # 束划分、四道闸门、渲染、批调用、单轮推进
+├── routing/                       # 【四、路由编排】
+│   ├── route.py                   # 模式表、锚点确认、通道调用、结果合并
+│   ├── filters.py                 # 前置初筛 + 后置剪枝
+│   └── report.py                  # 三段式报告
+├── config/                        # 唯一配置区
+│   ├── navigator.toml             # 全部参数
+│   ├── scenarios.json             # POI 唯一真源
+│   ├── closure_rules.json         # 取数期判据表
+│   ├── rules-library.json         # 冻结规则库
+│   └── prompts/judge_bundle.md    # LLM 提示词
+└── tests/
 ```
 
 ---
@@ -196,10 +202,10 @@ provenance-navigator/
 为了确保实验数据维护的**单一真实来源**，避免多处文档更新不一致的问题：
 
 - **基准测试数据索引**：
-  关于系统在严格五折留一跨场景交叉验证下的各项实测数据（包括步骤召回率、边查准率、确认边规模、大模型调用次数与全流程耗时），以及与 Java 调查引擎基线的详细对比，请统一查阅基准记录文件：
+  关于系统在严格留一交叉（10 场景逐折）验证下的各项实测数据（包括步骤召回率、边查准率、确认边规模、大模型调用次数与全流程耗时），以及与 Java 调查引擎基线的详细对比，请统一查阅基准记录文件：
   👉 [output/navigator-baseline/OVERVIEW.md](../output/navigator-baseline/OVERVIEW.md)
 - **评测协议与工具**：
-  所有评分严格使用项目官方评测工具 `tools/eval_agent_attack_path.py`，评分口径为：**召回按步骤、查准按边**。
+  所有评分严格使用项目官方评测工具 `tools/score_report_product.py`，评分口径为：**召回按步骤、查准按边**。
 
 ---
 
@@ -219,30 +225,33 @@ provenance-navigator/
 .venv/Scripts/python.exe provenance-navigator/main.py --scenario 1_Web_Exploit_Ransomware --mode llm-only
 
 # 运行官方评分工具进行打分
-.venv/Scripts/python.exe tools/eval_agent_attack_path.py \
-  --report output/agent-runs/1_Web_Exploit_Ransomware.json \
+.venv/Scripts/python.exe tools/score_report_product.py \
+  --report output/navigator-runs/1_Web_Exploit_Ransomware.json \
   --gt groundtruth/1_Web_Exploit_Ransomware.groundtruth.json
 ```
 
-#### 2. 运行全量五折留一端到端交叉验证
+#### 2. 运行全量留一交叉端到端验证
 ```bash
-# 纯规则模式五折交叉测试
-.venv/Scripts/python.exe provenance-navigator/run_five_fold.py --mode rules
+# 纯规则模式（先从冻结蒸馏产物读取基模，不重复蒸馏）
+.venv/Scripts/python.exe provenance-navigator/run_leave_one_out.py --mode rules --rules-from frozen
 
-# 智能混合模式五折交叉测试
-.venv/Scripts/python.exe provenance-navigator/run_five_fold.py --mode hybrid
+# 智能混合模式
+.venv/Scripts/python.exe provenance-navigator/run_leave_one_out.py --mode hybrid --rules-from frozen
 
-# 纯 LLM 模式五折交叉测试
-.venv/Scripts/python.exe provenance-navigator/run_five_fold.py --mode llm-only
+# 纯 LLM 模式（不蒸馏基模，--rules-from 不生效）
+.venv/Scripts/python.exe provenance-navigator/run_leave_one_out.py --mode llm-only
+
+# 重新冻结蒸馏产物（改了 GT / 场景清单 / 蒸馏相关源码之后）
+.venv/Scripts/python.exe provenance-navigator/run_leave_one_out.py --mode rules --rules-from fresh --freeze
 ```
 
 ---
 
 ### 2.5 边界穿越故事通道（Boundary-Story Channel，默认关闭）
 
-与 `rules/matcher.py`（基模匹配与手写闭环）、`orchestrator/bridge.py`（会话桥接与诱导闭环）
+与 `rules/online.py` 的基模匹配/血缘闭环、会话桥接与双端诱导闭环
 **并列的第三条符号促进通路**，同属「通道二」的促进环节，**只增不减**：它只把候选边提升为已确认，
-不删除任何既有确认边（实测五折「剔除 = 0」）。**默认开启**，在 `rules` 与 `hybrid` 两个模式下运行（`llm-only` 按设计跳过全部符号通道）。
+不删除任何既有确认边（实测留一交叉「剔除 = 0」）。**默认开启**，在 `rules` 与 `hybrid` 两个模式下运行（`llm-only` 按设计跳过全部符号通道）。
 
 **判据（六步，全部与标准答案无关）**
 
@@ -258,12 +267,12 @@ provenance-navigator/
 6. **链条继续**：沿「消费攻击产物 / 被攻击主体派生」迭代扩散，以覆盖非入站型入口（如钓鱼投递）。
 
 **为什么可信**：① 判据只引用图内事实与操作系统本体事实，不引用标准答案（该模块内无任何读取标注的代码）；
-② 只做加法，实测五折「剔除 = 0」，增益不可能来自「把东西移出评分集合」；③ 无阈值、无名单、无时间窗，
+② 只做加法，实测留一交叉「剔除 = 0」，增益不可能来自「把东西移出评分集合」；③ 无阈值、无名单、无时间窗，
 唯一人工输入是调查锚点（已声明为外部前置输入）。
 
-**实测（真五折端到端、官方工具、完整确认集口径，`--mode rules`，本通道已默认开启）**
+**实测（真留一交叉端到端、10 折、官方工具、完整确认集口径，`--mode rules`，本通道已默认开启）**
 
-| 配置 | 召回（步骤） | 查准（边） | F1 | 大模型调用 | 五折耗时 |
+| 配置 | 召回（步骤） | 查准（边） | F1 | 大模型调用 | 10 折总耗时 |
 |---|---|---|---|---|---|
 | 未启用本通道（历史对照） | 81.1%（352/434） | 82.5%（9815/11904） | 0.8177 | 0 | 289.4s |
 | **`rules`（本通道默认开启，现行基线）** | **91.5%（397/434）** | 81.5%（9861/12104） | **0.8619** | 0 | 285.9s |

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import unittest
 
-from foundation.core import graph_facts
-from foundation.layers.l1_reach import walk as C
+from common import graph as graph_facts
+import closure.walk as C
 
 
 class FakeSource:

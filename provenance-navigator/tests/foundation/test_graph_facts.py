@@ -13,7 +13,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-from foundation.core import graph_facts as G
+from common import graph as G
 
 # 关系类型 -> （源端类别, 目标端类别）
 EXPECTED_LABELS = {

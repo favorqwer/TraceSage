@@ -26,12 +26,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from config_support import temp_config  # noqa: E402
-from foundation.deps import Deps  # noqa: E402
-from foundation.core import settings  # noqa: E402
-from foundation.core.llm import LlmBudget  # noqa: E402
-from foundation.core.record import Investigation  # noqa: E402
-from foundation.layers import l2_judge as l2  # noqa: E402
-from foundation.orchestration import judging_pass as judging_mod  # noqa: E402
+from closure.extractor import Deps  # noqa: E402
+from common import config as settings  # noqa: E402
+from common.model import LlmBudget  # noqa: E402
+from common.graph import Investigation  # noqa: E402
+import llm.judge as l2  # noqa: E402
+import llm.judge as judging_mod  # noqa: E402
 
 
 class FakeResponse:
@@ -85,7 +85,7 @@ def build_record() -> Investigation:
 
     三元组方向与生产流水线一致（读边的源是对象、派生边的源是父进程）。
     """
-    from foundation.core import graph_facts
+    from common import graph as graph_facts
 
     inv = Investigation(run_id=f"unit-{uuid.uuid4().hex[:8]}", scenario="unit")
     inv.poi_rows = [{"process_content": "/bin/bash", "other": "/srv/marker", "rel": "p2f",
@@ -227,7 +227,7 @@ class BundleProtocolTest(unittest.TestCase):
 
     def test_shared_tables_render_when_class_has_enough_bundles(self) -> None:
         """批头两张共享表：类别够大时出「同类规模」，子束明显更小时出「上一级束」。"""
-        render_module = importlib.import_module("foundation.layers.l2_judge.rendering")
+        render_module = importlib.import_module("llm.judge")
         scale = {"/etc": {"n": 5, "median": 2, "sizes": [1, 2, 2, 3, 9]}}
         child = {"id": "B0002", "size": 1, "all_dirs": ["/etc"], "bytes": 10,
                  "objects_n": 1, "parent": {

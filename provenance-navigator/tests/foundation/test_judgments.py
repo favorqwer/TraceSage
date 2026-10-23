@@ -1,6 +1,6 @@
 """第 1 层判据表的单测（不需要数据库、不需要模型）：对象角色、事件判定。
 
-口径（`foundation/rules/l1_judgments.json` + `l1_reach/judgments.py`）：
+口径（`config/closure_rules.json` + `closure/walk.py`）：
 - 对象判据按表顺序取第一个命中，后果是「不展开对象」与「不追交接」；
 - 事件判据：零字节的数据读取（读类边、搬 0 字节）与连接建立类（不算交付）。
 """
@@ -13,8 +13,8 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-from foundation.layers.l1_reach import judgments as J
-from foundation.layers.l1_reach import table as T
+import closure.walk as J
+import closure.walk as T
 
 
 def row(event_id: int, *, pid: str = "7sshd", rel: str = "f2p", other: str = "/etc/passwd",

@@ -1,5 +1,5 @@
 import unittest
-from foundation.core.record import Investigation
+from common.graph import Investigation
 
 class DummyDeps:
     def __init__(self, record):

@@ -1,6 +1,6 @@
 """数据库直查来源（参照实现，只给单测用）：不进生产包。
 
-正式流程只有一种取数方式——读本地顶点-时间索引（`foundation/layers/l1_reach/walk.py` 的
+正式流程只有一种取数方式——读本地顶点-时间索引（`closure/walk.py` 的
 `SnapshotReader`）。这里保留直查版本，只为了让单测拿它和索引来源逐条对拍：索引构建错了要能发现。
 """
 
@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from foundation.layers.l1_reach import table as _rules_table
-from foundation.layers.l1_reach.judgments import object_ruling
-from foundation.layers.l1_reach.process_info import prefetch_process_info
-from foundation.layers.l1_reach.walk import Event
+import closure.walk as _rules_table
+from closure.walk import object_ruling
+from closure.walk import prefetch_process_info
+from closure.walk import Event
 
 # 表里全部带 not_delivery 后果的事件判据的操作名（与索引来源同一份判据）
 _NOT_DELIVERY = sorted({
@@ -116,6 +116,48 @@ class DbSource:
         self.queries = 0
         self.rows = 0
         self.nondelivery_not_expanded: dict[str, int] = {}   # 被跳过的非交付通道顶点展开次数（不是边数）
+        self._ppid_map: Optional[dict[tuple[str, int], list[tuple[int, str]]]] = None
+        self._ppid_of: dict[str, int] = {}
+
+    def _load_ppid(self) -> None:
+        """记录到的父子关系（与索引来源同一口径）：(容器, pid) → [(出生时刻, 进程键)]。"""
+        if self._ppid_map is not None:
+            return
+        mapping: dict[tuple[str, int], list[tuple[int, str]]] = {}
+        rows = self.graph.run(
+            "MATCH (p:Process) RETURN p.host_id AS host, p.container_id AS ctr, p.pid AS pid, "
+            "p.start_ns AS st, coalesce(p.ppid, 0) AS ppid"
+        )
+        self.queries += 1
+        self.rows += len(rows)
+        for row in rows:
+            container = str(row.get("ctr") or "host")
+            key = f"{row.get('host') or ''}|{container}|{row.get('pid')}|{row.get('st') or 0}"
+            mapping.setdefault((container, int(row.get("pid") or 0)), []).append(
+                (int(row.get("st") or 0), key))
+            if row.get("ppid"):
+                self._ppid_of[key] = int(row["ppid"])
+        self._ppid_map = mapping
+
+    def parent_of_process(self, key: str) -> Optional[str]:
+        self._load_ppid()
+        ppid = self._ppid_of.get(str(key))
+        if not ppid:
+            return None
+        parts = str(key).split("|")
+        if len(parts) < 4:
+            return None
+        container, start = (parts[1] or "host"), int(parts[3])
+        candidates = [(st, pkey) for st, pkey in (self._ppid_map or {}).get((container, ppid), ())
+                      if st <= start]
+        if not candidates:
+            return None
+        parent = max(candidates)[1]
+        return parent if parent != key else None
+
+    def birth_of_process(self, key: str) -> int:
+        parts = str(key).split("|")
+        return int(parts[3]) if len(parts) >= 4 else 0
 
     def _run(self, cypher: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         out = self.graph.run(cypher, params)

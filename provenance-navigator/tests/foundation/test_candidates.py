@@ -12,20 +12,35 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-from foundation.layers.l1_reach import candidates as OF
+import closure.fold as OF
 
 
 def row(event_id: int, *, pid: str = "7sshd", rel: str = "f2p", other: str = "/etc/passwd",
-        syscall: str = "read", at: int = 10, other_process_id: str = "", support: int = 8) -> dict:
+        syscall: str = "read", at: int = 10, other_process_id: str = "", support: int = 8,
+        effect: str = "") -> dict:
     """一条候选边行：只带折叠会看的字段。"""
     return {"event_id": event_id, "rel": rel, "syscall": syscall, "owner": "/usr/sbin/sshd",
             "other": other, "other_label": "Process" if rel == "p2p" else "File",
             "process_id": pid, "other_process_id": other_process_id,
             "starttime": at, "endtime": at + 1, "bytes": 0, "dist": 1, "support": support,
-            "via_kind": "", "via_key": ""}
+            "via_kind": "", "via_key": "", "effect": effect}
 
 
 class FoldTest(unittest.TestCase):
+    def test_fold_collects_effects(self) -> None:
+        """同一三元组的多条实例成败不同：折叠保留集合，不猜唯一值。"""
+        rows = [row(1, other="/tmp/x", effect="success"),
+                row(2, other="/tmp/x", effect="failure"),
+                row(3, other="/tmp/x", effect="success")]
+        edge = OF.fold(rows).edges[0]
+        self.assertEqual(edge.effects, {"success", "failure"})
+        self.assertEqual(edge.to_dict()["effects"], ["failure", "success"])
+
+    def test_fold_without_effect_keeps_empty_set(self) -> None:
+        edge = OF.fold([row(1, other="/tmp/y")]).edges[0]
+        self.assertEqual(edge.effects, set())
+        self.assertEqual(edge.to_dict()["effects"], [])
+
     def test_fold_merges_same_triple(self) -> None:
         rows = [row(1, pid="100bash", other="/home/u/x", at=10),
                 row(2, pid="100bash", other="/home/u/x", at=20)]

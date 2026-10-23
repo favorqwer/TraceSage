@@ -1,35 +1,50 @@
-"""因果闭包与拓扑底座：结构可达因果闭包抽取器（直接直连 Neo4j 图数据库）
+"""因果闭包入口：组装依赖、跑 POI 定位与展开，返回候选边。
 
-职责：
-从 Neo4j 中根据场景配置匹配终点事件（POI），沿着进程、文件、套接字等图实体展开反向因果可达闭包，
-抽取所有候选因果边，作为神经符号路由器的输入，彻底摆脱对外部大模型智能体预过滤产物的依赖。
-
-场景与调查起点（POI）的唯一真源为 provenance-navigator/config/scenarios.json，本系统不再维护副本。
+实现已迁到 `closure/walk.py`（POI、索引、反向闭包）与 `closure/fold.py`（折叠、进程摘要、展开）。
+本文件只做装配，并保留 `Deps` 容器供旧调用方使用。
 """
 
-import sys
+from __future__ import annotations
+
 import time
-from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Tuple
 
-# 引入导航器内迁入的取数底座（反向因果闭包与折叠）
-_NAV_DIR = Path(__file__).resolve().parents[1]
-if str(_NAV_DIR) not in sys.path:
-    sys.path.insert(0, str(_NAV_DIR))
+from common import config as cfg
+from common.graph import Investigation, ReadOnlyGraph
+from common.model import LlmBudget
+from closure import fold, walk
 
-from foundation.core import scenarios, settings
-from foundation.deps import build_deps
-from foundation.orchestration import expand_closure, intake
+
+@dataclass
+class Deps:
+    """一次运行的依赖（图 / 模型 / 记账 / 记录）。"""
+
+    scenario: Any
+    graph: ReadOnlyGraph
+    model: Any
+    budget: LlmBudget
+    record: Investigation
+    log: Callable[[str], None] = print
+    trace: list[dict[str, Any]] = field(default_factory=list)
+
+
+def build_deps(scenario: Any, run_id: str, *, model: Any = None,
+               log: Callable[[str], None] = print) -> Deps:
+    cfg.ensure_work_dirs()
+    graph = ReadOnlyGraph(scenario.database, scenario=scenario.name, run_id=run_id)
+    budget = LlmBudget()
+    record = Investigation(run_id=run_id, scenario=scenario.name, database=scenario.database)
+    return Deps(scenario=scenario, graph=graph, model=model, budget=budget, record=record, log=log)
 
 
 def list_scenarios() -> List[str]:
     """全部场景名（真源：provenance-navigator/config/scenarios.json）。"""
-    settings.load_dotenv()
-    return scenarios.available_scenarios()
+    cfg.load_dotenv()
+    return cfg.available_scenarios()
 
 
 def _anchor_triples(deps: Any) -> List[Tuple[str, str, str]]:
-    """计算 POI 锚点事件的内容三元组（与 agent 判定层 _confirm_anchor_poi 同口径）。"""
     triples: List[Tuple[str, str, str]] = []
     for row in deps.record.poi_rows:
         rel = str(row.get("rel") or "")
@@ -42,23 +57,15 @@ def _anchor_triples(deps: Any) -> List[Tuple[str, str, str]]:
 
 def extract_raw_closure(scenario_name: str, return_deps: bool = False,
                         light: bool = False) -> Any:
-    """自主连接 Neo4j，从终点事件展开完整的反向因果闭包候选边集合。
-
-    light=True 时只保留拓扑事实与基模匹配所需的四个字段（src/syscall/dst/process_id），
-    专供离线蒸馏的训练候选池使用（不携带事件清单等大体量字段，控制内存占用）。
-
-    返回:
-        (raw_edges, stats) 或 (raw_edges, stats, deps)
-        stats 中 anchor_triples 为 POI 锚点事件的内容三元组清单。
-    """
-    settings.load_dotenv()
-    sc = scenarios.load_scenario(scenario_name)
+    """自主连接 Neo4j，从终点事件展开完整的反向因果闭包候选边集合。"""
+    cfg.load_dotenv()
+    sc = cfg.load_scenario(scenario_name)
     run_id = f"pnavigator-{int(time.time())}"
 
     t0 = time.time()
     deps = build_deps(sc, run_id)
-    intake.intake(deps)
-    prep = expand_closure.prepare(deps)
+    walk.intake(deps)
+    prep = fold.prepare(deps)
 
     raw_edges: List[Dict[str, Any]] = []
     for _key, edge_rec in deps.record.edges.items():
@@ -68,6 +75,10 @@ def extract_raw_closure(scenario_name: str, return_deps: bool = False,
                 "syscall": edge_rec.get("syscall"),
                 "dst": edge_rec.get("dst"),
                 "process_id": edge_rec.get("process_id"),
+                "src_label": edge_rec.get("src_label"),
+                "dst_label": edge_rec.get("dst_label"),
+                "src_identities": edge_rec.get("src_identities") or [],
+                "dst_identities": edge_rec.get("dst_identities") or [],
             }
         else:
             e = dict(edge_rec)
@@ -85,7 +96,7 @@ def extract_raw_closure(scenario_name: str, return_deps: bool = False,
         "anchor_triples": _anchor_triples(deps),
     }
 
-    expand_closure.finish(prep)
+    fold.finish(prep)
     deps.graph.close()
 
     if return_deps:

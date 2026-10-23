@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-from foundation.layers.l2_judge import guards  # noqa: E402
+import llm.judge as guards  # noqa: E402
 
 
 def item(bid, size, *, dirs=("/etc",), programs=("/bin/bash",), parent=True, vacuous=False):
