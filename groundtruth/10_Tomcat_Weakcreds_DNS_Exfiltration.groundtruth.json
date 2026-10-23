@@ -1,0 +1,1204 @@
+{
+  "scenario": "10_Tomcat_Weakcreds_DNS_Exfiltration",
+  "entry": {
+    "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:40352->100.86.108.4:8080",
+    "action": "accept",
+    "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+    "effect": "success",
+    "edge_key": "NetworkToProcess:169587:accept",
+    "syscall": "accept",
+    "time": "17:34:29.885",
+    "why": "攻击在日志里最早的可归属动作：外部对 8080 端口（Tomcat 管理台）发起的首个 TCP 握手 accept 连接"
+  },
+  "poi": {
+    "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+    "action": "send",
+    "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:48370->100.86.108.4:8080",
+    "effect": "success",
+    "edge_key": "ProcessToNetwork:37425242:send",
+    "syscall": "write",
+    "time": "18:01:59.960",
+    "why": "攻击窗口终局锚点：攻击者经 WebShell 备用通道下发最终存活复核命令，Tomcat 回送该命令的响应报文（该命令的执行边与其读取的 wd.log 读取边与 A8 阶段同 4 元组，按 GT 去重口径只记一次）。本条标定攻击可控性延续到窗口末尾，不代表破坏产物；关键数据渗漏发生在 A6 分片外传阶段"
+  },
+  "counts": {
+    "actions": 12,
+    "must_entries": 90,
+    "rules": 5,
+    "steps_total": 95,
+    "edges_total_with_dupes": 90,
+    "edges_unique": 90,
+    "must_edges": 90
+  },
+  "attack_path": [
+    {
+      "id": "A1",
+      "phase": "[A1] 外部对 8080 端口服务探测与弱口令猜测前置",
+      "time": "17:34:29.885~17:34:41.364",
+      "what": "外部攻击机向受害机 8080 端口（Tomcat）发起管理台服务探测，获取服务版本并下发首组口令猜测验证。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:40352->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:169587:accept",
+          "syscall": "accept",
+          "edge_id": "A1.1"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:51566->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:169608:accept",
+          "syscall": "accept",
+          "edge_id": "A1.2"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:40352->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:170363:recv",
+          "syscall": "read",
+          "edge_id": "A1.3"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "send",
+          "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:40352->100.86.108.4:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:170526:send",
+          "syscall": "write",
+          "edge_id": "A1.4"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:38412->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1167643:accept",
+          "syscall": "accept",
+          "edge_id": "A1.5"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:51566->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1167746:recv",
+          "syscall": "read",
+          "edge_id": "A1.6"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "phase": "[A2] 管理台低速弱口令爆破猜测（可能集合）",
+      "time": "17:34:55.175~17:42:36.980",
+      "what": "攻击机使用 Hydra 对受害者 Tomcat 管理台发起 34 轮低速弱口令猜测尝试（每组间隔 13 秒，避免触发 5 次锁定的防御机制），直至最后一组命中。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R1",
+          "direction": "src_to_dst",
+          "action": [
+            "accept",
+            "recv",
+            "send"
+          ],
+          "source": {
+            "all_of": [
+              {
+                "any_of": [
+                  {
+                    "vertex": "network",
+                    "match": "path_pattern",
+                    "value": "^100\\.74\\.213\\.15:\\d+->100\\.86\\.108\\.4:8080$"
+                  },
+                  {
+                    "vertex": "process",
+                    "match": "exact",
+                    "value": "/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java"
+                  }
+                ]
+              },
+              {
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "in",
+                    "values": [
+                      "100.74.213.15:35264->100.86.108.4:8080",
+                      "100.74.213.15:38118->100.86.108.4:8080",
+                      "100.74.213.15:38412->100.86.108.4:8080",
+                      "100.74.213.15:40352->100.86.108.4:8080",
+                      "100.74.213.15:48370->100.86.108.4:8080",
+                      "100.74.213.15:51566->100.86.108.4:8080",
+                      "100.74.213.15:53682->100.86.108.4:8080",
+                      "100.74.213.15:55248->100.86.108.4:8080",
+                      "100.74.213.15:55262->100.86.108.4:8080",
+                      "100.74.213.15:56832->100.86.108.4:8080",
+                      "100.74.213.15:59564->100.86.108.4:8080"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "target": {
+            "all_of": [
+              {
+                "any_of": [
+                  {
+                    "vertex": "network",
+                    "match": "path_pattern",
+                    "value": "^100\\.74\\.213\\.15:\\d+->100\\.86\\.108\\.4:8080$"
+                  },
+                  {
+                    "vertex": "process",
+                    "match": "exact",
+                    "value": "/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java"
+                  }
+                ]
+              },
+              {
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "in",
+                    "values": [
+                      "100.74.213.15:35264->100.86.108.4:8080",
+                      "100.74.213.15:38118->100.86.108.4:8080",
+                      "100.74.213.15:38412->100.86.108.4:8080",
+                      "100.74.213.15:40352->100.86.108.4:8080",
+                      "100.74.213.15:48370->100.86.108.4:8080",
+                      "100.74.213.15:51566->100.86.108.4:8080",
+                      "100.74.213.15:53682->100.86.108.4:8080",
+                      "100.74.213.15:55248->100.86.108.4:8080",
+                      "100.74.213.15:55262->100.86.108.4:8080",
+                      "100.74.213.15:56832->100.86.108.4:8080",
+                      "100.74.213.15:59564->100.86.108.4:8080"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "phase": "[A3] 弱口令命中登录、木马应用包（WAR）远程部署与命令执行验证",
+      "time": "17:42:51.023~17:43:14.688",
+      "what": "攻击机命中 admin:admin123 登录管理后台，通过管理接口远程上传 internal-report2.war 木马应用包，Tomcat 自动解包部署预编译 CmdServlet，攻击者通过命令执行接口完成环境验证。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:35264->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3761220:accept",
+          "syscall": "accept",
+          "edge_id": "A3.1"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:53682->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3761292:recv",
+          "syscall": "read",
+          "edge_id": "A3.2"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "send",
+          "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:53682->100.86.108.4:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3761507:send",
+          "syscall": "write",
+          "edge_id": "A3.3"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:55248->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3792796:accept",
+          "syscall": "accept",
+          "edge_id": "A3.4"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:35264->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3792873:recv",
+          "syscall": "read",
+          "edge_id": "A3.5"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "create",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/var/lib/tomcat9/webapps/internal-report.war.tmp",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3793025:create",
+          "syscall": "open",
+          "edge_id": "A3.6"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "write",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/var/lib/tomcat9/webapps/internal-report.war.tmp",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3793098:write",
+          "syscall": "write",
+          "edge_id": "A3.7"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/var/lib/tomcat9/webapps/internal-report.war.tmp",
+          "action": "rename",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "FileToProcess:3793368:rename",
+          "syscall": "rename",
+          "edge_id": "A3.8"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "create",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/var/lib/tomcat9/webapps/internal-report",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3793878:create",
+          "syscall": "mkdir",
+          "edge_id": "A3.9"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "create",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/var/lib/tomcat9/webapps/internal-report/WEB-INF/classes/CmdServlet.class",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3794145:create",
+          "syscall": "open",
+          "edge_id": "A3.10"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "write",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/var/lib/tomcat9/webapps/internal-report/WEB-INF/classes/CmdServlet.class",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3794157:write",
+          "syscall": "write",
+          "edge_id": "A3.11"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/var/lib/tomcat9/webapps/internal-report/WEB-INF/classes/CmdServlet.class",
+          "action": "read",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "FileToProcess:3797318:read",
+          "syscall": "read",
+          "edge_id": "A3.12"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "send",
+          "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:35264->100.86.108.4:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3921868:send",
+          "syscall": "write",
+          "edge_id": "A3.13"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:55262->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3937433:accept",
+          "syscall": "accept",
+          "edge_id": "A3.14"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:55248->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3937868:recv",
+          "syscall": "read",
+          "edge_id": "A3.15"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "send",
+          "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:55248->100.86.108.4:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3938072:send",
+          "syscall": "write",
+          "edge_id": "A3.16"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:38118->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3939052:accept",
+          "syscall": "accept",
+          "edge_id": "A3.17"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:55262->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3939196:recv",
+          "syscall": "read",
+          "edge_id": "A3.18"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3939753:exec",
+          "syscall": "execve",
+          "edge_id": "A3.19"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3940286:exec",
+          "syscall": "execve",
+          "edge_id": "A3.20"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/hostname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3940719:exec",
+          "syscall": "execve",
+          "edge_id": "A3.21"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "send",
+          "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:55262->100.86.108.4:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3940864:send",
+          "syscall": "write",
+          "edge_id": "A3.22"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "phase": "[A4] 命令执行引导隐蔽 DNS 隧道客户端与装载守护进程",
+      "time": "17:43:25.962~17:43:37.653",
+      "what": "攻击者经命令执行接口下发 boot.sh 引导命令，下载 dnscat 静态客户端与 wd.sh 看门狗脚本至 /tmp/.cache-system，启动隐蔽 DNS 隧道并拉起常驻守护循环。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:59564->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3964111:accept",
+          "syscall": "accept",
+          "edge_id": "A4.1"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:38118->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3964131:recv",
+          "syscall": "read",
+          "edge_id": "A4.2"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3964742:exec",
+          "syscall": "execve",
+          "edge_id": "A4.3"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3964845:exec",
+          "syscall": "execve",
+          "edge_id": "A4.4"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.86.108.4:39894->100.74.213.15:8000",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3966551:send",
+          "syscall": "sendto",
+          "edge_id": "A4.5"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.86.108.4:39894->100.74.213.15:8000",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3967034:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A4.6"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/curl",
+          "action": "write",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:pipe:[72943]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3967065:write",
+          "syscall": "write",
+          "edge_id": "A4.7"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/sh",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/mkdir",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3967136:exec",
+          "syscall": "execve",
+          "edge_id": "A4.8"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/mkdir",
+          "action": "create",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3967310:create",
+          "syscall": "mkdir",
+          "edge_id": "A4.9"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/sh",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3967357:exec",
+          "syscall": "execve",
+          "edge_id": "A4.10"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/curl",
+          "action": "create",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/dnscat",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3969085:create",
+          "syscall": "open",
+          "edge_id": "A4.11"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.86.108.4:37006->100.74.213.15:8000",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4003789:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A4.12"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/curl",
+          "action": "create",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/wd.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4003797:create",
+          "syscall": "open",
+          "edge_id": "A4.13"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/curl",
+          "action": "write",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/wd.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4003823:write",
+          "syscall": "write",
+          "edge_id": "A4.14"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/sh",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/chmod",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4003933:exec",
+          "syscall": "execve",
+          "edge_id": "A4.15"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/chmod",
+          "action": "chmod",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/dnscat",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4004023:chmod",
+          "syscall": "chmod",
+          "edge_id": "A4.16"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/chmod",
+          "action": "chmod",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/wd.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4004027:chmod",
+          "syscall": "chmod",
+          "edge_id": "A4.17"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/sh",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/nohup",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4009498:exec",
+          "syscall": "execve",
+          "edge_id": "A4.18"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/nohup",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/dnscat",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4010155:exec",
+          "syscall": "execve",
+          "edge_id": "A4.19"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/dnscat(/tmp/.cache-system/dnscat)",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/dnscat",
+          "effect": "success",
+          "edge_key": "FileToProcess:4010155:exec",
+          "syscall": "execve",
+          "edge_id": "A4.20"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/dnscat",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4011377:exec",
+          "syscall": "execve",
+          "edge_id": "A4.21"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4012260:exec",
+          "syscall": "execve",
+          "edge_id": "A4.22"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/sh",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/setsid",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4015805:exec",
+          "syscall": "execve",
+          "edge_id": "A4.23"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/setsid",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/wd.sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4015980:exec",
+          "syscall": "execve",
+          "edge_id": "A4.24"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/wd.sh(/tmp/.cache-system/wd.sh)",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/wd.sh",
+          "effect": "success",
+          "edge_key": "FileToProcess:4015980:exec",
+          "syscall": "execve",
+          "edge_id": "A4.25"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:pipe:[72943]",
+          "action": "read",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/sh",
+          "effect": "success",
+          "edge_key": "FileToProcess:4050550:read",
+          "syscall": "read",
+          "edge_id": "A4.26"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "send",
+          "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:38118->100.86.108.4:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:4050907:send",
+          "syscall": "write",
+          "edge_id": "A4.27"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "phase": "[A5] 经隐蔽 DNS 隧道下发交互式系统与业务环境侦察",
+      "time": "17:44:03.603~17:44:03.613",
+      "what": "攻击者经 dnscat 隧道控制台下发侦察指令，枚举系统内核版本，并通过管道重定向探查核心业务数据目录 /srv/business 大小与结构。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/uname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4115920:exec",
+          "syscall": "execve",
+          "edge_id": "A5.1"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/du",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4116119:exec",
+          "syscall": "execve",
+          "edge_id": "A5.2"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/du",
+          "action": "write",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:pipe:[72947]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4116315:write",
+          "syscall": "write",
+          "edge_id": "A5.3"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:pipe:[72947]",
+          "action": "read",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/dnscat",
+          "effect": "success",
+          "edge_key": "FileToProcess:4116324:read",
+          "syscall": "read",
+          "edge_id": "A5.4"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/ls",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4116430:exec",
+          "syscall": "execve",
+          "edge_id": "A5.5"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/ls",
+          "action": "write",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:pipe:[72947]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4116755:write",
+          "syscall": "write",
+          "edge_id": "A5.6"
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "phase": "[A6] 核心业务数据打包与经 DNS 隧道隐蔽分片外传",
+      "time": "17:44:36.578~17:46:16.720",
+      "what": "攻击者经隧道将客户核心数据与经营月报打包压缩为 report.tgz 并转为 base64 文本，使用 dd 按 32KB 分片经管道传回 bash 并由 DNS 隧道分批发往攻击机，最后完成校验码比对。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4197550:exec",
+          "syscall": "execve",
+          "edge_id": "A6.1"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/tar",
+          "action": "create",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/report.tgz",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4197823:create",
+          "syscall": "open",
+          "edge_id": "A6.2"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/tar",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4197850:exec",
+          "syscall": "execve",
+          "edge_id": "A6.3"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/gzip",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4198048:exec",
+          "syscall": "execve",
+          "edge_id": "A6.4"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/customers.json",
+          "action": "read",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "FileToProcess:4198240:read",
+          "syscall": "read",
+          "edge_id": "A6.5"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/srv/business/reports/monthly_report_2026-01.csv",
+          "action": "read",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "FileToProcess:4199240:read",
+          "syscall": "read",
+          "edge_id": "A6.6"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/gzip",
+          "action": "write",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/report.tgz",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4199372:write",
+          "syscall": "write",
+          "edge_id": "A6.7"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "create",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/report.b64",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4199513:create",
+          "syscall": "open",
+          "edge_id": "A6.8"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/base64",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4199519:exec",
+          "syscall": "execve",
+          "edge_id": "A6.9"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/report.tgz",
+          "action": "read",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/base64",
+          "effect": "success",
+          "edge_key": "FileToProcess:4199649:read",
+          "syscall": "read",
+          "edge_id": "A6.10"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/base64",
+          "action": "write",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/report.b64",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4199655:write",
+          "syscall": "write",
+          "edge_id": "A6.11"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/dd",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4200583:exec",
+          "syscall": "execve",
+          "edge_id": "A6.12"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/report.b64",
+          "action": "read",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/dd",
+          "effect": "success",
+          "edge_key": "FileToProcess:4200719:read",
+          "syscall": "read",
+          "edge_id": "A6.13"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/dd",
+          "action": "write",
+          "dst": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:pipe:[72973]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4200721:write",
+          "syscall": "write",
+          "edge_id": "A6.14"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:pipe:[72973]",
+          "action": "read",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "FileToProcess:4200738:read",
+          "syscall": "read",
+          "edge_id": "A6.15"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/sha256sum",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4513962:exec",
+          "syscall": "execve",
+          "edge_id": "A6.16"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/report.b64",
+          "action": "read",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/sha256sum",
+          "effect": "success",
+          "edge_key": "FileToProcess:4514250:read",
+          "syscall": "read",
+          "edge_id": "A6.17"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "phase": "[A7] 批量打包外传核心经营月报数据（可能集合）",
+      "time": "17:44:36.582~17:44:36.602",
+      "what": "tar 打包归档进程批量读取 /srv/business/reports/ 下的其余 11 份核心经营月报数据文件（monthly_report_2026-02.csv 至 2026-12.csv）。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R2",
+          "direction": "src_to_dst",
+          "action": [
+            "read"
+          ],
+          "source": {
+            "vertex": "file",
+            "match": "path_prefix",
+            "value": "/srv/business/reports/",
+            "none_of": [
+              {
+                "vertex": "file",
+                "match": "exact",
+                "value": "/srv/business/reports/monthly_report_2026-01.csv"
+              }
+            ]
+          },
+          "target": {
+            "vertex": "process",
+            "match": "exact",
+            "value": "/usr/bin/tar"
+          }
+        }
+      ]
+    },
+    {
+      "id": "A8",
+      "phase": "[A8] 经第二通道杀掉客户端与验证看门狗自愈恢复",
+      "time": "17:50:42.674~17:51:11.598",
+      "what": "攻击者通过 WebShell 备用通道杀死 dnscat 进程，看门狗 wd.sh 检测到客户端掉线后自动将其重新拉起，恢复 DNS 隧道控制会话，验证断线自愈能力。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:59564->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:5307669:recv",
+          "syscall": "read",
+          "edge_id": "A8.1"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/pkill",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:5308255:exec",
+          "syscall": "execve",
+          "edge_id": "A8.2"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/pkill",
+          "action": "signal",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/dnscat",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:5313539:signal",
+          "syscall": "kill",
+          "edge_id": "A8.3"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "send",
+          "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:59564->100.86.108.4:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:5323762:send",
+          "syscall": "write",
+          "edge_id": "A8.4"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/wd.sh",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/nohup",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:5363582:exec",
+          "syscall": "execve",
+          "edge_id": "A8.5"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:48370->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:5389397:accept",
+          "syscall": "accept",
+          "edge_id": "A8.6"
+        },
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:56832->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:5389513:recv",
+          "syscall": "read",
+          "edge_id": "A8.7"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/tail",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:5401812:exec",
+          "syscall": "execve",
+          "edge_id": "A8.8"
+        },
+        {
+          "src": "f:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/tmp/.cache-system/wd.log",
+          "action": "read",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/bin/tail",
+          "effect": "success",
+          "edge_key": "FileToProcess:5401931:read",
+          "syscall": "read",
+          "edge_id": "A8.9"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "send",
+          "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:56832->100.86.108.4:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:5402181:send",
+          "syscall": "write",
+          "edge_id": "A8.10"
+        }
+      ]
+    },
+    {
+      "id": "A9",
+      "phase": "[A9] 静默驻留与最终状态探查",
+      "time": "18:01:59.919~18:01:59.960",
+      "what": "静默驻留期结束时，攻击者经 WebShell 备用通道下发存活复核命令；本阶段锚定该次请求/响应的收尾（18:01:59），命令执行与读取 wd.log 的事实已在 A8 登记（同四元组，按 GT 去重口径不重复计入）。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:48370->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:37411720:recv",
+          "syscall": "read",
+          "edge_id": "A9.1"
+        },
+        {
+          "src": "p:10_Tomcat_WeakCreds_DNS_Exfiltration/host:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java",
+          "action": "send",
+          "dst": "n:10_Tomcat_WeakCreds_DNS_Exfiltration:100.74.213.15:48370->100.86.108.4:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:37425242:send",
+          "syscall": "write",
+          "edge_id": "A9.2"
+        }
+      ]
+    },
+    {
+      "id": "A10",
+      "phase": "[A10] DNS 隐蔽隧道承载的控制与外传通道（可能集合）",
+      "time": "17:43:31~18:01:59",
+      "what": "dnscat 客户端把控制指令与 base64 分片数据封装进域名解析请求，经 UDP 53 与攻击机隧道服务端往返数千个报文；这是本场非 TCP 控制与外传的物理承载，同一对端顶点下的报文条数随外传数据量膨胀，故按规则收口。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R3",
+          "direction": "src_to_dst",
+          "action": [
+            "send",
+            "recv"
+          ],
+          "source": {
+            "any_of": [
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/tmp/.cache-system/dnscat"
+              },
+              {
+                "vertex": "network",
+                "match": "in",
+                "values": [
+                  "192.168.122.129:52587->100.74.213.15:53",
+                  "192.168.122.129:41583->100.74.213.15:53"
+                ]
+              }
+            ]
+          },
+          "target": {
+            "any_of": [
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/tmp/.cache-system/dnscat"
+              },
+              {
+                "vertex": "network",
+                "match": "in",
+                "values": [
+                  "192.168.122.129:52587->100.74.213.15:53",
+                  "192.168.122.129:41583->100.74.213.15:53"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "A11",
+      "phase": "[A11] 载荷投递与分片外传的批量读写（可能集合）",
+      "time": "17:43:26~17:46:06",
+      "what": "curl 经 8000 端口分批接收 1.37 兆字节静态 dnscat 客户端并写入 /tmp/.cache-system/dnscat；外传阶段 dd 每次按 32 千字节切出数据、写入各自的一次性管道交给 bash；条数随载荷大小与分片数量动态膨胀，故按规则收口。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R4",
+          "direction": "src_to_dst",
+          "action": [
+            "recv",
+            "write"
+          ],
+          "source": {
+            "any_of": [
+              {
+                "vertex": "network",
+                "match": "in",
+                "values": [
+                  "100.86.108.4:39900->100.74.213.15:8000"
+                ]
+              },
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/usr/bin/dd"
+              },
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/usr/bin/curl"
+              }
+            ]
+          },
+          "target": {
+            "any_of": [
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/usr/bin/curl"
+              },
+              {
+                "vertex": "file",
+                "match": "path_prefix",
+                "value": "pipe:"
+              },
+              {
+                "vertex": "file",
+                "match": "exact",
+                "value": "/tmp/.cache-system/dnscat"
+              }
+            ],
+            "none_of": [
+              {
+                "vertex": "file",
+                "match": "in",
+                "values": [
+                  "pipe:[72943]",
+                  "pipe:[72973]"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "A12",
+      "phase": "[A12] 看门狗守护循环心跳（可能集合）",
+      "time": "17:44:01~18:01:59",
+      "what": "守护循环 wd.sh 每 30 秒一轮：sleep 等待、pgrep 探测隧道客户端是否存活、date 取时间戳，并把 alive/restart 追加进 wd.log；轮次随驻留时长膨胀，是本场断线自愈与静默驻留的物理心跳。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R5",
+          "direction": "src_to_dst",
+          "action": [
+            "exec",
+            "write"
+          ],
+          "source": {
+            "any_of": [
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/tmp/.cache-system/wd.sh"
+              }
+            ]
+          },
+          "target": {
+            "any_of": [
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/usr/bin/sleep"
+              },
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/usr/bin/pgrep"
+              },
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/usr/bin/date"
+              },
+              {
+                "vertex": "file",
+                "match": "exact",
+                "value": "/tmp/.cache-system/wd.log"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

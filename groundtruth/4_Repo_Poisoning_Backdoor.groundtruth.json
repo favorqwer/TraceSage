@@ -1,0 +1,879 @@
+{
+  "scenario": "4_Repo_Poisoning_Backdoor",
+  "entry": {
+    "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/lib/systemd/systemd",
+    "action": "exec",
+    "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/local/sbin/internal-repo-update.sh",
+    "effect": "success",
+    "edge_key": "ProcessToProcess:357707:exec",
+    "syscall": "execve",
+    "time": "23:03:31.406",
+    "why": "受害者主机维护任务系统服务派生：systemd 派生并执行内部源更新脚本，为日志中最早可归属的受害者攻击触发源头"
+  },
+  "poi": {
+    "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/sshd",
+    "action": "send",
+    "dst": "n:4_Repo_Poisoning_Backdoor:100.74.213.15:53648->100.86.108.4:22",
+    "effect": "success",
+    "edge_key": "ProcessToNetwork:3778434:send",
+    "syscall": "write",
+    "time": "23:10:06.464",
+    "why": "攻击全流程终局闭环：攻击者在等待 5 分钟周期回连后发起第二次独立 SSH 登录，验证定时器持久化与后门账号存活状态，sshd 将持久化单元存活状态回传至攻击机"
+  },
+  "counts": {
+    "actions": 10,
+    "must_entries": 84,
+    "rules": 0,
+    "steps_total": 84,
+    "edges_total_with_dupes": 84,
+    "edges_unique": 84
+  },
+  "attack_path": [
+    {
+      "id": "A1",
+      "phase": "[A1] 维护任务触发与内部源投毒包拉取",
+      "time": "23:03:31.406~23:03:36.974",
+      "what": "受害者机日常维护任务 internal-repo-update.service 触发，执行更新脚本并拉起 apt-get，从被投毒的内部软件源（100.116.135.31:80）下载投毒安装包 internal-tools_2.0.0_amd64.deb 并缓存落盘。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/lib/systemd/systemd",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/local/sbin/internal-repo-update.sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:357707:exec",
+          "syscall": "execve",
+          "edge_id": "A1.1"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/usr/local/sbin/internal-repo-update.sh",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/local/sbin/internal-repo-update.sh",
+          "effect": "success",
+          "edge_key": "FileToProcess:357707:exec",
+          "syscall": "execve",
+          "edge_id": "A1.2"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/local/sbin/internal-repo-update.sh",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/apt-get",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:359160:exec",
+          "syscall": "execve",
+          "edge_id": "A1.3"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/apt-get",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/lib/apt/methods/http",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:634903:exec",
+          "syscall": "execve",
+          "edge_id": "A1.4"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/lib/apt/methods/http",
+          "action": "connect",
+          "dst": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:42784->100.116.135.31:80",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:635977:connect",
+          "syscall": "connect",
+          "edge_id": "A1.5"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/lib/apt/methods/http",
+          "action": "send",
+          "dst": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:42784->100.116.135.31:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:636125:send",
+          "syscall": "write",
+          "edge_id": "A1.6"
+        },
+        {
+          "src": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:42784->100.116.135.31:80",
+          "action": "recv",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/lib/apt/methods/http",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:636194:recv",
+          "syscall": "read",
+          "edge_id": "A1.7"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/lib/apt/methods/http",
+          "action": "create",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/var/cache/apt/archives/partial/internal-tools_2.0.0_amd64.deb",
+          "effect": "success",
+          "edge_key": "ProcessToFile:636225:create",
+          "syscall": "open",
+          "edge_id": "A1.8"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/lib/apt/methods/http",
+          "action": "write",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/var/cache/apt/archives/partial/internal-tools_2.0.0_amd64.deb",
+          "effect": "success",
+          "edge_key": "ProcessToFile:636260:write",
+          "syscall": "write",
+          "edge_id": "A1.9"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/var/cache/apt/archives/partial/internal-tools_2.0.0_amd64.deb",
+          "action": "rename",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/apt-get",
+          "effect": "success",
+          "edge_key": "FileToProcess:636343:rename",
+          "syscall": "rename",
+          "edge_id": "A1.10"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/apt-get",
+          "action": "rename",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/var/cache/apt/archives/internal-tools_2.0.0_amd64.deb",
+          "effect": "success",
+          "edge_key": "ProcessToFile:636343:rename",
+          "syscall": "rename",
+          "edge_id": "A1.11"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "phase": "[A2] 软件包解包与 postinst 脚本后门安装启动",
+      "time": "23:03:37.272~23:03:37.432",
+      "what": "包管理器派生 dpkg 解包 internal-tools_2.0.0_amd64.deb 安装包，并调用执行其中的恶意安装后脚本 internal-tools.postinst。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/apt-get",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/dpkg",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:668137:exec",
+          "syscall": "execve",
+          "edge_id": "A2.1"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/dpkg",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:705788:exec",
+          "syscall": "execve",
+          "edge_id": "A2.2"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "effect": "success",
+          "edge_key": "FileToProcess:705788:exec",
+          "syscall": "execve",
+          "edge_id": "A2.3"
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "phase": "[A3] 后门账号创建、口令配置与 Sudo 特权分配",
+      "time": "23:03:37.437~23:03:37.516",
+      "what": "postinst 脚本以最高权限运行，调用 useradd 创建系统账号 svc-backup，使用 chpasswd 设置已知静态口令，并通过 usermod 将其加入管理员组 sudo。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/useradd",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:707366:exec",
+          "syscall": "execve",
+          "edge_id": "A3.1"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/useradd",
+          "action": "create",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/home/svc-backup",
+          "effect": "success",
+          "edge_key": "ProcessToFile:710833:create",
+          "syscall": "mkdir",
+          "edge_id": "A3.2"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/etc/passwd+",
+          "action": "rename",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/useradd",
+          "effect": "success",
+          "edge_key": "FileToProcess:711229:rename",
+          "syscall": "rename",
+          "edge_id": "A3.3"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/useradd",
+          "action": "rename",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/etc/passwd",
+          "effect": "success",
+          "edge_key": "ProcessToFile:711229:rename",
+          "syscall": "rename",
+          "edge_id": "A3.4"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/etc/shadow+",
+          "action": "rename",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/useradd",
+          "effect": "success",
+          "edge_key": "FileToProcess:711473:rename",
+          "syscall": "rename",
+          "edge_id": "A3.5"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/useradd",
+          "action": "rename",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/etc/shadow",
+          "effect": "success",
+          "edge_key": "ProcessToFile:711473:rename",
+          "syscall": "rename",
+          "edge_id": "A3.6"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/chpasswd",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:713385:exec",
+          "syscall": "execve",
+          "edge_id": "A3.7"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/etc/nshadow",
+          "action": "rename",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/chpasswd",
+          "effect": "success",
+          "edge_key": "FileToProcess:720565:rename",
+          "syscall": "rename",
+          "edge_id": "A3.8"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/chpasswd",
+          "action": "rename",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/etc/shadow",
+          "effect": "success",
+          "edge_key": "ProcessToFile:720565:rename",
+          "syscall": "rename",
+          "edge_id": "A3.9"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/usermod",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:720996:exec",
+          "syscall": "execve",
+          "edge_id": "A3.10"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/etc/gshadow+",
+          "action": "rename",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/usermod",
+          "effect": "success",
+          "edge_key": "FileToProcess:722365:rename",
+          "syscall": "rename",
+          "edge_id": "A3.11"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/usermod",
+          "action": "rename",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/etc/gshadow",
+          "effect": "success",
+          "edge_key": "ProcessToFile:722365:rename",
+          "syscall": "rename",
+          "edge_id": "A3.12"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "phase": "[A4] 植入攻击者 SSH 授权公钥",
+      "time": "23:03:37.519~23:03:37.522",
+      "what": "postinst 脚本创建后门账号的 .ssh 目录，直接写入攻击者的公钥至 authorized_keys，并修改文件属主与 600 安全权限。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/install",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:722675:exec",
+          "syscall": "execve",
+          "edge_id": "A4.1"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "create",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/home/svc-backup/.ssh/authorized_keys",
+          "effect": "success",
+          "edge_key": "ProcessToFile:722962:create",
+          "syscall": "open",
+          "edge_id": "A4.2"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "write",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/home/svc-backup/.ssh/authorized_keys",
+          "effect": "success",
+          "edge_key": "ProcessToFile:722976:write",
+          "syscall": "write",
+          "edge_id": "A4.3"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/chown",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:723082:exec",
+          "syscall": "execve",
+          "edge_id": "A4.4"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/chmod",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:723351:exec",
+          "syscall": "execve",
+          "edge_id": "A4.5"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/chmod",
+          "action": "chmod",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/home/svc-backup/.ssh/authorized_keys",
+          "effect": "success",
+          "edge_key": "ProcessToFile:723435:chmod",
+          "syscall": "chmod",
+          "edge_id": "A4.6"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "phase": "[A5] 常驻持久化服务与定时器落盘并注册",
+      "time": "23:03:37.523~23:03:37.772",
+      "what": "postinst 脚本以 cat 重定向将回连代理脚本 internal-tools-sync-agent 及其 systemd 服务、定时器定义写入系统目录，执行 daemon-reload 并 enable 定时器（落地表现为 timers.target.wants 软链建立），随后 start 服务拉起回连代理（进程见 A6）。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "create",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/usr/local/bin/internal-tools-sync-agent",
+          "effect": "success",
+          "edge_key": "ProcessToFile:723556:create",
+          "syscall": "open",
+          "edge_id": "A5.1"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/cat",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:723574:exec",
+          "syscall": "execve",
+          "edge_id": "A5.2"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/cat",
+          "action": "write",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/usr/local/bin/internal-tools-sync-agent",
+          "effect": "success",
+          "edge_key": "ProcessToFile:723664:write",
+          "syscall": "write",
+          "edge_id": "A5.3"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/chmod",
+          "action": "chmod",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/usr/local/bin/internal-tools-sync-agent",
+          "effect": "success",
+          "edge_key": "ProcessToFile:723819:chmod",
+          "syscall": "chmod",
+          "edge_id": "A5.4"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "create",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/etc/systemd/system/internal-tools-sync.service",
+          "effect": "success",
+          "edge_key": "ProcessToFile:723884:create",
+          "syscall": "open",
+          "edge_id": "A5.5"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/cat",
+          "action": "write",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/etc/systemd/system/internal-tools-sync.service",
+          "effect": "success",
+          "edge_key": "ProcessToFile:723992:write",
+          "syscall": "write",
+          "edge_id": "A5.6"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "create",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/etc/systemd/system/internal-tools-sync.timer",
+          "effect": "success",
+          "edge_key": "ProcessToFile:724063:create",
+          "syscall": "open",
+          "edge_id": "A5.7"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/cat",
+          "action": "write",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/etc/systemd/system/internal-tools-sync.timer",
+          "effect": "success",
+          "edge_key": "ProcessToFile:724171:write",
+          "syscall": "write",
+          "edge_id": "A5.8"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/var/lib/dpkg/info/internal-tools.postinst",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/systemctl",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:724301:exec",
+          "syscall": "execve",
+          "edge_id": "A5.9"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/lib/systemd/systemd",
+          "action": "link",
+          "dst": "f:4_Repo_Poisoning_Backdoor/host:/etc/systemd/system/timers.target.wants/internal-tools-sync.timer",
+          "effect": "success",
+          "edge_key": "ProcessToFile:950118:link",
+          "syscall": "symlink",
+          "edge_id": "A5.10"
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "phase": "[A6] 首次即时反向心跳回连",
+      "time": "23:03:38.028~23:03:38.622",
+      "what": "internal-tools-sync.service 服务首次启动，执行 internal-tools-sync-agent，调用 curl 向外部攻击机（100.74.213.15:8080/beacon）发送初始上线信标数据包。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/lib/systemd/systemd",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/local/bin/internal-tools-sync-agent",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1179633:exec",
+          "syscall": "execve",
+          "edge_id": "A6.1"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/usr/local/bin/internal-tools-sync-agent",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/local/bin/internal-tools-sync-agent",
+          "effect": "success",
+          "edge_key": "FileToProcess:1179633:exec",
+          "syscall": "execve",
+          "edge_id": "A6.2"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/local/bin/internal-tools-sync-agent",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/hostname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1181022:exec",
+          "syscall": "execve",
+          "edge_id": "A6.3"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/local/bin/internal-tools-sync-agent",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1181654:exec",
+          "syscall": "execve",
+          "edge_id": "A6.4"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/local/bin/internal-tools-sync-agent",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/date",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1182438:exec",
+          "syscall": "execve",
+          "edge_id": "A6.5"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/local/bin/internal-tools-sync-agent",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1182809:exec",
+          "syscall": "execve",
+          "edge_id": "A6.6"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:44622->100.74.213.15:8080",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:1183811:connect",
+          "syscall": "connect",
+          "edge_id": "A6.7"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:44622->100.74.213.15:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1185389:send",
+          "syscall": "sendto",
+          "edge_id": "A6.8"
+        },
+        {
+          "src": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:44622->100.74.213.15:8080",
+          "action": "recv",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1188749:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A6.9"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "phase": "[A7] 攻击者首次 SSH 登录与会话建立",
+      "time": "23:04:11.472~23:04:12.353",
+      "what": "外部攻击机使用后门私钥通过 SSH 登录受害者主机后门账号 svc-backup，sshd 校验 authorized_keys 并派生命令解释器，攻击者完成首次后门连通性验证。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:4_Repo_Poisoning_Backdoor:100.74.213.15:42926->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1410912:accept",
+          "syscall": "accept",
+          "edge_id": "A7.1"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/home/svc-backup/.ssh/authorized_keys",
+          "action": "read",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "FileToProcess:1416855:read",
+          "syscall": "read",
+          "edge_id": "A7.2"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/sshd",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1644175:exec",
+          "syscall": "execve",
+          "edge_id": "A7.3"
+        }
+      ]
+    },
+    {
+      "id": "A8",
+      "phase": "[A8] 攻击者执行后渗透脚本、Sudo 提权与影子文件读取",
+      "time": "23:04:23.541~23:04:24.090",
+      "what": "攻击者通过第二条 SSH 会话推送 post_exploit.sh 脚本，执行一系列环境侦察命令后，利用预留口令通过 sudo 成功提权至 root (uid=0)，并调用 head 读取最高特权敏感文件 /etc/shadow 取得系统口令散列凭据。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:4_Repo_Poisoning_Backdoor:100.74.213.15:46666->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:2099219:accept",
+          "syscall": "accept",
+          "edge_id": "A8.1"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2292757:exec",
+          "syscall": "execve",
+          "edge_id": "A8.2"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/date",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2341860:exec",
+          "syscall": "execve",
+          "edge_id": "A8.3"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2342430:exec",
+          "syscall": "execve",
+          "edge_id": "A8.4"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/hostname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2343967:exec",
+          "syscall": "execve",
+          "edge_id": "A8.5"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/uname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2344971:exec",
+          "syscall": "execve",
+          "edge_id": "A8.6"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/systemctl",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2346682:exec",
+          "syscall": "execve",
+          "edge_id": "A8.7"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2346783:exec",
+          "syscall": "execve",
+          "edge_id": "A8.8"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/tail",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2352575:exec",
+          "syscall": "execve",
+          "edge_id": "A8.9"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/var/log/internal-tools/update.log",
+          "action": "read",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/tail",
+          "effect": "success",
+          "edge_key": "FileToProcess:2352950:read",
+          "syscall": "read",
+          "edge_id": "A8.10"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/sudo",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2353739:exec",
+          "syscall": "execve",
+          "edge_id": "A8.11"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/sudo",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2379313:exec",
+          "syscall": "execve",
+          "edge_id": "A8.12"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/cut",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2381808:exec",
+          "syscall": "execve",
+          "edge_id": "A8.13"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/sudo",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2386388:exec",
+          "syscall": "execve",
+          "edge_id": "A8.14"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/etc/shadow",
+          "action": "read",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "FileToProcess:2386830:read",
+          "syscall": "read",
+          "edge_id": "A8.15"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/wc",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2391114:exec",
+          "syscall": "execve",
+          "edge_id": "A8.16"
+        },
+        {
+          "src": "f:4_Repo_Poisoning_Backdoor/host:/home/svc-backup/.ssh/authorized_keys",
+          "action": "read",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/wc",
+          "effect": "success",
+          "edge_key": "FileToProcess:2391728:read",
+          "syscall": "read",
+          "edge_id": "A8.17"
+        }
+      ]
+    },
+    {
+      "id": "A9",
+      "phase": "[A9] 常驻持久化定时器周期性心跳",
+      "time": "23:04:23.756~23:09:29.656",
+      "what": "注册在 systemd 的定时器 internal-tools-sync.timer 保持活跃运行，按 OnActiveSec=45s 与 OnUnitActiveSec=5min 周期性唤醒服务并向攻击机（100.74.213.15:8080）回传心跳信标。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:39246->100.74.213.15:8080",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:2109425:connect",
+          "syscall": "connect",
+          "edge_id": "A9.1"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:39246->100.74.213.15:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:2149151:send",
+          "syscall": "sendto",
+          "edge_id": "A9.2"
+        },
+        {
+          "src": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:39246->100.74.213.15:8080",
+          "action": "recv",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:2169680:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A9.3"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:39636->100.74.213.15:8080",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:3448652:connect",
+          "syscall": "connect",
+          "edge_id": "A9.4"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:39636->100.74.213.15:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3451766:send",
+          "syscall": "sendto",
+          "edge_id": "A9.5"
+        },
+        {
+          "src": "n:4_Repo_Poisoning_Backdoor:100.86.108.4:39636->100.74.213.15:8080",
+          "action": "recv",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3452904:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A9.6"
+        }
+      ]
+    },
+    {
+      "id": "A10",
+      "phase": "[A10] 攻击者二次独立登录与持久化存活验证",
+      "time": "23:10:05.955~23:10:06.464",
+      "what": "攻击者在等待 5 分钟周期回连后发起第二次独立 SSH 登录，验证定时器持久化与账号存活状态，sshd 将持久化单元存活状态（enabled/下次触发）回传至攻击机，完成攻击闭环。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:4_Repo_Poisoning_Backdoor:100.74.213.15:53648->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3521291:accept",
+          "syscall": "accept",
+          "edge_id": "A10.1"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/date",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3767244:exec",
+          "syscall": "execve",
+          "edge_id": "A10.2"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3768124:exec",
+          "syscall": "execve",
+          "edge_id": "A10.3"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/systemctl",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3769452:exec",
+          "syscall": "execve",
+          "edge_id": "A10.4"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/sed",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3773002:exec",
+          "syscall": "execve",
+          "edge_id": "A10.5"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:4_Repo_Poisoning_Backdoor/host:/usr/bin/awk",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3773173:exec",
+          "syscall": "execve",
+          "edge_id": "A10.6"
+        },
+        {
+          "src": "p:4_Repo_Poisoning_Backdoor/host:/usr/sbin/sshd",
+          "action": "send",
+          "dst": "n:4_Repo_Poisoning_Backdoor:100.74.213.15:53648->100.86.108.4:22",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3778434:send",
+          "syscall": "write",
+          "edge_id": "A10.7"
+        }
+      ]
+    }
+  ]
+}

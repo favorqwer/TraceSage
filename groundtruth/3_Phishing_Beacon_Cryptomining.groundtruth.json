@@ -1,0 +1,862 @@
+{
+  "scenario": "3_Phishing_Beacon_Cryptomining",
+  "entry": {
+    "src": "p:3_Phishing_Beacon_Cryptomining/host:/bin/bash",
+    "action": "exec",
+    "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+    "effect": "success",
+    "edge_key": "ProcessToProcess:851214:exec",
+    "syscall": "execve",
+    "time": "22:21:24.825",
+    "why": "受害者在终端粘贴执行诱导命令：bash 派生 curl 向攻击机拉取第一阶段安装脚本"
+  },
+  "poi": {
+    "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+    "action": "send",
+    "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:59062->100.84.151.2:8080",
+    "effect": "success",
+    "edge_key": "ProcessToNetwork:13411281:send",
+    "syscall": "sendto",
+    "time": "22:32:31.867",
+    "why": "攻击最终破坏与窃密产物：curl 将收集的主机敏感信息归档包 collected.tar.gz 真实外传至受信任第三方 C2 服务端"
+  },
+  "counts": {
+    "actions": 10,
+    "must_entries": 70,
+    "rules": 2,
+    "steps_total": 72,
+    "edges_total_with_dupes": 70,
+    "edges_unique": 70
+  },
+  "attack_path": [
+    {
+      "id": "A1",
+      "phase": "[A1] 诱导命令执行与第一阶段载荷拉取",
+      "time": "22:21:24.825~22:21:24.852",
+      "what": "受害者在终端粘贴执行命令，bash 派生 curl 向攻击机（100.74.213.15:80）请求并下载 install.sh 脚本。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:851214:exec",
+          "syscall": "execve",
+          "edge_id": "A1.1"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:51268->100.74.213.15:80",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:852470:connect",
+          "syscall": "connect",
+          "edge_id": "A1.2"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:51268->100.74.213.15:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:852896:send",
+          "syscall": "sendto",
+          "edge_id": "A1.3"
+        },
+        {
+          "src": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:51268->100.74.213.15:80",
+          "action": "recv",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:853285:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.4"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "write",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:pipe:[214042]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:853298:write",
+          "syscall": "write",
+          "edge_id": "A1.5"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:pipe:[214042]",
+          "action": "read",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "FileToProcess:853479:read",
+          "syscall": "read",
+          "edge_id": "A1.6"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "phase": "[A2] 管道执行第一阶段脚本并部署第二阶段轮询植入体",
+      "time": "22:21:24.825~22:21:25.724",
+      "what": "install.sh 通过管道交付 bash 执行，创建工作目录、从受信任第三方机（100.84.151.2:8080）下载第二阶段轮询植入体 .agent.sh、赋予执行权限并以 nohup setsid 常驻后台执行。 第一阶段脚本以子 shell 方式执行。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:851222:exec",
+          "syscall": "execve",
+          "edge_id": "A2.1"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/mkdir",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:854091:exec",
+          "syscall": "execve",
+          "edge_id": "A2.2"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/mkdir",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper",
+          "effect": "success",
+          "edge_key": "ProcessToFile:854305:create",
+          "syscall": "mkdir",
+          "edge_id": "A2.3"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/mkdir",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out",
+          "effect": "success",
+          "edge_key": "ProcessToFile:854315:create",
+          "syscall": "mkdir",
+          "edge_id": "A2.4"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:859744:create",
+          "syscall": "open",
+          "edge_id": "A2.5"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "write",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:859776:write",
+          "syscall": "write",
+          "edge_id": "A2.6"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/chmod",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:860065:exec",
+          "syscall": "execve",
+          "edge_id": "A2.7"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/chmod",
+          "action": "chmod",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:860149:chmod",
+          "syscall": "chmod",
+          "edge_id": "A2.8"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/setsid",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:860483:exec",
+          "syscall": "execve",
+          "edge_id": "A2.9"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/setsid",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/nohup",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:860685:exec",
+          "syscall": "execve",
+          "edge_id": "A2.10"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/nohup",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:860773:exec",
+          "syscall": "execve",
+          "edge_id": "A2.11"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "effect": "success",
+          "edge_key": "FileToProcess:860773:exec",
+          "syscall": "execve",
+          "edge_id": "A2.12"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "read",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "effect": "success",
+          "edge_key": "FileToProcess:860973:read",
+          "syscall": "read",
+          "edge_id": "A2.13"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/mkdir",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking",
+          "effect": "success",
+          "edge_key": "ProcessToFile:861524:create",
+          "syscall": "mkdir",
+          "edge_id": "A2.14"
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "phase": "[A3] 驻留体启动与首次 C2 心跳通信",
+      "time": "22:21:25.726~22:21:26.106",
+      "what": "植入体 .agent.sh 启动常驻主循环，首次向受信任第三方 C2 服务器（100.84.151.2:8080）发送心跳报文宣告上线。 植入体常驻主循环由脚本自身派生的子进程承载。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:862237:exec",
+          "syscall": "execve",
+          "edge_id": "A3.1"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:58098->100.84.151.2:8080",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:863127:connect",
+          "syscall": "connect",
+          "edge_id": "A3.2"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:58098->100.84.151.2:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:864839:send",
+          "syscall": "sendto",
+          "edge_id": "A3.3"
+        },
+        {
+          "src": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:58098->100.84.151.2:8080",
+          "action": "recv",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:866106:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A3.4"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "phase": "[A4] C2 下发任务一与执行（主机敏感信息收集与结果回传）",
+      "time": "22:21:26.131~22:21:26.715",
+      "what": "植入体向 C2 轮询任务，获取 01_sysinfo.sh 并保存为 tasking/t_1791642086.sh 执行，将收集的主机信息重定向至 out 目录并回传给 C2。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:58106->100.84.151.2:8080",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:867489:connect",
+          "syscall": "connect",
+          "edge_id": "A4.1"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:58106->100.84.151.2:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:867836:send",
+          "syscall": "sendto",
+          "edge_id": "A4.2"
+        },
+        {
+          "src": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:58106->100.84.151.2:8080",
+          "action": "recv",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:868750:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A4.3"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642086.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:869150:create",
+          "syscall": "open",
+          "edge_id": "A4.4"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "write",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642086.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:869166:write",
+          "syscall": "write",
+          "edge_id": "A4.5"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/chmod",
+          "action": "chmod",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642086.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:869394:chmod",
+          "syscall": "chmod",
+          "edge_id": "A4.6"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/t_1791642086.sh.out",
+          "effect": "success",
+          "edge_key": "ProcessToFile:869777:create",
+          "syscall": "open",
+          "edge_id": "A4.7"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642086.sh",
+          "action": "read",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "FileToProcess:870218:read",
+          "syscall": "read",
+          "edge_id": "A4.8"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/t_1791642086.sh.out",
+          "action": "read",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "FileToProcess:893085:read",
+          "syscall": "read",
+          "edge_id": "A4.9"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:58120->100.84.151.2:8080",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:893143:connect",
+          "syscall": "connect",
+          "edge_id": "A4.10"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:58120->100.84.151.2:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:897087:send",
+          "syscall": "sendto",
+          "edge_id": "A4.11"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "phase": "[A5] C2 下发任务二（开源挖矿软件下载与配置落地）",
+      "time": "22:22:32.216~22:22:36.238",
+      "what": "植入体接收 02_start_miner.sh，从攻击机下载官方静态版 XMRig 挖矿程序落地为 kswapd0 并赋予执行权限，生成连接本地矿池的 config.json。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642152.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:2219757:create",
+          "syscall": "open",
+          "edge_id": "A5.1"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "write",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642152.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:2219771:write",
+          "syscall": "write",
+          "edge_id": "A5.2"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/chmod",
+          "action": "chmod",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642152.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:2219911:chmod",
+          "syscall": "chmod",
+          "edge_id": "A5.3"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/t_1791642152.sh.out",
+          "effect": "success",
+          "edge_key": "ProcessToFile:2220221:create",
+          "syscall": "open",
+          "edge_id": "A5.4"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2220231:exec",
+          "syscall": "execve",
+          "edge_id": "A5.5"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642152.sh",
+          "action": "read",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "FileToProcess:2220489:read",
+          "syscall": "read",
+          "edge_id": "A5.6"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:43422->100.74.213.15:80",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:2221509:connect",
+          "syscall": "connect",
+          "edge_id": "A5.7"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:43422->100.74.213.15:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:2221717:send",
+          "syscall": "sendto",
+          "edge_id": "A5.8"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/kswapd0",
+          "effect": "success",
+          "edge_key": "ProcessToFile:2222247:create",
+          "syscall": "open",
+          "edge_id": "A5.9"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "write",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/kswapd0",
+          "effect": "success",
+          "edge_key": "ProcessToFile:2222305:write",
+          "syscall": "write",
+          "edge_id": "A5.10"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/chmod",
+          "action": "chmod",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/kswapd0",
+          "effect": "success",
+          "edge_key": "ProcessToFile:2300487:chmod",
+          "syscall": "chmod",
+          "edge_id": "A5.11"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/config.json",
+          "effect": "success",
+          "edge_key": "ProcessToFile:2300614:create",
+          "syscall": "open",
+          "edge_id": "A5.12"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/cat",
+          "action": "write",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/config.json",
+          "effect": "success",
+          "edge_key": "ProcessToFile:2300722:write",
+          "syscall": "write",
+          "edge_id": "A5.13"
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "phase": "[A6] 启动伪装挖矿程序并建立矿池连接",
+      "time": "22:22:36.239~22:22:41.268",
+      "what": "挖矿进程 kswapd0 启动并加载 config.json，连接攻击机矿池（100.74.213.15:3333）建立 Stratum 网络套接字连接，并回传任务二执行结果。 挖矿进程派生子进程承载计算与矿池会话。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/nohup",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/kswapd0",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2301247:exec",
+          "syscall": "execve",
+          "edge_id": "A6.1"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/kswapd0",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/kswapd0",
+          "effect": "success",
+          "edge_key": "FileToProcess:2301247:exec",
+          "syscall": "execve",
+          "edge_id": "A6.2"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/config.json",
+          "action": "read",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/kswapd0",
+          "effect": "success",
+          "edge_key": "FileToProcess:2302658:read",
+          "syscall": "read",
+          "edge_id": "A6.3"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/kswapd0",
+          "action": "connect",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:55650->100.74.213.15:3333",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:2303057:connect",
+          "syscall": "connect",
+          "edge_id": "A6.4"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/t_1791642152.sh.out",
+          "action": "read",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "FileToProcess:2379545:read",
+          "syscall": "read",
+          "edge_id": "A6.5"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:42142->100.84.151.2:8080",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:2379603:connect",
+          "syscall": "connect",
+          "edge_id": "A6.6"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:42142->100.84.151.2:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:2380683:send",
+          "syscall": "sendto",
+          "edge_id": "A6.7"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "phase": "[A7] 矿池协议高频哈希计算与计算份额提交（可能集合）",
+      "time": "22:22:36.257~22:40:12.000",
+      "what": "挖矿进程 kswapd0 使用 Stratum 协议持续向攻击机矿池（100.74.213.15:3333）提交工作量份额（submit/share）并接收矿池确认，属于高频动态通信流量。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R1",
+          "direction": "either",
+          "action": [
+            "send",
+            "recv"
+          ],
+          "source": {
+            "vertex": "process",
+            "match": "exact",
+            "value": "/home/ubuntu/.local/share/.syslog-helper/kswapd0"
+          },
+          "target": {
+            "vertex": "network",
+            "match": "path_suffix",
+            "value": ":3333"
+          }
+        }
+      ]
+    },
+    {
+      "id": "A8",
+      "phase": "[A8] C2 下发任务三（收集主机配置并归档压缩）",
+      "time": "22:32:31.821~22:32:31.841",
+      "what": "植入体接收 03_exfil_info.sh，收集受害者机 IP、系统版本等信息输出至 host-info.txt，并调用 tar 和 gzip 压缩打包为 collected.tar.gz。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642751.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:13405682:create",
+          "syscall": "open",
+          "edge_id": "A8.1"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "write",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642751.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:13405696:write",
+          "syscall": "write",
+          "edge_id": "A8.2"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/chmod",
+          "action": "chmod",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642751.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:13405836:chmod",
+          "syscall": "chmod",
+          "edge_id": "A8.3"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/.agent.sh",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/t_1791642751.sh.out",
+          "effect": "success",
+          "edge_key": "ProcessToFile:13406145:create",
+          "syscall": "open",
+          "edge_id": "A8.4"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/tasking/t_1791642751.sh",
+          "action": "read",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "FileToProcess:13406429:read",
+          "syscall": "read",
+          "edge_id": "A8.5"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/host-info.txt",
+          "effect": "success",
+          "edge_key": "ProcessToFile:13406740:create",
+          "syscall": "open",
+          "edge_id": "A8.6"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/date",
+          "action": "write",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/host-info.txt",
+          "effect": "success",
+          "edge_key": "ProcessToFile:13406954:write",
+          "syscall": "write",
+          "edge_id": "A8.7"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/tar",
+          "action": "clone",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:13409142:clone",
+          "syscall": "clone",
+          "edge_id": "A8.8"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/tar",
+          "action": "create",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/collected.tar.gz",
+          "effect": "success",
+          "edge_key": "ProcessToFile:13409196:create",
+          "syscall": "open",
+          "edge_id": "A8.9"
+        },
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/host-info.txt",
+          "action": "read",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "FileToProcess:13409267:read",
+          "syscall": "read",
+          "edge_id": "A8.10"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/gzip",
+          "action": "write",
+          "dst": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/collected.tar.gz",
+          "effect": "success",
+          "edge_key": "ProcessToFile:13409498:write",
+          "syscall": "write",
+          "edge_id": "A8.11"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/stat",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:13409667:exec",
+          "syscall": "execve",
+          "edge_id": "A8.12"
+        }
+      ]
+    },
+    {
+      "id": "A9",
+      "phase": "[A9] 主机机密外发渗漏与任务闭环",
+      "time": "22:32:31.844~22:32:31.867",
+      "what": "调用 curl 读取打包文件 collected.tar.gz，以 HTTP POST 方式外发上传至 C2 服务器（100.84.151.2:8080/upload），达成机密渗漏破坏目的。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "f:3_Phishing_Beacon_Cryptomining/host:/home/ubuntu/.local/share/.syslog-helper/out/collected.tar.gz",
+          "action": "read",
+          "dst": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "FileToProcess:13410877:read",
+          "syscall": "read",
+          "edge_id": "A9.1"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:59062->100.84.151.2:8080",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:13410935:connect",
+          "syscall": "connect",
+          "edge_id": "A9.2"
+        },
+        {
+          "src": "p:3_Phishing_Beacon_Cryptomining/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:3_Phishing_Beacon_Cryptomining:100.86.108.4:59062->100.84.151.2:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:13411281:send",
+          "syscall": "sendto",
+          "edge_id": "A9.3"
+        }
+      ]
+    },
+    {
+      "id": "A10",
+      "phase": "[A10] C2 轮询驻留循环（心跳/取任务/结果回传，可能集合）",
+      "time": "22:21:24.859~22:32:31.867",
+      "what": "植入体 .agent.sh 每 50~70 秒抖动回连一次，每次派生 curl 向受信任第三方 C2（100.84.151.2:8080）发送心跳、轮询任务、回传任务输出；同一条通道上还承载第二阶段载荷 s2.sh 的首次下载。图上该端口共 29 次连接、107 条边，其中首心跳、首取任务、首回传、任务二回传、外传已作为必须边逐条收录，其余全部由本规则覆盖。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R2",
+          "direction": "either",
+          "action": [
+            "connect",
+            "send",
+            "recv"
+          ],
+          "source": {
+            "any_of": [
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/usr/bin/curl"
+              },
+              {
+                "vertex": "network",
+                "match": "path_suffix",
+                "value": "100.84.151.2:8080",
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "exact",
+                    "value": "100.86.108.4:58098->100.84.151.2:8080"
+                  },
+                  {
+                    "vertex": "network",
+                    "match": "exact",
+                    "value": "100.86.108.4:58106->100.84.151.2:8080"
+                  },
+                  {
+                    "vertex": "network",
+                    "match": "exact",
+                    "value": "100.86.108.4:58120->100.84.151.2:8080"
+                  },
+                  {
+                    "vertex": "network",
+                    "match": "exact",
+                    "value": "100.86.108.4:42142->100.84.151.2:8080"
+                  },
+                  {
+                    "vertex": "network",
+                    "match": "exact",
+                    "value": "100.86.108.4:59062->100.84.151.2:8080"
+                  }
+                ]
+              }
+            ]
+          },
+          "target": {
+            "any_of": [
+              {
+                "vertex": "process",
+                "match": "exact",
+                "value": "/usr/bin/curl"
+              },
+              {
+                "vertex": "network",
+                "match": "path_suffix",
+                "value": "100.84.151.2:8080",
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "exact",
+                    "value": "100.86.108.4:58098->100.84.151.2:8080"
+                  },
+                  {
+                    "vertex": "network",
+                    "match": "exact",
+                    "value": "100.86.108.4:58106->100.84.151.2:8080"
+                  },
+                  {
+                    "vertex": "network",
+                    "match": "exact",
+                    "value": "100.86.108.4:58120->100.84.151.2:8080"
+                  },
+                  {
+                    "vertex": "network",
+                    "match": "exact",
+                    "value": "100.86.108.4:42142->100.84.151.2:8080"
+                  },
+                  {
+                    "vertex": "network",
+                    "match": "exact",
+                    "value": "100.86.108.4:59062->100.84.151.2:8080"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

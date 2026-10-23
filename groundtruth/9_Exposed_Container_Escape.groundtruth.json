@@ -1,0 +1,1412 @@
+{
+  "scenario": "9_Exposed_Container_Escape",
+  "entry": {
+    "src": "n:9_Exposed_Container_Escape:100.74.213.15:44120->100.86.108.4:2375",
+    "action": "accept",
+    "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+    "effect": "success",
+    "edge_key": "NetworkToProcess:573774:accept",
+    "syscall": "accept",
+    "time": "10:25:36.799",
+    "why": "攻击在日志里最早的可归属动作：外部对暴露的 2375 Docker 管理接口的第一条入网连接"
+  },
+  "poi": {
+    "src": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+    "action": "send",
+    "dst": "n:9_Exposed_Container_Escape:172.17.0.2:56186->100.74.213.15:8808",
+    "effect": "success",
+    "edge_key": "ProcessToNetwork:5345223:send",
+    "syscall": "sendto",
+    "time": "10:41:05.753",
+    "why": "攻击全流程终局闭环：后门容器进程接收 QUIT 自行退出后，由 Docker restart=always 策略自动拉起新实例，并成功向攻击机 C2 发送 HELLO 恢复回连通道"
+  },
+  "counts": {
+    "actions": 12,
+    "must_entries": 152,
+    "rules": 3,
+    "steps_total": 155,
+    "edges_total_with_dupes": 152,
+    "edges_unique": 152,
+    "must_edges": 152
+  },
+  "attack_path": [
+    {
+      "id": "A1",
+      "phase": "[A1] 外部对 2375 暴露容器管理接口未授权探测与侦察",
+      "time": "10:25:36.799~10:26:54.800",
+      "what": "攻击机（100.74.213.15）直接连接受害者机裸奔且无认证的 2375 Docker Daemon 管理接口，并发起 7 项系统与容器资源状态侦察请求（version, info, containers, images, networks, volumes, system/df）。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:44120->100.86.108.4:2375",
+          "action": "accept",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:573774:accept",
+          "syscall": "accept"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:44120->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:573993:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:100.74.213.15:44120->100.86.108.4:2375",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:575717:send",
+          "syscall": "write"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:55300->100.86.108.4:2375",
+          "action": "accept",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:604845:accept",
+          "syscall": "accept"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:55300->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:605193:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:100.74.213.15:55300->100.86.108.4:2375",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:607279:send",
+          "syscall": "write"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:57654->100.86.108.4:2375",
+          "action": "accept",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:637024:accept",
+          "syscall": "accept"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:57654->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:637348:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:100.74.213.15:57654->100.86.108.4:2375",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:641555:send",
+          "syscall": "write"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:60746->100.86.108.4:2375",
+          "action": "accept",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:672162:accept",
+          "syscall": "accept"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:60746->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:672370:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:100.74.213.15:60746->100.86.108.4:2375",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:686420:send",
+          "syscall": "write"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:46912->100.86.108.4:2375",
+          "action": "accept",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:715833:accept",
+          "syscall": "accept"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:46912->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:716046:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:100.74.213.15:46912->100.86.108.4:2375",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:716112:send",
+          "syscall": "write"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:60250->100.86.108.4:2375",
+          "action": "accept",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:747231:accept",
+          "syscall": "accept"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:60250->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:747625:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:100.74.213.15:60250->100.86.108.4:2375",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:747703:send",
+          "syscall": "write"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:56288->100.86.108.4:2375",
+          "action": "accept",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:777309:accept",
+          "syscall": "accept"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:56288->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:777465:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:100.74.213.15:56288->100.86.108.4:2375",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:801515:send",
+          "syscall": "write"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "phase": "[A2] 滥用管理接口部署特权逃逸容器",
+      "time": "10:28:11.110~10:28:12.300",
+      "what": "攻击机调用 Docker API 创建名为 s9-escape 的特权容器（挂载宿主根目录 /:/host 并开启 Privileged），启动容器并派生 sh 解释器准备执行逃逸引导脚本。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:58818->100.86.108.4:2375",
+          "action": "accept",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:916022:accept",
+          "syscall": "accept"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:58818->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:916827:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:58828->100.86.108.4:2375",
+          "action": "accept",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:918901:accept",
+          "syscall": "accept"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:58828->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:919557:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:58838->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:948230:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/runc",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1035331:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "clone",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1041924:clone",
+          "syscall": "clone"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/wget",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1042967:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/wget",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:56294->100.74.213.15:8809",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1044197:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1047008:exec",
+          "syscall": "execve"
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "phase": "[A3] 逃逸容器内下载载荷与现场编译隐藏库",
+      "time": "10:28:12.540~10:28:15.210",
+      "what": "逃逸脚本从攻击机投递端口（8809）下载静态回连后门 svc-watchdog 与开源进程隐藏源码 processhider.c，通过 sed 修改进程过滤名为 svc-watchdog，并通过 chroot 调用宿主 gcc 编译器编译生成动态隐藏库 libdbus-helper.so。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/wget",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:56306->100.74.213.15:8809",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1248042:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/wget",
+          "action": "create",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/tmp/svc-watchdog",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1249059:create",
+          "syscall": "open"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/wget",
+          "action": "write",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/tmp/svc-watchdog",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1249120:write",
+          "syscall": "write"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/wget",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:56310->100.74.213.15:8809",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1271693:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/wget",
+          "action": "create",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/tmp/processhider.c",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1273004:create",
+          "syscall": "open"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/wget",
+          "action": "write",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/tmp/processhider.c",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1273132:write",
+          "syscall": "write"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/chmod",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1273336:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/cp",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1273489:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/cp",
+          "action": "create",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/tmp/processhider.c",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1273542:create",
+          "syscall": "open"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/533ccab15096:/tmp/processhider.c",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/cp",
+          "effect": "success",
+          "edge_key": "FileToProcess:1273549:read",
+          "syscall": "sendfile"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/cp",
+          "action": "write",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/tmp/processhider.c",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1273549:write",
+          "syscall": "sendfile"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sed",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1273681:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/533ccab15096:/host/tmp/processhider.c",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sed",
+          "effect": "success",
+          "edge_key": "FileToProcess:1273743:read",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sed",
+          "action": "write",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/tmp/processhider.cjBdppf",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1273747:write",
+          "syscall": "write"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sed",
+          "action": "rename",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/tmp/processhider.c",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1273770:rename",
+          "syscall": "rename"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/533ccab15096:/host/tmp/processhider.cjBdppf",
+          "action": "rename",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sed",
+          "effect": "success",
+          "edge_key": "FileToProcess:1273770:rename",
+          "syscall": "rename"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/sbin/chroot",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1273908:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/sbin/chroot",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/gcc",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1273934:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/gcc",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/lib/gcc/x86_64-linux-gnu/11/cc1",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1274138:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/533ccab15096:/tmp/processhider.c",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/lib/gcc/x86_64-linux-gnu/11/cc1",
+          "effect": "success",
+          "edge_key": "FileToProcess:1274749:read",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/gcc",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/as",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1278333:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/gcc",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/lib/gcc/x86_64-linux-gnu/11/collect2",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1278812:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/lib/gcc/x86_64-linux-gnu/11/collect2",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/ld",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1279111:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/ld",
+          "action": "create",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/usr/lib/libdbus-helper.so",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1279419:create",
+          "syscall": "open"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/ld",
+          "action": "write",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/usr/lib/libdbus-helper.so",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1281858:write",
+          "syscall": "write"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/ld",
+          "action": "chmod",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/usr/lib/libdbus-helper.so",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1282206:chmod",
+          "syscall": "chmod"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/rm",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1282392:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/rm",
+          "action": "unlink",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/tmp/processhider.c",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1282426:unlink",
+          "syscall": "unlink"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/sbin/chroot",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/env",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1282580:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/env",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/true",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1282652:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/533ccab15096:/usr/lib/libdbus-helper.so",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/true",
+          "effect": "success",
+          "edge_key": "FileToProcess:1282670:read",
+          "syscall": "read"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "phase": "[A4] 跨命名空间植入后门程序与双重持久化配置",
+      "time": "10:28:15.020~10:28:17.000",
+      "what": "逃逸容器利用 /host 挂载点将后门程序写入宿主 /usr/sbin/svc-watchdog 并赋权，配置宿主定时任务 /etc/cron.d/svc-watchdog 实现每分钟单实例自启，将隐藏库写入全局预加载 /etc/ld.so.preload 隐藏自身进程，并读取 /etc/shadow 验证提权成果。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/cp",
+          "action": "create",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/usr/sbin/svc-watchdog",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1282898:create",
+          "syscall": "open"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/cp",
+          "action": "write",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/usr/sbin/svc-watchdog",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1282900:write",
+          "syscall": "sendfile"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/chmod",
+          "action": "chmod",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/usr/sbin/svc-watchdog",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1283042:chmod",
+          "syscall": "chmod"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "create",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/etc/cron.d/svc-watchdog",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1283075:create",
+          "syscall": "open"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/cat",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1283221:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/cat",
+          "action": "write",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/etc/cron.d/svc-watchdog",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1283253:write",
+          "syscall": "write"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/chmod",
+          "action": "chmod",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/etc/cron.d/svc-watchdog",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1283395:chmod",
+          "syscall": "chmod"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "create",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/etc/ld.so.preload",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1283422:create",
+          "syscall": "open"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "write",
+          "dst": "f:9_Exposed_Container_Escape/533ccab15096:/host/etc/ld.so.preload",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1283525:write",
+          "syscall": "write"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/wc",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1283984:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/sbin/chroot",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1301420:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/533ccab15096:/etc/shadow",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "FileToProcess:1301606:read",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/bin/grep",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1301897:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/533ccab15096:/usr/sbin/chroot",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/533ccab15096:/usr/bin/ps",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1301935:exec",
+          "syscall": "execve"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "phase": "[A5] 等待宿主持久化上线并轮询自检（可能集合）",
+      "time": "10:28:15.207~10:28:15.226",
+      "what": "逃逸脚本 [7/7] 在宿主持久化安装后按 5 秒一轮、最多 16 轮反复执行 chroot /host /usr/sbin/svc-watchdog LISTPROC host-svc 轮询等待后门上线，轮数随 cron 调度抖动变化，故以规则覆盖而非逐条枚举。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R3",
+          "direction": "src_to_dst",
+          "action": [
+            "exec"
+          ],
+          "source": {
+            "vertex": "process",
+            "match": "exact",
+            "value": "/usr/sbin/chroot"
+          },
+          "target": {
+            "vertex": "process",
+            "match": "exact",
+            "value": "/usr/sbin/svc-watchdog"
+          }
+        }
+      ],
+      "edges": []
+    },
+    {
+      "id": "A6",
+      "phase": "[A6] 宿主持久化后门首次上线回连 C2 通道",
+      "time": "10:29:01.500~10:29:02.000",
+      "what": "宿主 cron 定时服务读取新建的定时任务并触发执行，通过 flock 锁拉起 /usr/sbin/svc-watchdog 后门进程，后门加载预加载隐藏库并向攻击机 C2 服务端（8808 端口）发送首次上线心跳报文（label=host-svc）。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "f:9_Exposed_Container_Escape/host:/etc/cron.d/svc-watchdog",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/sbin/cron",
+          "effect": "success",
+          "edge_key": "FileToProcess:1436854:read",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/sbin/cron",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1438452:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/host:/usr/lib/libdbus-helper.so",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "effect": "success",
+          "edge_key": "FileToProcess:1438531:read",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/flock",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1438739:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/host:/usr/lib/libdbus-helper.so",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/flock",
+          "effect": "success",
+          "edge_key": "FileToProcess:1438765:read",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/bin/flock",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/sbin/svc-watchdog",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1438867:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/sbin/svc-watchdog",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:100.86.108.4:45670->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1438901:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/sbin/svc-watchdog",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:100.86.108.4:45670->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1439232:send",
+          "syscall": "sendto"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "phase": "[A7] 隐藏防御规避效果自检",
+      "time": "10:30:02.000~10:30:04.500",
+      "what": "攻击机通过 Docker API 部署 s9-check 容器执行防御规避有效性验证，检查全局预加载与定时任务配置，对比 ps 进程列表隐藏效果（计数为 0）与静态二进制视角。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:60970->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1568510:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:60980->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1596028:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/36ed990f3b47:/usr/bin/runc",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1714570:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/cat",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1717040:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/36ed990f3b47:/host/etc/ld.so.preload",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/cat",
+          "effect": "success",
+          "edge_key": "FileToProcess:1717315:read",
+          "syscall": "sendfile"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/36ed990f3b47:/host/etc/cron.d/svc-watchdog",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/cat",
+          "effect": "success",
+          "edge_key": "FileToProcess:1717872:read",
+          "syscall": "sendfile"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/36ed990f3b47:/usr/sbin/chroot",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1718116:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/grep",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1718890:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/36ed990f3b47:/usr/sbin/chroot",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/36ed990f3b47:/usr/bin/ps",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1718979:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "f:9_Exposed_Container_Escape/36ed990f3b47:/usr/lib/libdbus-helper.so",
+          "action": "read",
+          "dst": "p:9_Exposed_Container_Escape/36ed990f3b47:/usr/bin/ps",
+          "effect": "success",
+          "edge_key": "FileToProcess:1719115:read",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/36ed990f3b47:/usr/bin/wc",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1776985:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/36ed990f3b47:/bin/ls",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1821166:exec",
+          "syscall": "execve"
+        }
+      ]
+    },
+    {
+      "id": "A8",
+      "phase": "[A8] 部署常驻后门容器与建立第二信道",
+      "time": "10:31:04.000~10:31:07.000",
+      "what": "攻击机调用 Docker API 创建并启动第二层持久化容器 s9-backdoor（设置 RestartPolicy=always），容器挂载宿主后门程序常驻运行，并向攻击机 C2 建立独立通信管道（label=ctr-backdoor）。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:54018->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:2067695:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:54020->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:2095589:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/bin/runc",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2202697:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:34284->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:2204909:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:34284->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:2289802:send",
+          "syscall": "sendto"
+        }
+      ]
+    },
+    {
+      "id": "A9",
+      "phase": "[A9] C2 下发命令与主机及业务环境踩点",
+      "time": "10:35:02.000~10:38:37.000",
+      "what": "攻击机通过 8808 端口分别向宿主后门与容器后门下发 3 条侦察踩点指令（查看权限与系统标识、网络配置与监听服务、业务平台目录资产统计），后门执行后将输出流回传至攻击机。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/sbin/svc-watchdog",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:100.86.108.4:54888->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:2843258:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/sbin/svc-watchdog",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:100.86.108.4:54888->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:2844738:send",
+          "syscall": "sendto"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.86.108.4:54888->100.74.213.15:8808",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/sbin/svc-watchdog",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:2844742:recv",
+          "syscall": "recvfrom"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:<NA>",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2845276:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2845438:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/uname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2845785:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/hostname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:2845942:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/sbin/svc-watchdog",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:100.86.108.4:43732->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3008794:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/usr/sbin/svc-watchdog",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:100.86.108.4:43732->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3008881:send",
+          "syscall": "sendto"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.86.108.4:43732->100.74.213.15:8808",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/sbin/svc-watchdog",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3008885:recv",
+          "syscall": "recvfrom"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/sbin/ip",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3009310:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/grep",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3009329:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/ss",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3009933:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3009949:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:42330->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3266277:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:42330->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3266367:send",
+          "syscall": "sendto"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:172.17.0.2:42330->100.74.213.15:8808",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3266376:recv",
+          "syscall": "recvfrom"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/f8734eba3971:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3266729:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/f8734eba3971:/bin/ls",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3266806:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/bin/find",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3266959:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/bin/wc",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3266996:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/bin/du",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3267166:exec",
+          "syscall": "execve"
+        }
+      ]
+    },
+    {
+      "id": "A10",
+      "phase": "[A10] 批量打包与分批外传业务敏感数据",
+      "time": "10:38:38.000~10:40:18.000",
+      "what": "攻击机分四批调用 Docker API 启动外传容器（s9-exfil-orders, s9-exfil-customers, s9-exfil-invoices, s9-exfil-backup-logs），利用 tar 打包 /host/srv/order-platform 下 681 个业务敏感数据并通过 nc 流式外传至攻击机 8807 端口。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:57364->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3272322:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:57370->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3301504:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/133281583ea0:/usr/bin/runc",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/133281583ea0:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3409132:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/133281583ea0:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/133281583ea0:/bin/tar",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3411195:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/133281583ea0:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/133281583ea0:/usr/bin/nc",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3411325:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/133281583ea0:/usr/bin/nc",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.3:41721->100.74.213.15:8807",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3411517:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:50580->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3789516:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:50590->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3821399:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/d0b2b57e2fa1:/usr/bin/runc",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/d0b2b57e2fa1:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3927022:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/d0b2b57e2fa1:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/d0b2b57e2fa1:/bin/tar",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3928854:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/d0b2b57e2fa1:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/d0b2b57e2fa1:/usr/bin/nc",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3928904:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/d0b2b57e2fa1:/usr/bin/nc",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.3:41703->100.74.213.15:8807",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3930139:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:41802->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4231838:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:41816->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4262443:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/6abcbfbcb8fe:/usr/bin/runc",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/6abcbfbcb8fe:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4373825:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/6abcbfbcb8fe:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/6abcbfbcb8fe:/bin/tar",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4377784:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/6abcbfbcb8fe:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/6abcbfbcb8fe:/usr/bin/nc",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4378227:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/6abcbfbcb8fe:/usr/bin/nc",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.3:36243->100.74.213.15:8807",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:4379199:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:59414->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4672486:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:100.74.213.15:59420->100.86.108.4:2375",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/host:/usr/bin/dockerd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4704365:recv",
+          "syscall": "read"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/897619f2b055:/usr/bin/runc",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/897619f2b055:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4840826:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/897619f2b055:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/897619f2b055:/bin/tar",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4845010:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/897619f2b055:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Exposed_Container_Escape/897619f2b055:/usr/bin/nc",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4845055:exec",
+          "syscall": "execve"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/897619f2b055:/usr/bin/nc",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.3:35737->100.74.213.15:8807",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:4845342:connect",
+          "syscall": "connect"
+        }
+      ]
+    },
+    {
+      "id": "A11",
+      "phase": "[A11] 批量读取全量业务数据文件进行压缩打包（可能集合）",
+      "time": "10:38:39.000~10:40:18.000",
+      "what": "tar 进程遍历读取 /host/srv/order-platform/ 下 681 个业务数据文件（订单、客户、发票、备份与日志），进行归档流式传输。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R1",
+          "direction": "src_to_dst",
+          "action": [
+            "read",
+            "stat"
+          ],
+          "source": {
+            "vertex": "file",
+            "match": "path_prefix",
+            "value": "/host/srv/order-platform/"
+          },
+          "target": {
+            "vertex": "process",
+            "match": "exact",
+            "value": "/bin/tar"
+          }
+        },
+        {
+          "rule_id": "R2",
+          "direction": "src_to_dst",
+          "action": [
+            "send"
+          ],
+          "source": {
+            "vertex": "process",
+            "match": "exact",
+            "value": "/usr/bin/nc"
+          },
+          "target": {
+            "vertex": "network",
+            "match": "path_suffix",
+            "value": "100.74.213.15:8807"
+          }
+        }
+      ],
+      "edges": []
+    },
+    {
+      "id": "A12",
+      "phase": "[A12] 后门容器自愈持久化闭环验证",
+      "time": "10:41:05.000~10:41:05.753",
+      "what": "攻击机通过 C2 向后门容器下发 QUIT 指令使其退出，验证 Docker 引擎 restart=always 策略立即拉起新后门容器实例并重新发起 TCP 连接回连攻击机（POI 终局锚点）。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:56184->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:5188154:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:56184->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:5188241:send",
+          "syscall": "sendto"
+        },
+        {
+          "src": "n:9_Exposed_Container_Escape:172.17.0.2:56184->100.74.213.15:8808",
+          "action": "recv",
+          "dst": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:5188250:recv",
+          "syscall": "recvfrom"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "action": "connect",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:56186->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:5334548:connect",
+          "syscall": "connect"
+        },
+        {
+          "src": "p:9_Exposed_Container_Escape/f8734eba3971:/usr/sbin/svc-watchdog",
+          "action": "send",
+          "dst": "n:9_Exposed_Container_Escape:172.17.0.2:56186->100.74.213.15:8808",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:5345223:send",
+          "syscall": "sendto"
+        }
+      ]
+    }
+  ]
+}

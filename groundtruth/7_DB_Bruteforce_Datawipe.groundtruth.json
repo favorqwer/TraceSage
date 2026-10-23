@@ -1,0 +1,842 @@
+{
+  "scenario": "7_DB_Bruteforce_Datawipe",
+  "entry": {
+    "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35790->100.86.108.4:5432",
+    "action": "accept",
+    "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+    "effect": "success",
+    "edge_key": "NetworkToProcess:50137:accept",
+    "syscall": "accept",
+    "time": "21:51:18.606",
+    "why": "攻击在日志里最早的可归属动作：外部对 5432 端口（PostgreSQL）服务探测的第一条连接"
+  },
+  "poi": {
+    "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+    "action": "unlink",
+    "dst": "f:7_DB_BruteForce_DataWipe/host:/srv/bizapp/logs/bizapp-sync.log",
+    "effect": "success",
+    "edge_key": "ProcessToFile:1961450:unlink",
+    "syscall": "unlink",
+    "time": "22:00:58.583",
+    "why": "攻击最终破坏产物：覆写删除管线中的最后一个业务文件（业务同步日志）被彻底解链删除"
+  },
+  "counts": {
+    "actions": 7,
+    "must_entries": 71,
+    "rules": 2,
+    "steps_total": 73,
+    "edges_total_with_dupes": 71,
+    "edges_unique": 70,
+    "must_edges": 71
+  },
+  "attack_path": [
+    {
+      "id": "A1",
+      "phase": "[A1] 外部对 5432 端口服务探测与版本识别",
+      "time": "21:51:18.606~21:51:24.747",
+      "what": "外部攻击机（100.74.213.15）向受害机 5432 端口（PostgreSQL）发起 Nmap 轻量级服务探测，建立多条 TCP 探测连接获取服务横幅与协议指纹。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35790->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:50137:accept",
+          "syscall": "accept",
+          "edge_id": "A1.1"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35790->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "failure",
+          "edge_key": "NetworkToProcess:50221:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.2"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35790->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:64355:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.3"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35794->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:64613:accept",
+          "syscall": "accept",
+          "edge_id": "A1.4"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35794->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:64730:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.5"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35804->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:65019:accept",
+          "syscall": "accept",
+          "edge_id": "A1.6"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35804->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:65132:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.7"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "send",
+          "dst": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35804->100.86.108.4:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:65136:send",
+          "syscall": "sendto",
+          "edge_id": "A1.8"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35816->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:65469:accept",
+          "syscall": "accept",
+          "edge_id": "A1.9"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35816->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:65581:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.10"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "send",
+          "dst": "n:7_DB_BruteForce_DataWipe:100.74.213.15:35816->100.86.108.4:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:65585:send",
+          "syscall": "sendto",
+          "edge_id": "A1.11"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "phase": "[A2] 多轮并发 PostgreSQL 弱口令喷洒爆破（可能集合）",
+      "time": "21:51:30.180~22:00:42.829",
+      "what": "攻击机使用 Hydra 对受害机 PostgreSQL 服务发起 3 轮并发弱口令喷洒（包含 8 个数据库账号与多套口令字典，产生 489 次失败认证尝试），直至第三轮命中弱口令 postgres:P@ssw0rd。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R1",
+          "direction": "src_to_dst",
+          "action": [
+            "accept",
+            "recv",
+            "send"
+          ],
+          "source": {
+            "all_of": [
+              {
+                "any_of": [
+                  {
+                    "vertex": "network",
+                    "match": "path_prefix",
+                    "value": "100.74.213.15:"
+                  },
+                  {
+                    "vertex": "process",
+                    "match": "exact",
+                    "value": "/usr/lib/postgresql/14/bin/postgres"
+                  }
+                ]
+              },
+              {
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "in",
+                    "values": [
+                      "100.74.213.15:35790->100.86.108.4:5432",
+                      "100.74.213.15:35794->100.86.108.4:5432",
+                      "100.74.213.15:35804->100.86.108.4:5432",
+                      "100.74.213.15:35816->100.86.108.4:5432",
+                      "100.74.213.15:38182->100.86.108.4:5432",
+                      "100.74.213.15:38186->100.86.108.4:5432",
+                      "100.74.213.15:38190->100.86.108.4:5432",
+                      "100.74.213.15:38206->100.86.108.4:5432",
+                      "100.74.213.15:38218->100.86.108.4:5432",
+                      "100.74.213.15:38788->100.86.108.4:5432",
+                      "100.74.213.15:38804->100.86.108.4:5432",
+                      "100.74.213.15:38814->100.86.108.4:5432"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "target": {
+            "all_of": [
+              {
+                "any_of": [
+                  {
+                    "vertex": "network",
+                    "match": "path_prefix",
+                    "value": "100.74.213.15:"
+                  },
+                  {
+                    "vertex": "process",
+                    "match": "exact",
+                    "value": "/usr/lib/postgresql/14/bin/postgres"
+                  }
+                ]
+              },
+              {
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "in",
+                    "values": [
+                      "100.74.213.15:35790->100.86.108.4:5432",
+                      "100.74.213.15:35794->100.86.108.4:5432",
+                      "100.74.213.15:35804->100.86.108.4:5432",
+                      "100.74.213.15:35816->100.86.108.4:5432",
+                      "100.74.213.15:38182->100.86.108.4:5432",
+                      "100.74.213.15:38186->100.86.108.4:5432",
+                      "100.74.213.15:38190->100.86.108.4:5432",
+                      "100.74.213.15:38206->100.86.108.4:5432",
+                      "100.74.213.15:38218->100.86.108.4:5432",
+                      "100.74.213.15:38788->100.86.108.4:5432",
+                      "100.74.213.15:38804->100.86.108.4:5432",
+                      "100.74.213.15:38814->100.86.108.4:5432"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "phase": "[A3] 弱口令命中登录与业务环境信息枚举",
+      "time": "22:00:42.829~22:00:43.967",
+      "what": "攻击者使用命中的 postgres 超级用户凭据登录数据库，顺序执行多条元数据查询，枚举当前版本、数据库列表与体积、可登录角色、业务表清单（orders、payments、customers）及数据样例。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38182->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1900010:accept",
+          "syscall": "accept",
+          "edge_id": "A3.1"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38182->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1900123:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A3.2"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "send",
+          "dst": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38182->100.86.108.4:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1903256:send",
+          "syscall": "sendto",
+          "edge_id": "A3.3"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38186->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1903968:accept",
+          "syscall": "accept",
+          "edge_id": "A3.4"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38186->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1904090:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A3.5"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "send",
+          "dst": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38186->100.86.108.4:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1905465:send",
+          "syscall": "sendto",
+          "edge_id": "A3.6"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38190->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1905788:accept",
+          "syscall": "accept",
+          "edge_id": "A3.7"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38190->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1905901:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A3.8"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "send",
+          "dst": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38190->100.86.108.4:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1907391:send",
+          "syscall": "sendto",
+          "edge_id": "A3.9"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38206->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1907692:accept",
+          "syscall": "accept",
+          "edge_id": "A3.10"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38206->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1907810:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A3.11"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "send",
+          "dst": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38206->100.86.108.4:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1911802:send",
+          "syscall": "sendto",
+          "edge_id": "A3.12"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38218->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1912059:accept",
+          "syscall": "accept",
+          "edge_id": "A3.13"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38218->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1912168:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A3.14"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "send",
+          "dst": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38218->100.86.108.4:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1913454:send",
+          "syscall": "sendto",
+          "edge_id": "A3.15"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "phase": "[A4] 滥用数据库内置命令执行功能搜寻敏感备份文件",
+      "time": "22:00:49.064~22:00:49.412",
+      "what": "攻击者利用 PostgreSQL 超级用户权限执行 COPY FROM PROGRAM 机制派生系统 shell，在线执行 find 搜寻全盘敏感数据文件（.sql、.dump、.csv 等）并排序回显发现目标大本营 /srv/bizapp。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38788->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1921584:accept",
+          "syscall": "accept",
+          "edge_id": "A4.1"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38788->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1921712:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A4.2"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:<NA>",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1924312:exec",
+          "syscall": "execve",
+          "edge_id": "A4.3"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1924448:exec",
+          "syscall": "execve",
+          "edge_id": "A4.4"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/find",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1924745:exec",
+          "syscall": "execve",
+          "edge_id": "A4.5"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/sort",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1924810:exec",
+          "syscall": "execve",
+          "edge_id": "A4.6"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1924842:exec",
+          "syscall": "execve",
+          "edge_id": "A4.7"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/find",
+          "action": "write",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:pipe:[374249]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1925574:write",
+          "syscall": "write",
+          "edge_id": "A4.8"
+        },
+        {
+          "src": "f:7_DB_BruteForce_DataWipe/host:pipe:[374249]",
+          "action": "read",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/sort",
+          "effect": "success",
+          "edge_key": "FileToProcess:1925149:read",
+          "syscall": "read",
+          "edge_id": "A4.9"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/sort",
+          "action": "write",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:pipe:[374250]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1926176:write",
+          "syscall": "write",
+          "edge_id": "A4.10"
+        },
+        {
+          "src": "f:7_DB_BruteForce_DataWipe/host:pipe:[374250]",
+          "action": "read",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "FileToProcess:1925200:read",
+          "syscall": "read",
+          "edge_id": "A4.11"
+        },
+        {
+          "src": "f:7_DB_BruteForce_DataWipe/host:pipe:[372492]",
+          "action": "read",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "FileToProcess:1924331:read",
+          "syscall": "read",
+          "edge_id": "A4.12"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/bin/sh",
+          "action": "exit",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1926261:exit",
+          "syscall": "exit",
+          "edge_id": "A4.13"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "send",
+          "dst": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38788->100.86.108.4:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1927113:send",
+          "syscall": "sendto",
+          "edge_id": "A4.14"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "phase": "[A5] SQL 级破坏：级联清空删除核心业务表",
+      "time": "22:00:54.507~22:00:54.717",
+      "what": "攻击者通过 psql 客户端向 bizapp 业务库下发 DROP TABLE IF EXISTS payments, orders, customers CASCADE 破坏指令，导致物理存储文件被解除链接解链删除。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38804->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1935614:accept",
+          "syscall": "accept",
+          "edge_id": "A5.1"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38804->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1935756:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A5.2"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/var/lib/postgresql/14/main/base/16407/16475_fsm(/var/lib/postgresql/14/main/base/16407/16475_fsm)",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1936935:unlink",
+          "syscall": "unlink",
+          "edge_id": "A5.3"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/var/lib/postgresql/14/main/base/16407/16475_vm(/var/lib/postgresql/14/main/base/16407/16475_vm)",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1936941:unlink",
+          "syscall": "unlink",
+          "edge_id": "A5.4"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/var/lib/postgresql/14/main/base/16407/16482_fsm(/var/lib/postgresql/14/main/base/16407/16482_fsm)",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1937161:unlink",
+          "syscall": "unlink",
+          "edge_id": "A5.5"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/var/lib/postgresql/14/main/base/16407/16482_vm(/var/lib/postgresql/14/main/base/16407/16482_vm)",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1937167:unlink",
+          "syscall": "unlink",
+          "edge_id": "A5.6"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/var/lib/postgresql/14/main/base/16407/16489_fsm(/var/lib/postgresql/14/main/base/16407/16489_fsm)",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1937315:unlink",
+          "syscall": "unlink",
+          "edge_id": "A5.7"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/var/lib/postgresql/14/main/base/16407/16489_vm(/var/lib/postgresql/14/main/base/16407/16489_vm)",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1937321:unlink",
+          "syscall": "unlink",
+          "edge_id": "A5.8"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "send",
+          "dst": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38804->100.86.108.4:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1937377:send",
+          "syscall": "sendto",
+          "edge_id": "A5.9"
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "phase": "[A6] 破坏载荷在线投递与业务备份/导出/日志覆写删除",
+      "time": "22:00:54.801~22:00:58.583",
+      "what": "攻击者借 COPY TO PROGRAM 在线投递经过 Base64 编码的 wipe.sh 破坏脚本，在受害者机内存解码执行：遍历覆写并彻底删除 4 份全量数据库备份、3 份业务导出文件以及 2 份系统业务日志（共计 9 个目标物理文件），终局破坏锚点为同步日志 unlink。22:00:58.894 的 find 复核在 POI（最后一条 unlink，22:00:58.583）之后，属于 post-POI 验证，未计入本路径。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38814->100.86.108.4:5432",
+          "action": "accept",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1937878:accept",
+          "syscall": "accept",
+          "edge_id": "A6.1"
+        },
+        {
+          "src": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38814->100.86.108.4:5432",
+          "action": "recv",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1937990:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A6.2"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
+          "action": "send",
+          "dst": "n:7_DB_BruteForce_DataWipe:100.74.213.15:38814->100.86.108.4:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1937992:send",
+          "syscall": "sendto",
+          "edge_id": "A6.3"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1939332:exec",
+          "syscall": "execve",
+          "edge_id": "A6.4"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/bash",
+          "action": "write",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:pipe:[375464]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1939695:write",
+          "syscall": "write",
+          "edge_id": "A6.5"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/base64",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1939746:exec",
+          "syscall": "execve",
+          "edge_id": "A6.6"
+        },
+        {
+          "src": "f:7_DB_BruteForce_DataWipe/host:pipe:[375464]",
+          "action": "read",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/base64",
+          "effect": "success",
+          "edge_key": "FileToProcess:1940114:read",
+          "syscall": "read",
+          "edge_id": "A6.7"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/base64",
+          "action": "write",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:pipe:[375465]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1940125:write",
+          "syscall": "write",
+          "edge_id": "A6.8"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1939788:exec",
+          "syscall": "execve",
+          "edge_id": "A6.9"
+        },
+        {
+          "src": "f:7_DB_BruteForce_DataWipe/host:pipe:[375465]",
+          "action": "read",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "FileToProcess:1940111:read",
+          "syscall": "read",
+          "edge_id": "A6.10"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/stat",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1941495:exec",
+          "syscall": "execve",
+          "edge_id": "A6.11"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/dd",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1941710:exec",
+          "syscall": "execve",
+          "edge_id": "A6.12"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:1944371:exec",
+          "syscall": "execve",
+          "edge_id": "A6.13"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/srv/bizapp/backups/bizapp-20261010.sql",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1944458:unlink",
+          "syscall": "unlink",
+          "edge_id": "A6.14"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/srv/bizapp/backups/bizapp-20261011.sql",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1950165:unlink",
+          "syscall": "unlink",
+          "edge_id": "A6.15"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/srv/bizapp/backups/bizapp-20261012.sql",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1953847:unlink",
+          "syscall": "unlink",
+          "edge_id": "A6.16"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/srv/bizapp/backups/bizapp-20261013.sql",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1956699:unlink",
+          "syscall": "unlink",
+          "edge_id": "A6.17"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/srv/bizapp/export/customers_20261013.csv",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1957456:unlink",
+          "syscall": "unlink",
+          "edge_id": "A6.18"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/srv/bizapp/export/orders_20261013.csv",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1959772:unlink",
+          "syscall": "unlink",
+          "edge_id": "A6.19"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/srv/bizapp/export/payments_20261013.csv",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1960872:unlink",
+          "syscall": "unlink",
+          "edge_id": "A6.20"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/srv/bizapp/logs/bizapp-export.log",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1961271:unlink",
+          "syscall": "unlink",
+          "edge_id": "A6.21"
+        },
+        {
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/bin/rm",
+          "action": "unlink",
+          "dst": "f:7_DB_BruteForce_DataWipe/host:/srv/bizapp/logs/bizapp-sync.log",
+          "effect": "success",
+          "edge_key": "ProcessToFile:1961450:unlink",
+          "syscall": "unlink",
+          "edge_id": "A6.22"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "phase": "[A7] 破坏过程批量数据覆写（可能集合）",
+      "time": "22:00:54.958~22:00:58.558",
+      "what": "破坏脚本使用 /usr/bin/dd 以 1MB 随机数据大块覆写备份与导出文件（共计 1001 次大块物理覆写写入），抹除底层磁盘扇区数据。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R2",
+          "direction": "src_to_dst",
+          "action": [
+            "write"
+          ],
+          "source": {
+            "vertex": "process",
+            "match": "exact",
+            "value": "/usr/bin/dd"
+          },
+          "target": {
+            "vertex": "file",
+            "match": "path_prefix",
+            "value": "/srv/bizapp/"
+          }
+        }
+      ]
+    }
+  ]
+}

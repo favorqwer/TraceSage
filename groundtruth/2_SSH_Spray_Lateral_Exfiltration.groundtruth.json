@@ -1,0 +1,678 @@
+{
+  "scenario": "2_SSH_Spray_Lateral_Exfiltration",
+  "entry": {
+    "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:50188->100.86.108.4:22",
+    "action": "accept",
+    "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+    "effect": "success",
+    "edge_key": "NetworkToProcess:79505:accept",
+    "syscall": "accept",
+    "time": "19:36:58.278",
+    "why": "攻击在日志里最早的可归属动作：外部攻击机对 22 端口服务探测的第一条连接"
+  },
+  "poi": {
+    "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+    "action": "send",
+    "dst": "n:2_SSH_Spray_Lateral_Exfiltration:100.116.135.31:45794->100.86.108.4:22",
+    "effect": "success",
+    "edge_key": "ProcessToNetwork:5289022:send",
+    "syscall": "write",
+    "time": "19:50:57.956",
+    "why": "攻击最终破坏产物：受害者机上的 sshd 将压缩后的核心业务数据流（326MB）发往内网横向落脚点的最后一段外传数据流"
+  },
+  "counts": {
+    "actions": 9,
+    "must_entries": 52,
+    "rules": 2,
+    "steps_total": 54,
+    "edges_total_with_dupes": 52,
+    "edges_unique": 52,
+    "must_edges": 52
+  },
+  "attack_path": [
+    {
+      "id": "A1",
+      "phase": "[A1] 外部对 22 端口服务探测与 SSH 版本横幅识别",
+      "time": "19:36:58.278~19:36:59.711",
+      "what": "外部攻击机（100.74.213.15）向受害机 22 端口发起 Nmap 探测扫描，先后建立 3 条探测连接识别 SSH 端口开放状态并获取 OpenSSH 8.9p1 版本横幅。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:50188->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:79505:accept",
+          "syscall": "accept",
+          "edge_id": "A1.1"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "action": "send",
+          "dst": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:50188->100.86.108.4:22",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:80659:send",
+          "syscall": "write",
+          "edge_id": "A1.2"
+        },
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:50188->100.86.108.4:22",
+          "action": "recv",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:80663:recv",
+          "syscall": "read",
+          "edge_id": "A1.3"
+        },
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:50198->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:83834:accept",
+          "syscall": "accept",
+          "edge_id": "A1.4"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "action": "send",
+          "dst": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:50198->100.86.108.4:22",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:84997:send",
+          "syscall": "write",
+          "edge_id": "A1.5"
+        },
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:50198->100.86.108.4:22",
+          "action": "recv",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:85010:recv",
+          "syscall": "read",
+          "edge_id": "A1.6"
+        },
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:50214->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:88233:accept",
+          "syscall": "accept",
+          "edge_id": "A1.7"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "action": "send",
+          "dst": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:50214->100.86.108.4:22",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:89400:send",
+          "syscall": "write",
+          "edge_id": "A1.8"
+        },
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:50214->100.86.108.4:22",
+          "action": "recv",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:89404:recv",
+          "syscall": "read",
+          "edge_id": "A1.9"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "phase": "[A2] 多轮低速 SSH 弱口令喷洒爆破（可能集合）",
+      "time": "19:37:00.625~19:50:45.443",
+      "what": "外部攻击机使用 Hydra 对受害机 SSH 服务进行 3 轮并发弱口令喷洒（包含 12 个运维账号与多套口令字典，产生 588 次失败认证），直至第三轮命中弱口令 ops:Ops@2024。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R1",
+          "direction": "src_to_dst",
+          "action": [
+            "accept",
+            "recv",
+            "send"
+          ],
+          "source": {
+            "all_of": [
+              {
+                "any_of": [
+                  {
+                    "vertex": "network",
+                    "match": "path_prefix",
+                    "value": "100.74.213.15:"
+                  },
+                  {
+                    "vertex": "process",
+                    "match": "exact",
+                    "value": "/usr/sbin/sshd"
+                  }
+                ]
+              },
+              {
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "in",
+                    "values": [
+                      "100.74.213.15:50188->100.86.108.4:22",
+                      "100.74.213.15:50198->100.86.108.4:22",
+                      "100.74.213.15:50214->100.86.108.4:22",
+                      "100.74.213.15:52516->100.86.108.4:22",
+                      "100.74.213.15:52514->100.86.108.4:22"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "target": {
+            "all_of": [
+              {
+                "any_of": [
+                  {
+                    "vertex": "network",
+                    "match": "path_prefix",
+                    "value": "100.74.213.15:"
+                  },
+                  {
+                    "vertex": "process",
+                    "match": "exact",
+                    "value": "/usr/sbin/sshd"
+                  }
+                ]
+              },
+              {
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "in",
+                    "values": [
+                      "100.74.213.15:50188->100.86.108.4:22",
+                      "100.74.213.15:50198->100.86.108.4:22",
+                      "100.74.213.15:50214->100.86.108.4:22",
+                      "100.74.213.15:52516->100.86.108.4:22",
+                      "100.74.213.15:52514->100.86.108.4:22"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "edges": []
+    },
+    {
+      "id": "A3",
+      "phase": "[A3] 弱口令命中登录与交互会话建立",
+      "time": "19:50:50.044~19:50:51.059",
+      "what": "攻击者先用命中的 ops:Ops@2024 建立验证会话（52514，bash PID 32372，执行 echo/id/hostname/date），sshd 完成 PAM 认证并派生用户会话；再用第二个 SSH 会话（52516，bash PID 32414）以 bash -s 投递 stage_b_victim.sh；脚本经 SSH 标准输入管道 pipe:[224880] 由 sshd 写入、bash 读取后执行。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:52514->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4109992:accept",
+          "syscall": "accept",
+          "edge_id": "A3.1"
+        },
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.74.213.15:52516->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4461692:accept",
+          "syscall": "accept",
+          "edge_id": "A3.2"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4632762:exec",
+          "syscall": "execve",
+          "edge_id": "A3.3"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4633122:exec",
+          "syscall": "execve",
+          "edge_id": "A3.4"
+        },
+        {
+          "src": "f:2_SSH_Spray_Lateral_Exfiltration/host:pipe:[224880]",
+          "action": "read",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "FileToProcess:4633378:read",
+          "syscall": "read",
+          "edge_id": "A3.5"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "action": "write",
+          "dst": "f:2_SSH_Spray_Lateral_Exfiltration/host:pipe:[224880]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4633565:write",
+          "syscall": "write",
+          "edge_id": "A3.6"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "phase": "[A4] 本地主机环境与业务敏感数据探测枚举",
+      "time": "19:50:51.059~19:50:51.082",
+      "what": "攻击者在 bash 会话中先后执行 date、id、hostname、uname、ip、ss 探测主机基本信息、监听端口与网络地址，并执行 du 与 find 侦察业务数据目录 /srv/business。 会话 shell 为每条子命令派生子进程执行。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/date",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4634625:exec",
+          "syscall": "execve",
+          "edge_id": "A4.1"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4634893:exec",
+          "syscall": "execve",
+          "edge_id": "A4.2"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/hostname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4635379:exec",
+          "syscall": "execve",
+          "edge_id": "A4.3"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/uname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4635613:exec",
+          "syscall": "execve",
+          "edge_id": "A4.4"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/ip",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4635866:exec",
+          "syscall": "execve",
+          "edge_id": "A4.5"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/ss",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4636911:exec",
+          "syscall": "execve",
+          "edge_id": "A4.6"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/du",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4641463:exec",
+          "syscall": "execve",
+          "edge_id": "A4.7"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/find",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4642273:exec",
+          "syscall": "execve",
+          "edge_id": "A4.8"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "phase": "[A5] 应用配置窃取与数据库凭据可用性验证",
+      "time": "19:50:51.083~19:50:51.101",
+      "what": "攻击者读取业务应用配置文件 /opt/bizapp/config.ini 窃取数据库连接凭据（bizuser / Biz@2024），随后调用 psql 本地连接 PostgreSQL 数据库并成功查询业务表 orders_small 验证凭据有效性。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/cat",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4643201:exec",
+          "syscall": "execve",
+          "edge_id": "A5.1"
+        },
+        {
+          "src": "f:2_SSH_Spray_Lateral_Exfiltration/host:/opt/bizapp/config.ini",
+          "action": "read",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/cat",
+          "effect": "success",
+          "edge_key": "FileToProcess:4643291:read",
+          "syscall": "read",
+          "edge_id": "A5.2"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/psql",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4643940:exec",
+          "syscall": "execve",
+          "edge_id": "A5.3"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/psql",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/lib/postgresql/14/bin/psql",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4646127:exec",
+          "syscall": "execve",
+          "edge_id": "A5.4"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/lib/postgresql/14/bin/psql",
+          "action": "connect",
+          "dst": "n:2_SSH_Spray_Lateral_Exfiltration:127.0.0.1:36718->127.0.0.1:5432",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:4647152:connect",
+          "syscall": "connect",
+          "edge_id": "A5.5"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/lib/postgresql/14/bin/psql",
+          "action": "send",
+          "dst": "n:2_SSH_Spray_Lateral_Exfiltration:127.0.0.1:36718->127.0.0.1:5432",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:4647267:send",
+          "syscall": "sendto",
+          "edge_id": "A5.6"
+        },
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:127.0.0.1:36718->127.0.0.1:5432",
+          "action": "recv",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/lib/postgresql/14/bin/psql",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4647375:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A5.7"
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "phase": "[A6] 运维密钥收集与 Sudo 提权读取 Shadow",
+      "time": "19:50:51.119~19:50:51.162",
+      "what": "攻击者探测运维密钥目录 /home/ops/.ssh/ 并使用 sed 读取私钥文件 id_opspair；随后利用 ops 用户的 sudo 权限通过 head 提权读取系统最高机密口令哈希文件 /etc/shadow。 sudo 以子进程执行 head 完成读取。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/ls",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4648582:exec",
+          "syscall": "execve",
+          "edge_id": "A6.1"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/sed",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4649109:exec",
+          "syscall": "execve",
+          "edge_id": "A6.2"
+        },
+        {
+          "src": "f:2_SSH_Spray_Lateral_Exfiltration/host:/home/ops/.ssh/id_opspair",
+          "action": "read",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/sed",
+          "effect": "success",
+          "edge_key": "FileToProcess:4649281:read",
+          "syscall": "read",
+          "edge_id": "A6.3"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/sudo",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4649823:exec",
+          "syscall": "execve",
+          "edge_id": "A6.4"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/sudo",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4653320:exec",
+          "syscall": "execve",
+          "edge_id": "A6.5"
+        },
+        {
+          "src": "f:2_SSH_Spray_Lateral_Exfiltration/host:/etc/shadow",
+          "action": "read",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "FileToProcess:4653658:read",
+          "syscall": "read",
+          "edge_id": "A6.6"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "phase": "[A7] 经 SSH 密钥互信横向移动至内网机器",
+      "time": "19:50:51.165~19:50:51.464",
+      "what": "攻击者利用窃取到的私钥 id_opspair 发起 SSH 连接（100.86.108.4 -> 100.116.135.31:22），成功横向移动登录至内网机器并在其上派发下一步执行载荷。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/ssh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4655699:exec",
+          "syscall": "execve",
+          "edge_id": "A7.1"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/ssh",
+          "action": "connect",
+          "dst": "n:2_SSH_Spray_Lateral_Exfiltration:100.86.108.4:51698->100.116.135.31:22",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:4656699:connect",
+          "syscall": "connect",
+          "edge_id": "A7.2"
+        },
+        {
+          "src": "f:2_SSH_Spray_Lateral_Exfiltration/host:/home/ops/.ssh/id_opspair",
+          "action": "read",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/ssh",
+          "effect": "success",
+          "edge_key": "FileToProcess:4656794:read",
+          "syscall": "read",
+          "edge_id": "A7.3"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/ssh",
+          "action": "send",
+          "dst": "n:2_SSH_Spray_Lateral_Exfiltration:100.86.108.4:51698->100.116.135.31:22",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:4656830:send",
+          "syscall": "write",
+          "edge_id": "A7.4"
+        },
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.86.108.4:51698->100.116.135.31:22",
+          "action": "recv",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/ssh",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4656842:recv",
+          "syscall": "read",
+          "edge_id": "A7.5"
+        }
+      ]
+    },
+    {
+      "id": "A8",
+      "phase": "[A8] 核心业务数据流式打包与横向渗漏外传",
+      "time": "19:50:51.464~19:50:57.956",
+      "what": "内网受控机器用窃取的 ops 私钥回连受害靶机，sshd 读取 /home/ops/.ssh/authorized_keys 完成密钥认证；随后触发 tar 与 gzip 对 /srv/business 下 326MB 核心业务数据文件全量打包压缩，tar 将数据写入 pipe:[223938]、gzip 读取并压缩后写入 pipe:[224939]、sshd 从该管道读出并持续向内网机器流式外传，完成最终数据窃取破坏。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:2_SSH_Spray_Lateral_Exfiltration:100.116.135.31:45794->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4660227:accept",
+          "syscall": "accept",
+          "edge_id": "A8.1"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4744258:exec",
+          "syscall": "execve",
+          "edge_id": "A8.2"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/tar",
+          "action": "clone",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4745278:clone",
+          "syscall": "clone",
+          "edge_id": "A8.3"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/tar",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4745395:exec",
+          "syscall": "execve",
+          "edge_id": "A8.4"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/tar",
+          "action": "write",
+          "dst": "f:2_SSH_Spray_Lateral_Exfiltration/host:pipe:[223938]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4745759:write",
+          "syscall": "write",
+          "edge_id": "A8.5"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/bin/sh",
+          "action": "clone",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4745938:clone",
+          "syscall": "clone",
+          "edge_id": "A8.6"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/gzip",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4745998:exec",
+          "syscall": "execve",
+          "edge_id": "A8.7"
+        },
+        {
+          "src": "f:2_SSH_Spray_Lateral_Exfiltration/host:pipe:[223938]",
+          "action": "read",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/gzip",
+          "effect": "success",
+          "edge_key": "FileToProcess:4746483:read",
+          "syscall": "read",
+          "edge_id": "A8.8"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/bin/gzip",
+          "action": "write",
+          "dst": "f:2_SSH_Spray_Lateral_Exfiltration/host:pipe:[224939]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4761653:write",
+          "syscall": "write",
+          "edge_id": "A8.9"
+        },
+        {
+          "src": "f:2_SSH_Spray_Lateral_Exfiltration/host:pipe:[224939]",
+          "action": "read",
+          "dst": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "FileToProcess:4761672:read",
+          "syscall": "read",
+          "edge_id": "A8.10"
+        },
+        {
+          "src": "p:2_SSH_Spray_Lateral_Exfiltration/host:/usr/sbin/sshd",
+          "action": "send",
+          "dst": "n:2_SSH_Spray_Lateral_Exfiltration:100.116.135.31:45794->100.86.108.4:22",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:5289022:send",
+          "syscall": "write",
+          "edge_id": "A8.11"
+        }
+      ]
+    },
+    {
+      "id": "A9",
+      "phase": "[A9] 批量读取全量业务数据文件进行压缩打包（可能集合）",
+      "time": "19:50:51.658~19:50:57.953",
+      "what": "tar 进程遍历读取 /srv/business 下 202 个业务数据文件（含 customers, orders, finance, exports 等目录下 33,470 条读操作），管道传输至 gzip 进行流式压缩打包。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R2",
+          "direction": "src_to_dst",
+          "action": [
+            "read",
+            "stat"
+          ],
+          "source": {
+            "vertex": "file",
+            "match": "path_prefix",
+            "value": "/srv/business/"
+          },
+          "target": {
+            "vertex": "process",
+            "match": "exact",
+            "value": "/usr/bin/tar"
+          }
+        }
+      ],
+      "edges": []
+    }
+  ]
+}

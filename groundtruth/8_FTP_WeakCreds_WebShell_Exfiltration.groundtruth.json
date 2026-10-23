@@ -1,0 +1,832 @@
+{
+  "scenario": "8_FTP_WeakCreds_WebShell_Exfiltration",
+  "entry": {
+    "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:35976->100.86.108.4:21",
+    "action": "accept",
+    "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+    "effect": "success",
+    "edge_key": "NetworkToProcess:59393:accept",
+    "syscall": "accept",
+    "time": "10:41:55.343",
+    "why": "攻击在日志里最早的可归属动作：外部攻击机对 21 端口 FTP 服务发起慢速口令喷洒的第一条入网连接"
+  },
+  "poi": {
+    "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/curl",
+    "action": "send",
+    "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:48182->100.74.213.15:8888",
+    "effect": "success",
+    "edge_key": "ProcessToNetwork:12877421:send",
+    "syscall": "sendto",
+    "time": "11:35:19.791",
+    "why": "攻击最终破坏产物：受害者机上的 curl 将最后一块业务数据（records-2025-12.csv，26.3MB）发送至外部攻击机 8888 外传接收端"
+  },
+  "counts": {
+    "actions": 12,
+    "must_entries": 61,
+    "rules": 2,
+    "steps_total": 63,
+    "edges_total_with_dupes": 61,
+    "edges_unique": 61
+  },
+  "attack_path": [
+    {
+      "id": "A1",
+      "phase": "[A1] 外部 FTP 服务探测与横幅识别（慢速喷洒初始连接）",
+      "time": "10:41:55.343~10:41:58.731",
+      "what": "外部攻击机（100.74.213.15）向受害者机 21 端口发起慢速口令喷洒探测，首条连接成功握手并获取 vsFTPd 3.0.5 服务横幅，初次认证尝试被拒。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:35976->100.86.108.4:21",
+          "action": "accept",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:59393:accept",
+          "syscall": "accept",
+          "edge_id": "A1.1"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:35976->100.86.108.4:21",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:59580:send",
+          "syscall": "write",
+          "edge_id": "A1.2"
+        },
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:35976->100.86.108.4:21",
+          "action": "recv",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:59592:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.3"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "phase": "[A2] 外部持续慢速 FTP 弱口令字典喷洒尝试",
+      "time": "10:41:58.731~11:11:45.351",
+      "what": "攻击机利用 Hydra 向受害者机 21 端口持续进行三轮共 300 次慢速口令尝试（每次间隔约 5 秒），产生大量 FTP 认证交互数据包。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R1",
+          "direction": "src_to_dst",
+          "action": [
+            "accept",
+            "recv",
+            "send"
+          ],
+          "source": {
+            "all_of": [
+              {
+                "any_of": [
+                  {
+                    "vertex": "network",
+                    "match": "path_prefix",
+                    "value": "100.74.213.15:"
+                  },
+                  {
+                    "vertex": "process",
+                    "match": "exact",
+                    "value": "/usr/sbin/vsftpd"
+                  }
+                ]
+              },
+              {
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "in",
+                    "values": [
+                      "100.74.213.15:35976->100.86.108.4:21",
+                      "100.74.213.15:40230->100.86.108.4:21",
+                      "100.74.213.15:40234->100.86.108.4:21",
+                      "100.74.213.15:58874->100.86.108.4:30055"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "target": {
+            "all_of": [
+              {
+                "any_of": [
+                  {
+                    "vertex": "network",
+                    "match": "path_prefix",
+                    "value": "100.74.213.15:"
+                  },
+                  {
+                    "vertex": "process",
+                    "match": "exact",
+                    "value": "/usr/sbin/vsftpd"
+                  }
+                ]
+              },
+              {
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "in",
+                    "values": [
+                      "100.74.213.15:35976->100.86.108.4:21",
+                      "100.74.213.15:40230->100.86.108.4:21",
+                      "100.74.213.15:40234->100.86.108.4:21",
+                      "100.74.213.15:58874->100.86.108.4:30055"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "phase": "[A3] 第 300 次慢速喷洒命中 FTP 弱口令与认证成功",
+      "time": "11:11:45.351~11:11:48.542",
+      "what": "外部攻击机在第 3 轮喷洒的第 300 次尝试中成功命中 FTP 账号弱口令（fileuser / Winter@2024），完成服务身份鉴权。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:40230->100.86.108.4:21",
+          "action": "accept",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3765597:accept",
+          "syscall": "accept",
+          "edge_id": "A3.1"
+        },
+        {
+          "src": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/etc/passwd",
+          "action": "read",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "effect": "success",
+          "edge_key": "FileToProcess:3769960:read",
+          "syscall": "read",
+          "edge_id": "A3.2"
+        },
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:40230->100.86.108.4:21",
+          "action": "recv",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3770017:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A3.3"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:40230->100.86.108.4:21",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3773301:send",
+          "syscall": "write",
+          "edge_id": "A3.4"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "phase": "[A4] 经由 FTP 会话上传 PHP WebShell 木马（cache.php）",
+      "time": "11:11:48.699~11:11:49.005",
+      "what": "攻击者利用已鉴权的 FTP 账号上传包含任意命令执行功能的 PHP WebShell 木马（cache.php），木马落盘于站点公开上传目录。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:40234->100.86.108.4:21",
+          "action": "accept",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3773815:accept",
+          "syscall": "accept",
+          "edge_id": "A4.1"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "action": "bind",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:::ffff:100.86.108.4:30055",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3777010:bind",
+          "syscall": "bind",
+          "edge_id": "A4.2"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "action": "listen",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:::ffff:100.86.108.4:30055",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3777012:listen",
+          "syscall": "listen",
+          "edge_id": "A4.3"
+        },
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:40234->100.86.108.4:21",
+          "action": "recv",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3777164:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A4.4"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "action": "create",
+          "dst": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/srv/www/s8-site/uploads/.(/srv/www/s8-site/uploads)/cache.php",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3777271:create",
+          "syscall": "open",
+          "edge_id": "A4.5"
+        },
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:58874->100.86.108.4:30055",
+          "action": "accept",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3777319:accept",
+          "syscall": "accept",
+          "edge_id": "A4.6"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "action": "write",
+          "dst": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/srv/www/s8-site/uploads/.(/srv/www/s8-site/uploads)/cache.php",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3777417:write",
+          "syscall": "write",
+          "edge_id": "A4.7"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/vsftpd",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:40234->100.86.108.4:21",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3777886:send",
+          "syscall": "write",
+          "edge_id": "A4.8"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "phase": "[A5] 外部 HTTP 请求触发 WebShell 权限验证（cmd=id）",
+      "time": "11:11:49.055~11:11:49.060",
+      "what": "攻击者向 8080 端口发送 HTTP GET 请求调用 cache.php 执行 id 命令，由 nginx 转发至 php-fpm 解释执行并返回 www-data 权限回显。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:46628->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3778367:accept",
+          "syscall": "accept",
+          "edge_id": "A5.1"
+        },
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:46628->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3778373:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A5.2"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/nginx",
+          "action": "write",
+          "dst": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/run/php/php8.1-fpm.sock",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3778402:write",
+          "syscall": "write",
+          "edge_id": "A5.3"
+        },
+        {
+          "src": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/run/php/php8.1-fpm.sock",
+          "action": "read",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/php-fpm8.1",
+          "effect": "success",
+          "edge_key": "FileToProcess:3778425:read",
+          "syscall": "read",
+          "edge_id": "A5.4"
+        },
+        {
+          "src": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/srv/www/s8-site/uploads/cache.php",
+          "action": "read",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/php-fpm8.1",
+          "effect": "success",
+          "edge_key": "FileToProcess:3778485:read",
+          "syscall": "read",
+          "edge_id": "A5.5"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:<NA>",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3778751:exec",
+          "syscall": "execve",
+          "edge_id": "A5.6"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3778881:exec",
+          "syscall": "execve",
+          "edge_id": "A5.7"
+        },
+        {
+          "src": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/etc/passwd",
+          "action": "read",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "FileToProcess:3779059:read",
+          "syscall": "read",
+          "edge_id": "A5.8"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/sh",
+          "action": "exit",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/php-fpm8.1",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3779134:exit",
+          "syscall": "exit",
+          "edge_id": "A5.9"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/php-fpm8.1",
+          "action": "write",
+          "dst": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/run/php/php8.1-fpm.sock",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3779153:write",
+          "syscall": "write",
+          "edge_id": "A5.10"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/nginx",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:46628->100.86.108.4:8080",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3779170:send",
+          "syscall": "write",
+          "edge_id": "A5.11"
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "phase": "[A6] 外部 HTTP 请求触发反弹 Bash 会话",
+      "time": "11:11:49.140~11:11:49.160",
+      "what": "攻击者向 8080 端口发送 HTTP 请求调用 cache.php 派生 setsid 后台反弹会话，建立由受害机主动连向攻击机 4444 端口的交互式反向命令行会话。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:46636->100.86.108.4:8080",
+          "action": "accept",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3779647:accept",
+          "syscall": "accept",
+          "edge_id": "A6.1"
+        },
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.74.213.15:46636->100.86.108.4:8080",
+          "action": "recv",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3779654:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A6.2"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/setsid",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3780180:exec",
+          "syscall": "execve",
+          "edge_id": "A6.3"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/setsid",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3780336:exec",
+          "syscall": "execve",
+          "edge_id": "A6.4"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "connect",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:52526->100.74.213.15:4444",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3780558:connect",
+          "syscall": "connect",
+          "edge_id": "A6.5"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3780818:exec",
+          "syscall": "execve",
+          "edge_id": "A6.6"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:52526->100.74.213.15:4444",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3781109:send",
+          "syscall": "write",
+          "edge_id": "A6.7"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "phase": "[A7] 反弹会话内部环境探索与目录结构列举",
+      "time": "11:11:49.209~11:11:53.412",
+      "what": "攻击者在反弹会话中先后执行 id、hostname 与 ls 命令，探查当前运行身份、主机名及站点公开目录结构并回显至反弹终端。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3782098:exec",
+          "syscall": "execve",
+          "edge_id": "A7.1"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/id",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:52526->100.74.213.15:4444",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3782330:send",
+          "syscall": "write",
+          "edge_id": "A7.2"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/hostname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3786584:exec",
+          "syscall": "execve",
+          "edge_id": "A7.3"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/hostname",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:52526->100.74.213.15:4444",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3786664:send",
+          "syscall": "write",
+          "edge_id": "A7.4"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/ls",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3790814:exec",
+          "syscall": "execve",
+          "edge_id": "A7.5"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/ls",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:52526->100.74.213.15:4444",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3791189:send",
+          "syscall": "write",
+          "edge_id": "A7.6"
+        }
+      ]
+    },
+    {
+      "id": "A8",
+      "phase": "[A8] 站点配置读取凭据窃取与业务数据库验证",
+      "time": "11:11:55.459~11:11:57.513",
+      "what": "攻击者执行 cat 读取站点配置文件 db.ini 窃取数据库账号密码，随后执行 mysql 客户端连接本地 3306 端口验证订单表数据行数（5000条）。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/cat",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3795106:exec",
+          "syscall": "execve",
+          "edge_id": "A8.1"
+        },
+        {
+          "src": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/srv/www/s8-site/config/db.ini",
+          "action": "read",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/cat",
+          "effect": "success",
+          "edge_key": "FileToProcess:3795211:read",
+          "syscall": "read",
+          "edge_id": "A8.2"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/cat",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:52526->100.74.213.15:4444",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3795215:send",
+          "syscall": "write",
+          "edge_id": "A8.3"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/mysql",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3799118:exec",
+          "syscall": "execve",
+          "edge_id": "A8.4"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/mysql",
+          "action": "connect",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:127.0.0.1:54014->127.0.0.1:3306",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:3799838:connect",
+          "syscall": "connect",
+          "edge_id": "A8.5"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/mysql",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:127.0.0.1:54014->127.0.0.1:3306",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3799992:send",
+          "syscall": "sendto",
+          "edge_id": "A8.6"
+        },
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:127.0.0.1:54014->127.0.0.1:3306",
+          "action": "recv",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/mysql",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3800034:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A8.7"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/mysql",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:52526->100.74.213.15:4444",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3800056:send",
+          "syscall": "write",
+          "edge_id": "A8.8"
+        }
+      ]
+    },
+    {
+      "id": "A9",
+      "phase": "[A9] 待外传业务数据目录与容量摸排",
+      "time": "11:11:59.552~11:12:01.601",
+      "what": "攻击者执行 `ls -l /srv/business/s8-records | head -6` 与 `du -sh`，统计 /srv/business/s8-records 数据导出目录总大小（905MB）并回显到会话。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3804188:exec",
+          "syscall": "execve",
+          "edge_id": "A9.1"
+        },
+        {
+          "src": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:pipe:[204806]",
+          "action": "read",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/head",
+          "effect": "success",
+          "edge_key": "FileToProcess:3804468:read",
+          "syscall": "read",
+          "edge_id": "A9.2"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/ls",
+          "action": "write",
+          "dst": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:pipe:[204806]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:3804707:write",
+          "syscall": "write",
+          "edge_id": "A9.3"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/head",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:52526->100.74.213.15:4444",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3804724:send",
+          "syscall": "write",
+          "edge_id": "A9.4"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/du",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3808920:exec",
+          "syscall": "execve",
+          "edge_id": "A9.5"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/du",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:52526->100.74.213.15:4444",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3809096:send",
+          "syscall": "write",
+          "edge_id": "A9.6"
+        }
+      ]
+    },
+    {
+      "id": "A10",
+      "phase": "[A10] 低慢速分块外传首块数据（records-2023-01.csv）",
+      "time": "11:12:03.646~11:12:13.891",
+      "what": "攻击者执行 curl 将第一块业务数据文件（records-2023-01.csv，26.3MB）以 HTTP POST 流式上传至外部攻击机 8888 端口接收端。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:3814336:exec",
+          "syscall": "execve",
+          "edge_id": "A10.1"
+        },
+        {
+          "src": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/srv/business/s8-records/records-2023-01.csv",
+          "action": "read",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "FileToProcess:3815116:read",
+          "syscall": "read",
+          "edge_id": "A10.2"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:48180->100.74.213.15:8888",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:3828862:connect",
+          "syscall": "connect",
+          "edge_id": "A10.3"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:48180->100.74.213.15:8888",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3829078:send",
+          "syscall": "sendto",
+          "edge_id": "A10.4"
+        },
+        {
+          "src": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:48180->100.74.213.15:8888",
+          "action": "recv",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4023145:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A10.5"
+        }
+      ]
+    },
+    {
+      "id": "A11",
+      "phase": "[A11] 低慢速批量数据外传（36 块大文件并发/流式读写）",
+      "time": "11:12:13.891~11:35:10.611",
+      "what": "受害者机上的 curl 在会话控制下按 27~35 秒间隔逐一将 36 块业务 CSV 文件读取并通过 HTTP 外传至攻击机 8888 端口接收端。",
+      "collection": "possible",
+      "rules": [
+        {
+          "rule_id": "R2",
+          "direction": "src_to_dst",
+          "action": [
+            "read",
+            "send",
+            "connect"
+          ],
+          "source": {
+            "all_of": [
+              {
+                "any_of": [
+                  {
+                    "vertex": "file",
+                    "match": "path_prefix",
+                    "value": "/srv/business/s8-records/"
+                  },
+                  {
+                    "vertex": "process",
+                    "match": "exact",
+                    "value": "/usr/bin/curl"
+                  }
+                ]
+              },
+              {
+                "none_of": [
+                  {
+                    "vertex": "file",
+                    "match": "in",
+                    "values": [
+                      "/srv/business/s8-records/records-2023-01.csv",
+                      "/srv/business/s8-records/records-2025-12.csv"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "target": {
+            "all_of": [
+              {
+                "any_of": [
+                  {
+                    "vertex": "process",
+                    "match": "exact",
+                    "value": "/usr/bin/curl"
+                  },
+                  {
+                    "vertex": "network",
+                    "match": "path_suffix",
+                    "value": "100.74.213.15:8888"
+                  }
+                ]
+              },
+              {
+                "none_of": [
+                  {
+                    "vertex": "network",
+                    "match": "in",
+                    "values": [
+                      "100.86.108.4:48180->100.74.213.15:8888",
+                      "100.86.108.4:48182->100.74.213.15:8888"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "A12",
+      "phase": "[A12] 低慢速分块外传末块数据落地与攻击终局（records-2025-12.csv）",
+      "time": "11:35:10.611~11:35:19.791",
+      "what": "攻击者执行 curl 发送最后一块业务导出文件（records-2025-12.csv），完成全部 36 块共 905MB 核心业务数据的低慢速分块渗漏。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "f:8_FTP_WeakCreds_WebShell_Exfiltration/host:/srv/business/s8-records/records-2025-12.csv",
+          "action": "read",
+          "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "FileToProcess:12682668:read",
+          "syscall": "read",
+          "edge_id": "A12.1"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:48182->100.74.213.15:8888",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:12695820:connect",
+          "syscall": "connect",
+          "edge_id": "A12.2"
+        },
+        {
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:8_FTP_WeakCreds_WebShell_Exfiltration:100.86.108.4:48182->100.74.213.15:8888",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:12877421:send",
+          "syscall": "sendto",
+          "edge_id": "A12.3"
+        }
+      ]
+    }
+  ]
+}

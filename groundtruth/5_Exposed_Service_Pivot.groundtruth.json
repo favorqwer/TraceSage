@@ -1,0 +1,1591 @@
+{
+  "scenario": "5_Exposed_Service_Pivot",
+  "entry": {
+    "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50574->100.86.108.4:6379",
+    "action": "accept",
+    "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+    "effect": "success",
+    "edge_key": "NetworkToProcess:71432:accept",
+    "syscall": "accept",
+    "time": "23:41:01.059",
+    "why": "攻击在日志里最早的可归属动作：外部攻击机对 6379 暴露缓存服务发起的第一条探测连接（PING/PONG）"
+  },
+  "poi": {
+    "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+    "action": "send",
+    "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:47058->100.86.108.4:8443",
+    "effect": "success",
+    "edge_key": "ProcessToNetwork:1176232:send",
+    "syscall": "write",
+    "time": "23:42:01.884",
+    "why": "攻击最终破坏与横向移动产物：受害者机上的跳板转发进程（socat）将内网机器缓存服务被攻破恢复的最终响应（+OK）回传给攻击机，完成内网横向渗透"
+  },
+  "counts": {
+    "actions": 10,
+    "must_entries": 163,
+    "rules": 0,
+    "steps_total": 163,
+    "edges_total_with_dupes": 163,
+    "edges_unique": 163,
+    "must_edges": 163
+  },
+  "attack_path": [
+    {
+      "id": "A1",
+      "phase": "[A1] 外部对 6379 暴露缓存服务未授权探测与连通性验证",
+      "time": "23:41:01.059~23:41:01.069",
+      "what": "外部攻击机（100.74.213.15）向受害者机（100.86.108.4）6379 暴露缓存服务发起未授权探活连接，发送 PING 指令并成功收到 +PONG 响应。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50574->100.86.108.4:6379",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:71432:accept",
+          "syscall": "accept",
+          "edge_id": "A1.1"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50574->100.86.108.4:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:71503:recv",
+          "syscall": "read",
+          "edge_id": "A1.2"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:50574->100.86.108.4:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:71505:send",
+          "syscall": "write",
+          "edge_id": "A1.3"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "phase": "[A2] 滥用暴露缓存服务未授权配置篡改与写入 SSH 授权密钥",
+      "time": "23:41:01.129~23:41:01.361",
+      "what": "外部攻击机调用 pwn.sh 脚本，连续建立 6 条 Redis 连接，依次下发 CONFIG SET dir /root/.ssh、CONFIG SET dbfilename authorized_keys、SET x 注入 SSH 专用公钥，并触发 SAVE 快照落盘指令，由 root 权限的 Redis 进程创建 /root/.ssh/temp-30358.rdb、写入快照并原子重命名覆写至 /root/.ssh/authorized_keys，最后恢复 Redis 写入目录与文件名配置。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50590->100.86.108.4:6379",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:72180:accept",
+          "syscall": "accept",
+          "edge_id": "A2.1"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50590->100.86.108.4:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:72213:recv",
+          "syscall": "read",
+          "edge_id": "A2.2"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:50590->100.86.108.4:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:72221:send",
+          "syscall": "write",
+          "edge_id": "A2.3"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50598->100.86.108.4:6379",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:72540:accept",
+          "syscall": "accept",
+          "edge_id": "A2.4"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50598->100.86.108.4:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:72571:recv",
+          "syscall": "read",
+          "edge_id": "A2.5"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:50598->100.86.108.4:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:72578:send",
+          "syscall": "write",
+          "edge_id": "A2.6"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50602->100.86.108.4:6379",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:73340:accept",
+          "syscall": "accept",
+          "edge_id": "A2.7"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50602->100.86.108.4:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:73365:recv",
+          "syscall": "read",
+          "edge_id": "A2.8"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:50602->100.86.108.4:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:73367:send",
+          "syscall": "write",
+          "edge_id": "A2.9"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50606->100.86.108.4:6379",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:73649:accept",
+          "syscall": "accept",
+          "edge_id": "A2.10"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50606->100.86.108.4:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:73695:recv",
+          "syscall": "read",
+          "edge_id": "A2.11"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "action": "create",
+          "dst": "f:5_Exposed_Service_Pivot/host:/root/.ssh/temp-30358.rdb",
+          "effect": "success",
+          "edge_key": "ProcessToFile:73707:create",
+          "syscall": "open",
+          "edge_id": "A2.12"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "action": "write",
+          "dst": "f:5_Exposed_Service_Pivot/host:/root/.ssh/temp-30358.rdb",
+          "effect": "success",
+          "edge_key": "ProcessToFile:73713:write",
+          "syscall": "write",
+          "edge_id": "A2.13"
+        },
+        {
+          "src": "f:5_Exposed_Service_Pivot/host:/root/.ssh/temp-30358.rdb",
+          "action": "rename",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "FileToProcess:73738:rename",
+          "syscall": "rename",
+          "edge_id": "A2.14"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "action": "rename",
+          "dst": "f:5_Exposed_Service_Pivot/host:/root/.ssh/authorized_keys",
+          "effect": "success",
+          "edge_key": "ProcessToFile:73738:rename",
+          "syscall": "rename",
+          "edge_id": "A2.15"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:50606->100.86.108.4:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:73754:send",
+          "syscall": "write",
+          "edge_id": "A2.16"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50622->100.86.108.4:6379",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:74006:accept",
+          "syscall": "accept",
+          "edge_id": "A2.17"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50622->100.86.108.4:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:74039:recv",
+          "syscall": "read",
+          "edge_id": "A2.18"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:50622->100.86.108.4:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:74044:send",
+          "syscall": "write",
+          "edge_id": "A2.19"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50636->100.86.108.4:6379",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:74693:accept",
+          "syscall": "accept",
+          "edge_id": "A2.20"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:50636->100.86.108.4:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:74738:recv",
+          "syscall": "read",
+          "edge_id": "A2.21"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/redis-check-rdb",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:50636->100.86.108.4:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:74741:send",
+          "syscall": "write",
+          "edge_id": "A2.22"
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "phase": "[A3] 外部利用植入的 SSH 公钥首次登录验证最高权限 (root)",
+      "time": "23:41:01.435~23:41:01.965",
+      "what": "外部攻击机使用匹配的私钥通过 SSH 登录受害者机 22 端口，sshd 读取 /root/.ssh/authorized_keys 认证通过，建立交互 Shell 执行 id; hostname; uptime 验证提权成效并获取系统基本信息。 登录会话由 sshd 派生的子进程承载。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:53908->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:75213:accept",
+          "syscall": "accept",
+          "edge_id": "A3.1"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/sbin/sshd",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:53908->100.86.108.4:22",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:76384:send",
+          "syscall": "write",
+          "edge_id": "A3.2"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:53908->100.86.108.4:22",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:76388:recv",
+          "syscall": "read",
+          "edge_id": "A3.3"
+        },
+        {
+          "src": "f:5_Exposed_Service_Pivot/host:/root/.ssh/authorized_keys",
+          "action": "read",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "FileToProcess:80422:read",
+          "syscall": "read",
+          "edge_id": "A3.4"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/sbin/sshd",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:297050:exec",
+          "syscall": "execve",
+          "edge_id": "A3.5"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/bin/bash",
+          "action": "clone",
+          "dst": "p:5_Exposed_Service_Pivot/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:297492:clone",
+          "syscall": "clone",
+          "edge_id": "A3.6"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:297565:exec",
+          "syscall": "execve",
+          "edge_id": "A3.7"
+        },
+        {
+          "src": "f:5_Exposed_Service_Pivot/host:/etc/passwd",
+          "action": "read",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "FileToProcess:298043:read",
+          "syscall": "read",
+          "edge_id": "A3.8"
+        },
+        {
+          "src": "f:5_Exposed_Service_Pivot/host:/etc/group",
+          "action": "read",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "FileToProcess:298069:read",
+          "syscall": "read",
+          "edge_id": "A3.9"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/hostname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:298355:exec",
+          "syscall": "execve",
+          "edge_id": "A3.10"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/uptime",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:298732:exec",
+          "syscall": "execve",
+          "edge_id": "A3.11"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "phase": "[A4] 外部建立第二阶段 SSH 会话下发跳板改造引导命令",
+      "time": "23:41:09.828~23:41:10.168",
+      "what": "外部攻击机用同一把植入的公钥再次 SSH 登录受害者机（sshd 再次读取 authorized_keys 认证通过并派生 bash），以 root 权限执行复合引导指令，派生 curl 从攻击机载荷投递服务（100.74.213.15:8000）拉取 stage2 脚本并存为 /tmp/s5_stage2.sh，随后赋予可执行权限并启动执行。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:57568->100.86.108.4:22",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:478955:accept",
+          "syscall": "accept",
+          "edge_id": "A4.1"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/sbin/sshd",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:57568->100.86.108.4:22",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:480157:send",
+          "syscall": "write",
+          "edge_id": "A4.2"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:57568->100.86.108.4:22",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:480161:recv",
+          "syscall": "read",
+          "edge_id": "A4.3"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:547663:exec",
+          "syscall": "execve",
+          "edge_id": "A4.4"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/curl",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:58450->100.74.213.15:8000",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:551848:connect",
+          "syscall": "connect",
+          "edge_id": "A4.5"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/curl",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:58450->100.74.213.15:8000",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:560166:send",
+          "syscall": "sendto",
+          "edge_id": "A4.6"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:58450->100.74.213.15:8000",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/curl",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:564574:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A4.7"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/curl",
+          "action": "create",
+          "dst": "f:5_Exposed_Service_Pivot/host:/tmp/s5_stage2.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:564577:create",
+          "syscall": "open",
+          "edge_id": "A4.8"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/curl",
+          "action": "write",
+          "dst": "f:5_Exposed_Service_Pivot/host:/tmp/s5_stage2.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:564655:write",
+          "syscall": "write",
+          "edge_id": "A4.9"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/chmod",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:565478:exec",
+          "syscall": "execve",
+          "edge_id": "A4.10"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/chmod",
+          "action": "chmod",
+          "dst": "f:5_Exposed_Service_Pivot/host:/tmp/s5_stage2.sh",
+          "effect": "success",
+          "edge_key": "ProcessToFile:565580:chmod",
+          "syscall": "chmod",
+          "edge_id": "A4.11"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:565669:exec",
+          "syscall": "execve",
+          "edge_id": "A4.12"
+        },
+        {
+          "src": "f:5_Exposed_Service_Pivot/host:/tmp/s5_stage2.sh",
+          "action": "read",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "effect": "success",
+          "edge_key": "FileToProcess:565947:read",
+          "syscall": "read",
+          "edge_id": "A4.13"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "phase": "[A5] 受害者机执行第二阶段载荷初始化与本地环境自检",
+      "time": "23:41:10.172~23:41:10.182",
+      "what": "第二阶段载荷 s5_stage2.sh 启动运行，初始化专属运行日志 /var/tmp/s5.log（tee 追加写入），并调用 id、hostname、date、ip、tr 探测当前主机的实际用户身份、机器名与多网卡地址配置并重定向存盘",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/id",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:566099:exec",
+          "syscall": "execve",
+          "edge_id": "A5.1"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/hostname",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:566407:exec",
+          "syscall": "execve",
+          "edge_id": "A5.2"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/tee",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:566717:exec",
+          "syscall": "execve",
+          "edge_id": "A5.3"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/date",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:566786:exec",
+          "syscall": "execve",
+          "edge_id": "A5.4"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/tee",
+          "action": "create",
+          "dst": "f:5_Exposed_Service_Pivot/host:/var/tmp/s5.log",
+          "effect": "success",
+          "edge_key": "ProcessToFile:566969:create",
+          "syscall": "open",
+          "edge_id": "A5.5"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/tee",
+          "action": "write",
+          "dst": "f:5_Exposed_Service_Pivot/host:/var/tmp/s5.log",
+          "effect": "success",
+          "edge_key": "ProcessToFile:567099:write",
+          "syscall": "write",
+          "edge_id": "A5.6"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/sbin/ip",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:568825:exec",
+          "syscall": "execve",
+          "edge_id": "A5.7"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/tr",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:568896:exec",
+          "syscall": "execve",
+          "edge_id": "A5.8"
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "phase": "[A6] 受害者机从系统软件仓库下载安装 nmap 网络扫描工具",
+      "time": "23:41:10.182~23:41:15.936",
+      "what": "第二阶段脚本检测到本地缺失 nmap 扫描工具，调用系统包管理器 apt-get install -y -qq nmap 安装扫描依赖，apt-get 派生 apt 的 http 下载方法进程从软件源拉取安装包，再派生 dpkg 经 dpkg-deb、tar 解包释放文件、执行 nmap-common 的安装后脚本，安装就绪后将结果写入日志",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/apt-get",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:570919:exec",
+          "syscall": "execve",
+          "edge_id": "A6.1"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/apt-get",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/lib/apt/methods/http",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:579728:exec",
+          "syscall": "execve",
+          "edge_id": "A6.2"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/apt-get",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/dpkg",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:630426:exec",
+          "syscall": "execve",
+          "edge_id": "A6.3"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/dpkg",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/dpkg-deb",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:631507:exec",
+          "syscall": "execve",
+          "edge_id": "A6.4"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/dpkg-deb",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:631859:exec",
+          "syscall": "execve",
+          "edge_id": "A6.5"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/dpkg",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/var/lib/dpkg/info/nmap-common.postinst",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:760941:exec",
+          "syscall": "execve",
+          "edge_id": "A6.6"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "phase": "[A7] 受害者机执行 nmap 扫描内网目标主机端口",
+      "time": "23:41:15.938~23:41:15.993",
+      "what": "第二阶段脚本派生 nmap 针对内网目标主机（100.116.135.31）的常见关键服务端口（22, 6379, 8080, 3306, 5432）发起 TCP 连接探测，将扫描输出存入 /var/tmp/s5_scan.txt，并调用 grep 与 sed 解析发现 22 与 6379 端口开放后写入 /var/tmp/s5.log",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/nmap",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:923151:exec",
+          "syscall": "execve",
+          "edge_id": "A7.1"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/nmap",
+          "action": "create",
+          "dst": "f:5_Exposed_Service_Pivot/host:/var/tmp/s5_scan.txt",
+          "effect": "success",
+          "edge_key": "ProcessToFile:923740:create",
+          "syscall": "open",
+          "edge_id": "A7.2"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/nmap",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:53464->100.116.135.31:3306",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:924950:connect",
+          "syscall": "connect",
+          "edge_id": "A7.3"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/nmap",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:53234->100.116.135.31:22",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:925676:connect",
+          "syscall": "connect",
+          "edge_id": "A7.4"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/nmap",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:54990->100.116.135.31:8080",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:925870:connect",
+          "syscall": "connect",
+          "edge_id": "A7.5"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/nmap",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:35498->100.116.135.31:5432",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:925997:connect",
+          "syscall": "connect",
+          "edge_id": "A7.6"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/nmap",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:44920->100.116.135.31:6379",
+          "effect": "failure",
+          "edge_key": "ProcessToNetwork:926124:connect",
+          "syscall": "connect",
+          "edge_id": "A7.7"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/nmap",
+          "action": "write",
+          "dst": "f:5_Exposed_Service_Pivot/host:/var/tmp/s5_scan.txt",
+          "effect": "success",
+          "edge_key": "ProcessToFile:926204:write",
+          "syscall": "write",
+          "edge_id": "A7.8"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/grep",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:926418:exec",
+          "syscall": "execve",
+          "edge_id": "A7.9"
+        },
+        {
+          "src": "f:5_Exposed_Service_Pivot/host:/var/tmp/s5_scan.txt",
+          "action": "read",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/grep",
+          "effect": "success",
+          "edge_key": "FileToProcess:926600:read",
+          "syscall": "read",
+          "edge_id": "A7.10"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/sed",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:927514:exec",
+          "syscall": "execve",
+          "edge_id": "A7.11"
+        }
+      ]
+    },
+    {
+      "id": "A8",
+      "phase": "[A8] 受害者机部署 socat 端口转发进程建立内网中继跳板",
+      "time": "23:41:15.994~23:41:17.032",
+      "what": "第二阶段脚本调用 nohup 在受害者机后台部署 socat 进程，监听本地 0.0.0.0:8443 端口并将流量转发至内网目标机（100.116.135.31:6379），等待 1 秒后用 ss -lntp 自检 8443 已在监听，向运行日志记录监听 PID 后完成阶段二全部跳板改造流程。 后台子 shell 承载 nohup 启动的转发进程。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/nohup",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:929045:exec",
+          "syscall": "execve",
+          "edge_id": "A8.1"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/sleep",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:929076:exec",
+          "syscall": "execve",
+          "edge_id": "A8.2"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/nohup",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:929261:exec",
+          "syscall": "execve",
+          "edge_id": "A8.3"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "bind",
+          "dst": "n:5_Exposed_Service_Pivot:0.0.0.0:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:929937:bind",
+          "syscall": "bind",
+          "edge_id": "A8.4"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "listen",
+          "dst": "n:5_Exposed_Service_Pivot:0.0.0.0:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:929941:listen",
+          "syscall": "listen",
+          "edge_id": "A8.5"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/bash",
+          "action": "exec",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/ss",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:934409:exec",
+          "syscall": "execve",
+          "edge_id": "A8.6"
+        }
+      ]
+    },
+    {
+      "id": "A9",
+      "phase": "[A9] 外部攻击机经 8443 跳板首次探测内网缓存服务（触发保护配置拦截）",
+      "time": "23:41:42.605~23:41:42.905",
+      "what": "外部攻击机针对受害者机 8443 跳板端口调用 pwn.sh 执行初次流量中继测试，socat 每接一路连接即 fork 一个中继子进程将流量转发至内网目标机，执行 CONFIG SET 时因目标 Redis 高版本默认保护机制被拦截报错返回 ERR CONFIG SET failed，提示受保护配置限制。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:44978->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1122928:accept",
+          "syscall": "accept",
+          "edge_id": "A9.1"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39920->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1123015:connect",
+          "syscall": "connect",
+          "edge_id": "A9.2"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:44978->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1123120:recv",
+          "syscall": "read",
+          "edge_id": "A9.3"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39920->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1123127:send",
+          "syscall": "write",
+          "edge_id": "A9.4"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:39920->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1123244:recv",
+          "syscall": "read",
+          "edge_id": "A9.5"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:44978->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1123253:send",
+          "syscall": "write",
+          "edge_id": "A9.6"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:44982->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1123597:accept",
+          "syscall": "accept",
+          "edge_id": "A9.7"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39932->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1123684:connect",
+          "syscall": "connect",
+          "edge_id": "A9.8"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:44982->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1123800:recv",
+          "syscall": "read",
+          "edge_id": "A9.9"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39932->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1123806:send",
+          "syscall": "write",
+          "edge_id": "A9.10"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:39932->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1123908:recv",
+          "syscall": "read",
+          "edge_id": "A9.11"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:44982->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1123917:send",
+          "syscall": "write",
+          "edge_id": "A9.12"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:44998->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1124529:accept",
+          "syscall": "accept",
+          "edge_id": "A9.13"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39944->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1124612:connect",
+          "syscall": "connect",
+          "edge_id": "A9.14"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:44998->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1124687:recv",
+          "syscall": "read",
+          "edge_id": "A9.15"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39944->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1124695:send",
+          "syscall": "write",
+          "edge_id": "A9.16"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:39944->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1124790:recv",
+          "syscall": "read",
+          "edge_id": "A9.17"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:44998->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1124800:send",
+          "syscall": "write",
+          "edge_id": "A9.18"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:45006->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1125225:accept",
+          "syscall": "accept",
+          "edge_id": "A9.19"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39956->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1125313:connect",
+          "syscall": "connect",
+          "edge_id": "A9.20"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:45006->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1125479:recv",
+          "syscall": "read",
+          "edge_id": "A9.21"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39956->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1125486:send",
+          "syscall": "write",
+          "edge_id": "A9.22"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:39956->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1125577:recv",
+          "syscall": "read",
+          "edge_id": "A9.23"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:45006->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1125586:send",
+          "syscall": "write",
+          "edge_id": "A9.24"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:45020->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1126148:accept",
+          "syscall": "accept",
+          "edge_id": "A9.25"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39968->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1126223:connect",
+          "syscall": "connect",
+          "edge_id": "A9.26"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:45020->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1126310:recv",
+          "syscall": "read",
+          "edge_id": "A9.27"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39968->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1126317:send",
+          "syscall": "write",
+          "edge_id": "A9.28"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:39968->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1126425:recv",
+          "syscall": "read",
+          "edge_id": "A9.29"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:45020->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1126434:send",
+          "syscall": "write",
+          "edge_id": "A9.30"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:45032->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1126818:accept",
+          "syscall": "accept",
+          "edge_id": "A9.31"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39980->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1126897:connect",
+          "syscall": "connect",
+          "edge_id": "A9.32"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:45032->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1126975:recv",
+          "syscall": "read",
+          "edge_id": "A9.33"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39980->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1126981:send",
+          "syscall": "write",
+          "edge_id": "A9.34"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:39980->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1127085:recv",
+          "syscall": "read",
+          "edge_id": "A9.35"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:45032->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1127092:send",
+          "syscall": "write",
+          "edge_id": "A9.36"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:45036->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1127675:accept",
+          "syscall": "accept",
+          "edge_id": "A9.37"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39990->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1127754:connect",
+          "syscall": "connect",
+          "edge_id": "A9.38"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:45036->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1127838:recv",
+          "syscall": "read",
+          "edge_id": "A9.39"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:39990->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1127845:send",
+          "syscall": "write",
+          "edge_id": "A9.40"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:39990->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1127951:recv",
+          "syscall": "read",
+          "edge_id": "A9.41"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:45036->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1127959:send",
+          "syscall": "write",
+          "edge_id": "A9.42"
+        }
+      ]
+    },
+    {
+      "id": "A10",
+      "phase": "[A10] 外部攻击机经 8443 跳板二次横向注入利用载荷并拿下内网最高权限",
+      "time": "23:42:01.570~23:42:01.884",
+      "what": "外部攻击机再次经由 8443 跳板端口发起横向渗透攻击，socat 每接一路连接 fork 一个中继子进程透明转发完整利用指令流（PING、CONFIG SET dir、dbfilename、SET x、SAVE、恢复配置），在内网目标机成功将 SSH 公钥覆写至 /root/.ssh/authorized_keys 并回传最终 +OK 响应，完成内网横向突破闭环。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:46998->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1171144:accept",
+          "syscall": "accept",
+          "edge_id": "A10.1"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52904->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1171232:connect",
+          "syscall": "connect",
+          "edge_id": "A10.2"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:46998->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1171343:recv",
+          "syscall": "read",
+          "edge_id": "A10.3"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52904->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1171354:send",
+          "syscall": "write",
+          "edge_id": "A10.4"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:52904->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1171434:recv",
+          "syscall": "read",
+          "edge_id": "A10.5"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:46998->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1171441:send",
+          "syscall": "write",
+          "edge_id": "A10.6"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47006->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1171940:accept",
+          "syscall": "accept",
+          "edge_id": "A10.7"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52914->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1172034:connect",
+          "syscall": "connect",
+          "edge_id": "A10.8"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47006->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1172112:recv",
+          "syscall": "read",
+          "edge_id": "A10.9"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52914->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1172119:send",
+          "syscall": "write",
+          "edge_id": "A10.10"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:52914->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1172230:recv",
+          "syscall": "read",
+          "edge_id": "A10.11"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:47006->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1172238:send",
+          "syscall": "write",
+          "edge_id": "A10.12"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47016->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1172689:accept",
+          "syscall": "accept",
+          "edge_id": "A10.13"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52928->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1172776:connect",
+          "syscall": "connect",
+          "edge_id": "A10.14"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47016->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1172855:recv",
+          "syscall": "read",
+          "edge_id": "A10.15"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52928->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1172864:send",
+          "syscall": "write",
+          "edge_id": "A10.16"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:52928->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1172970:recv",
+          "syscall": "read",
+          "edge_id": "A10.17"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:47016->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1172978:send",
+          "syscall": "write",
+          "edge_id": "A10.18"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47018->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1173538:accept",
+          "syscall": "accept",
+          "edge_id": "A10.19"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52944->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1173625:connect",
+          "syscall": "connect",
+          "edge_id": "A10.20"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47018->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1173711:recv",
+          "syscall": "read",
+          "edge_id": "A10.21"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52944->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1173717:send",
+          "syscall": "write",
+          "edge_id": "A10.22"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:52944->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1173847:recv",
+          "syscall": "read",
+          "edge_id": "A10.23"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:47018->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1173853:send",
+          "syscall": "write",
+          "edge_id": "A10.24"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47032->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1174408:accept",
+          "syscall": "accept",
+          "edge_id": "A10.25"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52954->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1174495:connect",
+          "syscall": "connect",
+          "edge_id": "A10.26"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47032->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1174575:recv",
+          "syscall": "read",
+          "edge_id": "A10.27"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52954->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1174581:send",
+          "syscall": "write",
+          "edge_id": "A10.28"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:52954->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1174691:recv",
+          "syscall": "read",
+          "edge_id": "A10.29"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:47032->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1174697:send",
+          "syscall": "write",
+          "edge_id": "A10.30"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47044->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1175203:accept",
+          "syscall": "accept",
+          "edge_id": "A10.31"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52968->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1175282:connect",
+          "syscall": "connect",
+          "edge_id": "A10.32"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47044->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1175369:recv",
+          "syscall": "read",
+          "edge_id": "A10.33"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52968->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1175382:send",
+          "syscall": "write",
+          "edge_id": "A10.34"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.86.108.4:52968->100.116.135.31:6379",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1175496:recv",
+          "syscall": "read",
+          "edge_id": "A10.35"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:47044->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1175504:send",
+          "syscall": "write",
+          "edge_id": "A10.36"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47058->100.86.108.4:8443",
+          "action": "accept",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1175954:accept",
+          "syscall": "accept",
+          "edge_id": "A10.37"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "connect",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52972->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1176036:connect",
+          "syscall": "connect",
+          "edge_id": "A10.38"
+        },
+        {
+          "src": "n:5_Exposed_Service_Pivot:100.74.213.15:47058->100.86.108.4:8443",
+          "action": "recv",
+          "dst": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:1176128:recv",
+          "syscall": "read",
+          "edge_id": "A10.39"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.86.108.4:52972->100.116.135.31:6379",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1176134:send",
+          "syscall": "write",
+          "edge_id": "A10.40"
+        },
+        {
+          "src": "p:5_Exposed_Service_Pivot/host:/usr/bin/socat",
+          "action": "send",
+          "dst": "n:5_Exposed_Service_Pivot:100.74.213.15:47058->100.86.108.4:8443",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:1176232:send",
+          "syscall": "write",
+          "edge_id": "A10.41"
+        }
+      ]
+    }
+  ]
+}

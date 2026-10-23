@@ -1,0 +1,484 @@
+{
+  "scenario": "6_Web_SQLi_Data_Exfiltration",
+  "entry": {
+    "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:47740->100.86.108.4:80",
+    "action": "accept",
+    "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+    "effect": "success",
+    "edge_key": "NetworkToProcess:408937:accept",
+    "syscall": "accept",
+    "time": "17:41:28.465",
+    "why": "攻击在日志里最早的可归属动作：外部攻击机对 80 端口 Web 服务发起的首个 TCP 握手 accept 连接"
+  },
+  "poi": {
+    "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+    "action": "send",
+    "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:40316->100.86.108.4:80",
+    "effect": "success",
+    "edge_key": "ProcessToNetwork:5132328:send",
+    "syscall": "write",
+    "time": "17:54:51.234",
+    "why": "攻击最后一个可归属动作：攻击者完成管理员后台各功能模块漫游巡检后，发起最终会话复核，Apache 回送控制面板响应报文；本场为只读窃取，关键数据渗漏发生在 17:52:10，POI 按「最后一个攻击动作」保留此处。"
+  },
+  "counts": {
+    "actions": 4,
+    "must_entries": 46,
+    "rules": 0,
+    "steps_total": 46,
+    "edges_total_with_dupes": 46,
+    "edges_unique": 46
+  },
+  "attack_path": [
+    {
+      "id": "A1",
+      "phase": "[A1] 外部对 80 端口 Web 服务探测与站点资产指纹识别",
+      "time": "17:41:28.465~17:42:01.128",
+      "what": "外部攻击机（100.74.213.15）向受害机 80 端口发起侦察探测，依次请求站点首页、robots.txt、后台登录入口、版本描述 XML、语言包及 README 文档，获取 Web 目录结构与 Joomla! 3.7.0 精确版本指纹。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:47740->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:408937:accept",
+          "syscall": "accept",
+          "edge_id": "A1.1"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:47740->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:408947:recv",
+          "syscall": "read",
+          "edge_id": "A1.2"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:47740->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:414222:send",
+          "syscall": "write",
+          "edge_id": "A1.3"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:38006->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:430439:accept",
+          "syscall": "accept",
+          "edge_id": "A1.4"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:38006->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:430455:recv",
+          "syscall": "read",
+          "edge_id": "A1.5"
+        },
+        {
+          "src": "f:6_Web_SQLi_Data_Exfiltration/host:/srv/www/progql-portal/robots.txt",
+          "action": "mmap_read",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "FileToProcess:430484:mmap_read",
+          "syscall": "mmap",
+          "edge_id": "A1.6"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:38006->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:430486:send",
+          "syscall": "write",
+          "edge_id": "A1.7"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:39932->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:440145:accept",
+          "syscall": "accept",
+          "edge_id": "A1.8"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:39932->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:440152:recv",
+          "syscall": "read",
+          "edge_id": "A1.9"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:39932->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:442989:send",
+          "syscall": "write",
+          "edge_id": "A1.10"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:39940->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:452720:accept",
+          "syscall": "accept",
+          "edge_id": "A1.11"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:39940->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:452730:recv",
+          "syscall": "read",
+          "edge_id": "A1.12"
+        },
+        {
+          "src": "f:6_Web_SQLi_Data_Exfiltration/host:/srv/www/progql-portal/administrator/manifests/files/joomla.xml",
+          "action": "mmap_read",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "FileToProcess:452758:mmap_read",
+          "syscall": "mmap",
+          "edge_id": "A1.13"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:39940->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:452760:send",
+          "syscall": "write",
+          "edge_id": "A1.14"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:44478->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:464299:accept",
+          "syscall": "accept",
+          "edge_id": "A1.15"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:44478->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:464312:recv",
+          "syscall": "read",
+          "edge_id": "A1.16"
+        },
+        {
+          "src": "f:6_Web_SQLi_Data_Exfiltration/host:/srv/www/progql-portal/language/en-GB/en-GB.xml",
+          "action": "mmap_read",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "FileToProcess:464335:mmap_read",
+          "syscall": "mmap",
+          "edge_id": "A1.17"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:44478->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:464337:send",
+          "syscall": "write",
+          "edge_id": "A1.18"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:44304->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:474079:accept",
+          "syscall": "accept",
+          "edge_id": "A1.19"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:44304->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:474091:recv",
+          "syscall": "read",
+          "edge_id": "A1.20"
+        },
+        {
+          "src": "f:6_Web_SQLi_Data_Exfiltration/host:/srv/www/progql-portal/README.txt",
+          "action": "mmap_read",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "FileToProcess:474109:mmap_read",
+          "syscall": "mmap",
+          "edge_id": "A1.21"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:44304->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:474111:send",
+          "syscall": "write",
+          "edge_id": "A1.22"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "phase": "[A2] 验证 Joomla 字段组件未授权 SQL 错误回显注入点",
+      "time": "17:42:09.167~17:42:09.182",
+      "what": "外部攻击机针对 Joomla! 3.7.0 组件参数 list[fullordering] 发送 extractvalue 报错注入测试载荷，HTTP 层返回错误回显；数据库 socket 执行证据统一归入 A3 的 R2 规则。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:44318->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:486625:accept",
+          "syscall": "accept",
+          "edge_id": "A2.1"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:44318->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:486632:recv",
+          "syscall": "read",
+          "edge_id": "A2.2"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:44318->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:489405:send",
+          "syscall": "write",
+          "edge_id": "A2.3"
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "phase": "[A3] 攻击者利用本地破解的管理员凭据登录后台并获取特权会话",
+      "time": "17:52:08.835~17:52:45.800",
+      "what": "外部攻击机在 17:52:08~17:52:09 建立两条到 /administrator/index.php 的连接，随后在 17:52:45 提交管理员登录认证请求，服务端凭据校验通过并返回 303 See other 重定向，成功建立管理员合法特权会话。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:48100->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4545698:accept",
+          "syscall": "accept",
+          "edge_id": "A3.1"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:48114->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4549131:accept",
+          "syscall": "accept",
+          "edge_id": "A3.2"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:48100->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4679426:recv",
+          "syscall": "read",
+          "edge_id": "A3.3"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:48100->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:4681938:send",
+          "syscall": "write",
+          "edge_id": "A3.4"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:48114->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4682521:recv",
+          "syscall": "read",
+          "edge_id": "A3.5"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:48114->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:4686559:send",
+          "syscall": "write",
+          "edge_id": "A3.6"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "phase": "[A4] 攻击者使用管理员特权会话逐页慢速巡检敏感管理功能",
+      "time": "17:52:08.412~17:54:51.234",
+      "what": "外部攻击机在拖库末段 17:52:08~17:52:10 建立 5 条后台连接，随后复用这些会话对后台控制面板、用户管理列表、站点全局配置与扩展安装管理等关键管理页面进行逐页低速漫游巡检，并最终发起会话复核，完成全链路只读渗透。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:57244->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4543099:accept",
+          "syscall": "accept",
+          "edge_id": "A4.1"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:37936->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4552202:accept",
+          "syscall": "accept",
+          "edge_id": "A4.2"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:51732->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4555183:accept",
+          "syscall": "accept",
+          "edge_id": "A4.3"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:51030->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4555893:accept",
+          "syscall": "accept",
+          "edge_id": "A4.4"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:40316->100.86.108.4:80",
+          "action": "accept",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4555902:accept",
+          "syscall": "accept",
+          "edge_id": "A4.5"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:37936->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4904563:recv",
+          "syscall": "read",
+          "edge_id": "A4.6"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:37936->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:4908689:send",
+          "syscall": "write",
+          "edge_id": "A4.7"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:51732->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4964247:recv",
+          "syscall": "read",
+          "edge_id": "A4.8"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:51732->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:4971347:send",
+          "syscall": "write",
+          "edge_id": "A4.9"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:51030->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:5020096:recv",
+          "syscall": "read",
+          "edge_id": "A4.10"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:51030->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:5034709:send",
+          "syscall": "write",
+          "edge_id": "A4.11"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:57244->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:5075759:recv",
+          "syscall": "read",
+          "edge_id": "A4.12"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:57244->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:5080206:send",
+          "syscall": "write",
+          "edge_id": "A4.13"
+        },
+        {
+          "src": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:40316->100.86.108.4:80",
+          "action": "recv",
+          "dst": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:5128322:recv",
+          "syscall": "read",
+          "edge_id": "A4.14"
+        },
+        {
+          "src": "p:6_Web_SQLi_Data_Exfiltration/host:/usr/sbin/apache2",
+          "action": "send",
+          "dst": "n:6_Web_SQLi_Data_Exfiltration:100.74.213.15:40316->100.86.108.4:80",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:5132328:send",
+          "syscall": "write",
+          "edge_id": "A4.15"
+        }
+      ]
+    }
+  ],
+  "note": "本场景的攻击判别面在现有图模型（进程/文件/网络三类顶点 + 五类边）下不可表达：SQL 注入在受害者机上只体现为 apache2 的普通收发边，以及 apache2 与 /var/run/mysqld/mysqld.sock 之间的普通读写边，与任何正常 Web 请求同形，图里没有 URL、参数、SQL 文本或错误回显可供判定。因此本 GT 不设 possible 规则：攻击期内的 939 次取数请求以及网站自身的数据库通信，既不能算作攻击步骤，也不应由规则吸收为攻击步骤。评测本场时按 must 的连接边计召回，且不得据此宣称系统具备 SQL 注入判别能力。"
+}
