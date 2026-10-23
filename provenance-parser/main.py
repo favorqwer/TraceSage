@@ -48,6 +48,8 @@ def _build() -> argparse.ArgumentParser:
     ap.add_argument("--neo4j-password", default="")
     ap.add_argument("--neo4j-database", default="")
     ap.add_argument("--no-reset", action="store_true", help="不清空该 host_id 的旧图")
+    ap.add_argument("--strict-paths", action="store_true",
+                    help="路径审计严格模式：未规整的文件路径直接抛错（重建验收用）")
     return ap
 
 
@@ -71,7 +73,8 @@ def _apply_args(settings: Settings, args: argparse.Namespace) -> Settings:
         dry_run=args.dry_run,
     )
     graph = replace(settings.graph, fd_table_max=args.fd_cap)
-    emit = replace(settings.emit, keep_payload=not args.no_payload)
+    emit = replace(settings.emit, keep_payload=not args.no_payload,
+                   strict_paths=bool(args.strict_paths))
     database = args.neo4j_database or settings.database
     neo4j = replace(
         settings.neo4j,
@@ -110,6 +113,9 @@ def _print_summary(payload: dict) -> None:
     print(f"图：节点 {payload['nodes']['total']:,}，边 {edges['total']:,} {edges['by_class']}")
     gaps = payload["gaps"]
     print(f"事件号：末号 {gaps['max_event_num']:,}，缺号 {gaps['missing_numbers']:,}")
+    audit = payload.get("path_audit") or {}
+    print(f"路径审计：未规整路径 {audit.get('dirty', 0)} 个"
+          + (f"，示例 {audit.get('samples', [])[:3]}" if audit.get('dirty') else ""))
     print(f"耗时：{payload['elapsed_s']}s　报告：{payload['report_dir']}")
 
 
@@ -168,6 +174,10 @@ def main(argv: list[str] | None = None) -> int:
         print("[3/3] 收尾：节点快照与报告…", flush=True)
         payload = ReportWriter(settings.report).write(snapshot)
         payload["report_dir"] = str(settings.report_dir)
+        from provenance.graph.emitter import PATH_AUDIT
+
+        payload["path_audit"] = {"dirty": PATH_AUDIT["dirty"],
+                                 "samples": PATH_AUDIT["samples"]}
         _print_summary(payload)
     except Exception as exc:
         print(f"\n[BLOCKED] {exc}", file=sys.stderr, flush=True)

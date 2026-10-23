@@ -39,7 +39,7 @@ def call(name, enter="", exit="", pid=100, ns=1000, cwd="/", rawres=None):
 class FeatureTest(unittest.TestCase):
     def test_dirfd_resolution(self):
         st = State.build("h")
-        st.fds.register("host", 100, 5, FdEntry("directory", "/base"))
+        st.fds.register("host", 100, 5, FdEntry.directory("/base"))
         resolver = ObjectResolver(st)
         c = call("openat", "dirfd=5 name=x", "res=3 fd=6(<f>/base/x)")
         self.assertEqual(resolver.path_arg(c, "name", dirfd_key="dirfd"), "/base/x")
@@ -53,24 +53,24 @@ class FeatureTest(unittest.TestCase):
 
     def test_cwd_and_fchdir_state(self):
         st = State.build("h")
-        st.fds.register("host", 100, 7, FdEntry("directory", "/tmp/dir"))
+        st.fds.register("host", 100, 7, FdEntry.directory("/tmp/dir"))
         st.proc.observe(row(1, ">", "chdir", pid=100))
-        st.proc.observe_fs(call("chdir", "path=/srv", "res=0"), st.fds)
+        ObjectResolver(st).observe_fs(call("chdir", "path=/srv", "res=0"))
         self.assertEqual(st.proc.observe(row(2, "<", "read", pid=100)).cwd, "/srv")
-        st.proc.observe_fs(call("fchdir", "fd=7(<d>/tmp/dir)", "res=0"), st.fds)
+        ObjectResolver(st).observe_fs(call("fchdir", "fd=7(<d>/tmp/dir)", "res=0"))
         self.assertEqual(st.proc.observe(row(3, "<", "read", pid=100)).cwd, "/tmp/dir")
 
     def test_fchdir_uses_token_when_table_misses(self):
         st = State.build("h")
         st.proc.observe(row(1, ">", "read", pid=100))
-        st.proc.observe_fs(call("fchdir", "fd=7(<d>/tmp/dir)", "res=0"), st.fds)
+        ObjectResolver(st).observe_fs(call("fchdir", "fd=7(<d>/tmp/dir)", "res=0"))
         self.assertEqual(st.proc.live("host", 100).cwd, "/tmp/dir")
         self.assertEqual(st.fds.counts["fchdir_from_token"], 1)
 
     def test_chroot_root_state(self):
         st = State.build("h")
         st.proc.observe(row(1, ">", "chroot", pid=100))
-        st.proc.observe_fs(call("chroot", "path=/jail", "res=0"), st.fds)
+        ObjectResolver(st).observe_fs(call("chroot", "path=/jail", "res=0"))
         self.assertEqual(st.proc.observe(row(2, "<", "read", pid=100)).root, "/jail")
         resolver = ObjectResolver(st)
         self.assertEqual(resolver.norm_path("/etc/passwd", call("read", pid=100)), "/jail/etc/passwd")

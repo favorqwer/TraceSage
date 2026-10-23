@@ -32,10 +32,10 @@ def create(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
         return ctx.attempt(out, call, "create", path or raw_path, result)
 
     if fd is not None:
+        target = ctx.objects.target_from_token(call, fd, kind=fd.kind, name=path or fd.name)
         ctx.st.fds.register(
             call.container_id, call.pid, fd.num,
-            FdEntry(kind=fd.kind, name=path or fd.name, proto=fd.proto,
-                    cloexec="O_CLOEXEC" in flags),
+            FdEntry(target, fd.proto, "O_CLOEXEC" in flags),
         )
     if not path:
         return ctx.give_up(out, call, Bucket.OTHER, "path_unresolved")

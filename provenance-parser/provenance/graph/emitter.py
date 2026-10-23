@@ -12,6 +12,24 @@ from ..core.syscalls import canonical_syscall
 from .state import State
 from .state.proc import Seg
 
+# 合成键：不是文件系统路径，不做路径规整检查
+_SYNTHETIC_PREFIXES = ("pipe:[", "socket:[", "netlink:[", "unix:[", "memfd:")
+# 路径审计：不合规的 File 路径计数（重建后必须为 0）。strict 模式下直接抛错。
+PATH_AUDIT = {"dirty": 0, "samples": []}
+
+
+def audit_file_path(path: str, strict: bool) -> None:
+    if path.startswith(_SYNTHETIC_PREFIXES) or path.startswith("?"):
+        return
+    dirty = not path.startswith("/") or ".(" in path or "(/" in path
+    if not dirty:
+        return
+    PATH_AUDIT["dirty"] += 1
+    if len(PATH_AUDIT["samples"]) < 20:
+        PATH_AUDIT["samples"].append(path)
+    if strict:
+        raise ValueError(f"未规整的文件路径进入图：{path!r}")
+
 
 class GraphEmitter:
     def __init__(self, state: State, options: EmitOptions) -> None:
@@ -49,6 +67,7 @@ class GraphEmitter:
     def file_node(self, cid: str, path: str, kind: str = "") -> Node | None:
         if not path:
             return None
+        audit_file_path(path, getattr(self.options, "strict_paths", False))
         normalized = file_kind_of(kind)
         if normalized is None:
             return None

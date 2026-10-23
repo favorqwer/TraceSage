@@ -59,6 +59,10 @@ def chroot(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     ctx.attach(out, node)
     ctx.add(out, ctx.edge(EdgeClass.P2F, "chroot", ctx.key(call), node.key,
                           call, result=ctx.result(call)))
+    result = ctx.result(call)
+    if result is not None and result >= 0:
+        # 同一路径只解析一次：状态更新消费这里的结果（见 ObjectResolver.observe_fs）
+        ctx.st.proc.note_root_target(call.head_row.num, path)
     return ctx.covered(out, call)
 
 
@@ -69,9 +73,13 @@ def setns(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
 def chroot_like(ctx: EmitContext, call: Call, action: str) -> Outcome:
     out = Outcome()
     fd, entry = ctx.fd_entry(call)
-    if entry is None or A.is_unknown_name(entry.name):
+    if fd is None or entry is None:
         return ctx.give_up(out, call, Bucket.UNKNOWN_FD, "fd")
-    node = ctx.file_node(call.container_id, entry.name, entry.kind)
+    obj = ctx.objects.from_entry(call, fd, entry)
+    if obj.kind != "file" or obj.key is None:
+        return ctx.give_up(out, call, obj.bucket if obj.kind == "none" else Bucket.NO_OBJECT,
+                           obj.reason or "not_file")
+    node = ctx.file_node(call.container_id, obj.key.path, obj.node_kind)
     if node is None:
         return ctx.give_up(out, call, Bucket.NO_OBJECT, "not_file")
     ctx.attach(out, node)

@@ -334,7 +334,7 @@ class EmitTest(unittest.TestCase):
         self.assertIn(Bucket.HANDLE, [b for _, b, _ in out.buckets])
         entry = self.st.fds.get("host", 100, 5)
         self.assertIsNotNone(entry)
-        self.assertEqual(entry.name, "/etc/passwd")
+        self.assertEqual(entry.target.path, "/etc/passwd")
         self.assertTrue(entry.cloexec)
 
     def test_open_tmpfile_registers_anonymous_fd(self):
@@ -344,21 +344,21 @@ class EmitTest(unittest.TestCase):
         self.assertEqual(out.edges, [])
         entry = self.st.fds.get("host", 100, 7)
         self.assertIsNotNone(entry)
-        self.assertEqual(entry.name, "")
+        self.assertIsNone(entry.target)
 
     def test_dup2_alias_uses_exit_result(self):
-        self.st.fds.register("host", 100, 3, FdEntry("file", "/tmp/a"))
+        self.st.fds.register("host", 100, 3, FdEntry.file("/tmp/a"))
         out = self.run_call(call("dup2", "fd=3(<f>/tmp/a)", "res=5(<f>/tmp/a)"))
         self.assertEqual(out.edges, [])
         entry = self.st.fds.get("host", 100, 5)
         self.assertIsNotNone(entry)
-        self.assertEqual(entry.name, "/tmp/a")
+        self.assertEqual(entry.target.path, "/tmp/a")
 
     def test_fcntl_dupfd_and_setfd(self):
-        self.st.fds.register("host", 100, 3, FdEntry("file", "/tmp/a"))
+        self.st.fds.register("host", 100, 3, FdEntry.file("/tmp/a"))
         self.run_call(call("fcntl", "fd=3(<f>/tmp/a) cmd=0(F_DUPFD)",
                            "res=6(<f>/tmp/a)"))
-        self.assertEqual(self.st.fds.get("host", 100, 6).name, "/tmp/a")
+        self.assertEqual(self.st.fds.get("host", 100, 6).target.path, "/tmp/a")
         self.run_call(call("fcntl", "fd=3(<f>/tmp/a) cmd=2(F_SETFD) arg=1(FD_CLOEXEC)",
                            "res=0"))
         self.assertTrue(self.st.fds.get("host", 100, 3).cloexec)
@@ -375,14 +375,14 @@ class EmitTest(unittest.TestCase):
 
     def test_close_range_removes_range(self):
         for fd in (3, 4, 5, 6):
-            self.st.fds.register("host", 100, fd, FdEntry("file", f"/{fd}"))
+            self.st.fds.register("host", 100, fd, FdEntry.file(f"/{fd}"))
         self.run_call(call("close_range", "first=3 last=5", "res=0"))
         self.assertIsNone(self.st.fds.get("host", 100, 3))
         self.assertIsNone(self.st.fds.get("host", 100, 5))
         self.assertIsNotNone(self.st.fds.get("host", 100, 6))
 
     def test_exit_destroys_fd_table(self):
-        self.st.fds.register("host", 100, 3, FdEntry("file", "/a"))
+        self.st.fds.register("host", 100, 3, FdEntry.file("/a"))
         self.run_call(call("exit_group", "", ""))
         self.assertIsNone(self.st.fds.get("host", 100, 3))
 

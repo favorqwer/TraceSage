@@ -21,11 +21,62 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
+class FileTarget:
+    """文件系统客体：`path` 只能是已解析的宿主视图绝对路径。"""
+
+    path: str
+    kind: str = "file"          # file / directory / unix
+
+
+@dataclass(frozen=True, slots=True)
+class NetTarget:
+    """网络客体：`endpoints` 是 Sysdig 连接元组。"""
+
+    endpoints: str
+    kind: str = "ipv4"          # ipv4 / ipv6
+    proto: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class SyntheticTarget:
+    """合成键：不是文件系统路径，永不参与路径规整（pipe / memfd / socket / netlink 等）。"""
+
+    name: str
+    kind: str = "other"
+
+
+FdTarget = FileTarget | NetTarget | SyntheticTarget
+
+
+@dataclass(frozen=True, slots=True)
 class FdEntry:
-    kind: str          # file / directory / ipv4 / ipv6 / unix / pipe / memfd / other ...
-    name: str          # 路径、元组、pipe:[inode]；O_TMPFILE 等匿名对象为空串
+    """句柄客体。
+
+    `target` 只能由 `ObjectResolver.target_from_token` 构造：要么是已解析的
+    `FileTarget`（路径已是宿主视图绝对路径，含 chroot 映射），要么是
+    `NetTarget` / `SyntheticTarget`。类型上存不进裸 token，所以使用点
+    （read/write/mmap/chmod/ioctl/stat/setns/dirfd）不需要再各自判断“要不要规整”。
+    """
+
+    target: FdTarget | None
     proto: str = ""
     cloexec: bool = False
+
+    @classmethod
+    def file(cls, path: str, kind: str = "file", *, proto: str = "", cloexec: bool = False) -> "FdEntry":
+        return cls(FileTarget(path, kind), proto, cloexec)
+
+    @classmethod
+    def directory(cls, path: str, *, proto: str = "", cloexec: bool = False) -> "FdEntry":
+        return cls(FileTarget(path, "directory"), proto, cloexec)
+
+    @classmethod
+    def net(cls, endpoints: str, kind: str = "ipv4", *, proto: str = "", cloexec: bool = False) -> "FdEntry":
+        return cls(NetTarget(endpoints, kind, proto), proto, cloexec)
+
+    @classmethod
+    def synthetic(cls, name: str, kind: str = "other", *, proto: str = "", cloexec: bool = False) -> "FdEntry":
+        return cls(SyntheticTarget(name, kind), proto, cloexec)
 
 
 class FdTable:
@@ -90,7 +141,7 @@ class FdTable:
         if entry is None:
             return False
         self.register(cid, pid, new,
-                      FdEntry(entry.kind, entry.name, entry.proto, cloexec))
+                      FdEntry(entry.target, entry.proto, cloexec))
         return True
 
     def set_cloexec(self, cid: str, pid: int, fd: int, cloexec: bool) -> bool:
@@ -98,7 +149,7 @@ class FdTable:
         if entry is None:
             return False
         bucket = self._by_pid[(cid, pid)]
-        bucket[fd] = FdEntry(entry.kind, entry.name, entry.proto, cloexec)
+        bucket[fd] = FdEntry(entry.target, entry.proto, cloexec)
         return True
 
     def close(self, cid: str, pid: int, fd: int) -> None:
@@ -147,9 +198,11 @@ class FdTable:
         self.counts["fork_copies"] += 1
 
     def dir_path(self, cid: str, pid: int, fd: int) -> str:
+        """目录句柄 -> 已解析的宿主视图路径（非目录或未登记为空串）。"""
         entry = self.get(cid, pid, fd)
-        if entry is not None and entry.kind == "directory":
-            return entry.name
+        target = entry.target if entry is not None else None
+        if isinstance(target, FileTarget) and target.kind == "directory":
+            return target.path
         return ""
 
     def stats(self) -> dict[str, int]:

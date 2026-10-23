@@ -105,7 +105,7 @@ def run(
             decision = classifier.decide(call)
             outcome = dispatch(call, decision, ctx)
             state.proc.observe_uid(call)
-            state.proc.observe_fs(call, state.fds)
+            ctx.objects.observe_fs(call)
             for num, bucket, reason in outcome.buckets:
                 ledger.settle(num, bucket, reason)
             observer.on_call(call, decision, outcome)

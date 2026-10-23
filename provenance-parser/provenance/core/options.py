@@ -44,6 +44,7 @@ class GraphLimits:
 class EmitOptions:
     keep_payload: bool = True
     payload_max_bytes: int = 80
+    strict_paths: bool = False    # True：未规整的文件路径直接抛错（重建验收用）
 
 
 @dataclass(frozen=True, slots=True)

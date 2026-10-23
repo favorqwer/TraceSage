@@ -124,10 +124,10 @@ class FdTest(unittest.TestCase):
         self.fds = State.build("h").fds
 
     def test_dup_close_cloexec(self):
-        self.fds.register("host", 7, 3, FdEntry("file", "/a"))
-        self.fds.register("host", 7, 4, FdEntry("file", "/b", cloexec=True))
+        self.fds.register("host", 7, 3, FdEntry.file("/a"))
+        self.fds.register("host", 7, 4, FdEntry.file("/b", cloexec=True))
         self.fds.dup("host", 7, 3, 5)
-        self.assertEqual(self.fds.get("host", 7, 5).name, "/a")
+        self.assertEqual(self.fds.get("host", 7, 5).target.path, "/a")
         self.fds.close("host", 7, 3)
         self.assertIsNone(self.fds.get("host", 7, 3))
         self.assertEqual(self.fds.prune_cloexec("host", 7), 1)
@@ -135,25 +135,25 @@ class FdTest(unittest.TestCase):
         self.assertIsNotNone(self.fds.get("host", 7, 5))
 
     def test_fork_copies_table(self):
-        self.fds.register("host", 8, 3, FdEntry("file", "/a"))
+        self.fds.register("host", 8, 3, FdEntry.file("/a"))
         self.fds.fork("host", 8, 9)
-        self.assertEqual(self.fds.get("host", 9, 3).name, "/a")
+        self.assertEqual(self.fds.get("host", 9, 3).target.path, "/a")
 
     def test_cap_eviction(self):
         fds = State.build("h").fds
         fds.cap = 2
         for fd in (3, 4, 5):
-            fds.register("host", 1, fd, FdEntry("file", f"/{fd}"))
+            fds.register("host", 1, fd, FdEntry.file(f"/{fd}"))
         self.assertIsNone(fds.get("host", 1, 3))
         self.assertIsNotNone(fds.get("host", 1, 5))
 
     def test_lru_eviction_keeps_recently_used(self):
         fds = State.build("h").fds
         fds.cap = 2
-        fds.register("host", 1, 3, FdEntry("file", "/3"))
-        fds.register("host", 1, 4, FdEntry("file", "/4"))
+        fds.register("host", 1, 3, FdEntry.file("/3"))
+        fds.register("host", 1, 4, FdEntry.file("/4"))
         self.assertIsNotNone(fds.get("host", 1, 3))  # 3 变成最近使用
-        fds.register("host", 1, 5, FdEntry("file", "/5"))
+        fds.register("host", 1, 5, FdEntry.file("/5"))
         self.assertIsNone(fds.get("host", 1, 4))     # 淘汰 4，不是 3
         self.assertIsNotNone(fds.get("host", 1, 3))
         self.assertIsNotNone(fds.get("host", 1, 5))

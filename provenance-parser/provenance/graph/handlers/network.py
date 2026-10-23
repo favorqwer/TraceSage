@@ -15,7 +15,7 @@ def _register(ctx: EmitContext, call: Call, fd: A.Fd | None, name: str, proto: s
     if fd is None or fd.num < 0:
         return
     ctx.st.fds.register(call.container_id, call.pid, fd.num,
-                        FdEntry(kind=fd.kind or "ipv4", name=name, proto=proto))
+                        FdEntry.net(name, fd.kind or "ipv4", proto=proto))
 
 
 def connect(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
@@ -30,8 +30,13 @@ def connect(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
         if not path:
             ctx.ops(out, call, f"connect:{raw or '-'}")
             return ctx.give_up(out, call, Bucket.OTHER, "unix_unusable")
+        # 套接字路径同样属于进程根内的绝对路径：统一走 norm_path（含 chroot 映射）
+        path = ctx.norm_path(path, call)
+        if not path:
+            ctx.ops(out, call, f"connect:{raw or '-'}")
+            return ctx.give_up(out, call, Bucket.OTHER, "unix_unusable")
         ctx.st.fds.register(call.container_id, call.pid, fd.num,
-                            FdEntry(kind="unix", name=path))
+                            FdEntry.file(path, "unix"))
         node = ctx.file_node(call.container_id, path, "unix")
         ctx.attach(out, node)
         ctx.add(out, ctx.edge(EdgeClass.P2F, "connect", ctx.key(call), node.key,
@@ -114,8 +119,11 @@ def accept(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
             ctx.ops(out, call, f"accept:{raw or '-'}")
             return ctx.give_up(out, call, Bucket.OTHER, "unix_unusable")
         # 只登记 fd；unix 的 accept 不建边。数据流由 send/recv 覆盖。
+        path = ctx.norm_path(path, call)
+        if not path:
+            return ctx.give_up(out, call, Bucket.OTHER, "unix_unusable")
         ctx.st.fds.register(call.container_id, call.pid, fd.num,
-                            FdEntry(kind="unix", name=path))
+                            FdEntry.file(path, "unix"))
         return out.settle(call, Bucket.HANDLE, "accept_unix_fd_only")
 
     if not raw or not A.tuple_usable(raw, session=True):

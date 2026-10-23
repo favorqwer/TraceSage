@@ -24,22 +24,37 @@ def normalize(path: str, cwd: str = "") -> str:
     return "/" + "/".join(parts)
 
 
-def path_value(raw: str) -> str:
-    """从 `oldpath=Cu1ADxgn(/dir/x)` 这类渲染里取真实路径。
+def parse_path_arg(raw: str) -> tuple[str, str]:
+    """把事件参数里的路径渲染拆成（显示名, 内核解析后的绝对路径）。
 
-    判定规则：括号前那一段不含 '/' 才算"显示名"，否则括号属于路径本身
-    （`/tmp/a(1)` 不能被截成 `1`）。
+    内核/sysdig 对相对名会写成 `shown(resolved)`，两种实测形态：
+      - `.(/srv/www/s8-site/uploads)`            shown `.`、resolved `/srv/.../uploads`
+      - `base/1(/var/lib/postgresql/14/main/base/1)` shown `base/1`、resolved `/var/.../base/1`
+
+    判定按渲染语法，不按前缀内容猜：整串以 `)` 结尾，且最后一对括号的内容
+    **以 `/` 开头且不含 `)`**，才算注记。这样 `/tmp/a(1)`（括号内容是 `1`）、
+    `/tmp/a (copy).txt`（不以 `)` 结尾）都不会被误剥——旧实现的
+    “括号前含 `/` 就不剥”会把上面第二种形态整串当成路径（实测 10 个库共
+    884 个畸形顶点）。
+
+    返回 ``(shown, resolved)``；没有注记时 ``resolved`` 为空串。
     """
-    text = raw.strip()
+    text = (raw or "").strip()
     if not text.endswith(")"):
-        return text
+        return text, ""
     idx = text.rfind("(")
-    if idx <= 0:
-        return text
-    prefix = text[:idx]
-    if "/" in prefix:
-        return text
-    return text[idx + 1 : -1]
+    if idx < 0:
+        return text, ""
+    inner = text[idx + 1 : -1]
+    if inner.startswith("/") and ")" not in inner:
+        return text[:idx], inner
+    return text, ""
+
+
+def path_value(raw: str) -> str:
+    """参数里的真实路径（有内核注记取注记里的绝对路径，否则取显示名）。"""
+    shown, resolved = parse_path_arg(raw)
+    return resolved or shown
 
 
 def is_unresolved(path: str) -> bool:

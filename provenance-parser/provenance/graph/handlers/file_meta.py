@@ -19,9 +19,14 @@ def chmod(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
         node = ctx.file_node(call.container_id, path)
     else:
         fd, entry = ctx.fd_entry(call)
-        if entry is None or A.is_unknown_name(entry.name):
+        if fd is None or entry is None:
             return ctx.give_up(out, call, Bucket.UNKNOWN_FD, "fd")
-        node = ctx.file_node(call.container_id, entry.name, entry.kind)
+        obj = ctx.objects.from_entry(call, fd, entry)
+        if obj.kind != "file" or obj.key is None:
+            return ctx.give_up(out, call,
+                               obj.bucket if obj.kind == "none" else Bucket.NO_OBJECT,
+                               obj.reason or "not_file")
+        node = ctx.file_node(call.container_id, obj.key.path, obj.node_kind)
         if node is None:
             return ctx.give_up(out, call, Bucket.NO_OBJECT, "not_file")
     ctx.attach(out, node)
@@ -36,9 +41,14 @@ def ioctl(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     if request:
         ctx.ops(out, call, f"ioctl:{A.int_of(request)}")
     fd, entry = ctx.fd_entry(call)
-    if entry is None or A.is_unknown_name(entry.name):
+    if fd is None or entry is None:
         return ctx.give_up(out, call, Bucket.UNKNOWN_FD, "fd")
-    node = ctx.file_node(call.container_id, entry.name, entry.kind)
+    obj = ctx.objects.from_entry(call, fd, entry)
+    if obj.kind != "file" or obj.key is None:
+        return ctx.give_up(out, call,
+                           obj.bucket if obj.kind == "none" else Bucket.NO_OBJECT,
+                           obj.reason or "not_file")
+    node = ctx.file_node(call.container_id, obj.key.path, obj.node_kind)
     if node is None:
         return ctx.give_up(out, call, Bucket.NO_OBJECT, "not_file")
     ctx.attach(out, node)
@@ -57,8 +67,13 @@ def stat_(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
                               call, result=ctx.result(call)))
         return ctx.covered(out, call)
     fd, entry = ctx.fd_entry(call)
-    if entry is not None and not A.is_unknown_name(entry.name):
-        node = ctx.file_node(call.container_id, entry.name, entry.kind)
+    if fd is not None and entry is not None:
+        obj = ctx.objects.from_entry(call, fd, entry)
+        if obj.kind != "file" or obj.key is None:
+            return ctx.give_up(out, call,
+                               obj.bucket if obj.kind == "none" else Bucket.NO_OBJECT,
+                               obj.reason or "not_file")
+        node = ctx.file_node(call.container_id, obj.key.path, obj.node_kind)
         if node is None:
             return ctx.give_up(out, call, Bucket.NO_OBJECT, "not_file")
         ctx.attach(out, node)

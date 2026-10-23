@@ -50,13 +50,14 @@ def _open_handle(ctx, out: Outcome, call, fds, reason: str) -> Outcome | None:
         # O_TMPFILE 没有名字；linkat 之前不能当 File 节点身份。
         # 但 fd 状态（CLOEXEC/别名/close）必须维护。
         kind = "directory" if kind == "directory" else "file"
-        path = ""
+        target = None
     else:
-        path = "" if A.is_unknown_name(fd.name) else fd.name
+        name = "" if A.is_unknown_name(fd.name) else fd.name
+        target = ctx.objects.target_from_token(call, fd, kind=kind, name=name) if name else None
 
     fds.register(
         call.container_id, call.pid, fd.num,
-        FdEntry(kind=kind, name=path, proto=fd.proto, cloexec=cloexec),
+        FdEntry(target, fd.proto, cloexec),
     )
     fds.counts["open_registered"] += 1
     return None  # 调用方统一收尾
@@ -75,12 +76,11 @@ def _dup_handle(ctx, out: Outcome, call, fds, name: str) -> Outcome:
             # 旧 fd 不在表里：退出行 evt.args 的 res=N(<f>/path) 仍带着新 fd 的客体，
             # 用它补登记（不假装知道旧 fd 的别名历史）。
             new_fd = A.fd_of(call.args.get("res"))
-            if new_fd is not None and new_fd.num == new:
-                fds.register(
-                    call.container_id, call.pid, new,
-                    FdEntry(new_fd.kind, "" if A.is_unknown_name(new_fd.name)
-                            else new_fd.name, new_fd.proto, cloexec),
-                )
+            target = (ctx.objects.target_from_token(call, new_fd)
+                      if new_fd is not None and new_fd.num == new else None)
+            if target is not None:
+                fds.register(call.container_id, call.pid, new,
+                             FdEntry(target, new_fd.proto, cloexec))
                 fds.counts["dup_alias_fallback"] += 1
             else:
                 fds.counts["dup_alias_miss"] += 1
@@ -100,14 +100,11 @@ def _fcntl_handle(ctx, out: Outcome, call, fds) -> Outcome:
             if not fds.dup(call.container_id, call.pid, old.num, result,
                            cloexec=(cmd == 1030)):
                 new_fd = A.fd_of(call.args.get("res"))
-                if new_fd is not None and new_fd.num == result:
-                    fds.register(
-                        call.container_id, call.pid, result,
-                        FdEntry(new_fd.kind,
-                                "" if A.is_unknown_name(new_fd.name)
-                                else new_fd.name,
-                                new_fd.proto, cloexec=(cmd == 1030)),
-                    )
+                target = (ctx.objects.target_from_token(call, new_fd)
+                          if new_fd is not None and new_fd.num == result else None)
+                if target is not None:
+                    fds.register(call.container_id, call.pid, result,
+                                 FdEntry(target, new_fd.proto, cloexec=(cmd == 1030)))
                     fds.counts["dup_alias_fallback"] += 1
                 else:
                     fds.counts["blind_dup"] += 1
@@ -157,8 +154,8 @@ def apply_handle(ctx, call, decision=None) -> Outcome:
                 fd = A.fd_of(call.args.get(key))
                 if fd is not None:
                     fds.register(cid, pid, fd.num,
-                                 FdEntry(kind="pipe", name=f"pipe:[{ino}]",
-                                         cloexec=cloexec))
+                                 FdEntry.synthetic(f"pipe:[{ino}]", "pipe",
+                                                   cloexec=cloexec))
                     fds.counts["pipe_registered"] += 1
         op_name = name
     elif name in ("fcntl", "fcntl64"):

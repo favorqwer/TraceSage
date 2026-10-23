@@ -58,6 +58,7 @@ class ProcState:
         self._order = 0
         self.exec_destinations: set[ProcKey] = set()
         self.clone_destinations: set[ProcKey] = set()
+        self._root_targets: dict[int, str] = {}
         self.counts = {
             "born_clone": 0,
             "born_exec": 0,
@@ -128,7 +129,9 @@ class ProcState:
         if seg.ppid is None and row.ppid > 0:
             seg.ppid = row.ppid
         if not seg.cwd and row.cwd:
-            seg.cwd = P.normalize(row.cwd) or row.cwd
+            # %proc.cwd 可能带内核注记（`shown(resolved)`）：先取真实路径再规整。
+            # 这里不套 chroot 根：%proc.cwd 的视图层级未定，套根会重复映射。
+            seg.cwd = P.normalize(P.path_value(row.cwd)) or row.cwd
         return seg
 
     # -- 身份事件 ------------------------------------------------------
@@ -226,51 +229,18 @@ class ProcState:
                 self.counts["uid_observed"] += 1
                 return
 
-    def observe_fs(self, call, fds=None) -> None:
-        """维护 cwd / chroot 根；必须在 handler 解析完本次路径之后调用。"""
-        name = call.call
-        if name not in ("chdir", "fchdir", "chroot", "pivot_root"):
-            return
-        result = call.result
-        if result is None or result < 0:
-            return
-        seg = self._live(call.container_id, call.pid) or self.observe(call.head_row)
+    def note_root_target(self, event_num: int, path: str) -> None:
+        """handler 已解析出的 chroot/pivot_root 目标（宿主视图），交由状态更新消费。
 
-        if name == "fchdir":
-            fd = A.fd_of(call.args.get("fd"))
-            path = ""
-            if fd is not None and fds is not None:
-                path = fds.dir_path(call.container_id, call.pid, fd.num)
-                if not path and (fd.kind == "directory"
-                                 and not A.is_unknown_name(fd.name)):
-                    # 表里没有，但事件 token 带 <d>/path：用它兜底。
-                    path = fd.name
-                    fds.counts["fchdir_from_token"] += 1
-            if path:
-                seg.cwd = path
-                self.counts["fs_state_updates"] += 1
-            elif fds is not None:
-                fds.counts["fchdir_miss"] += 1
-            else:
-                self.counts["fchdir_miss"] = self.counts.get("fchdir_miss", 0) + 1
-            return
+        单一来源：路径只解析一次（`ObjectResolver.resolve_path`），状态不再自己重算，
+        从结构上消除“建点用一条路径、进程状态用另一条路径”的分裂。
+        """
+        if len(self._root_targets) > 4096:
+            self._root_targets.clear()
+        self._root_targets[event_num] = path
 
-        path = (
-            call.text("path")
-            or call.text("filename")
-            or call.text("name")
-            or call.text("newroot")
-            or call.text("new_root")
-        )
-        if not path:
-            return
-        base = seg.cwd or call.head_row.cwd or "/"
-        value = P.normalize(path, base)
-        if name == "chdir":
-            seg.cwd = value
-        elif name in ("chroot", "pivot_root"):
-            seg.root = value
-        self.counts["fs_state_updates"] += 1
+    def take_root_target(self, event_num: int) -> str:
+        return self._root_targets.pop(event_num, "")
 
     def on_exit(self, seg: Seg, start_ns: int) -> None:
         if seg.exited_ns is None:
