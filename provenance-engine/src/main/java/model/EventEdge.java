@@ -19,6 +19,8 @@ public class EventEdge {
    private long endns;
    private String uuid;
    private String host;
+   /** 系统调用返回值（原样）。用于判定这次事件是成功还是失败：<0 失败、>=0 成功；null 表示该边没有返回值可比。 */
+   private Long result;
 
    public EventEdge(EntityNode source, EntityNode sink, long edgeid, String optype, long size, long startNs, long endNs, String uuid, String host) {
       this.source = source;
@@ -49,6 +51,7 @@ public class EventEdge {
       this.startns = edge.getStartns();
       this.endns = edge.getEndns();
       this.host = edge.getHost();
+      this.result = edge.getResult();
    }
 
    public EventEdge(EntityNode source, EntityNode sink) {
@@ -60,6 +63,12 @@ public class EventEdge {
       this.endTime = e2.endTime;
       this.size = this.size + e2.size;
       this.endns = e2.endns;
+      // 合并组里成败不一致（一次失败一次成功）时，整组不再宣称单一成败，判分按“不否决”处理。
+      if (this.result != null && e2.result != null && ((this.result < 0) != (e2.result < 0))) {
+         this.result = null;
+      } else if (this.result == null) {
+         this.result = e2.result;
+      }
       return this;
    }
 
@@ -136,6 +145,14 @@ public class EventEdge {
 
    public void setHost(String host) {
       this.host = host;
+   }
+
+   public Long getResult() {
+      return this.result;
+   }
+
+   public void setResult(Long result) {
+      this.result = result;
    }
 
    @Override

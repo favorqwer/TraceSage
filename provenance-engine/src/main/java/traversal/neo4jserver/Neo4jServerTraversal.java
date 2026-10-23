@@ -27,7 +27,7 @@ import traversal.DBTraversal;
 
 /**
  * Investigation traversal against the TraceSage Neo4j server store
- * (sysdig-parser import: :Process/:File/:Network vertices, p2p/p2f/f2p/p2n/n2p
+ * (provenance-parser import: :Process/:File/:Network vertices, v2
  * event relationships).
  *
  * POI/with-clause branches:

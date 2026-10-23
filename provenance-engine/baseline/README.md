@@ -32,7 +32,7 @@ bash provenance-engine/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
 # （POI 没有默认值，必须显式给；各场景的 POI 见 provenance-navigator/config/scenarios.json）
 ```
 
-- 数据源：**Neo4j 服务器**（scap-parser 导入的溯源图；`bolt://localhost:7687/neo4j`，
+- 数据源：**Neo4j 服务器**（provenance-parser 导入的溯源图；`bolt://localhost:7687/neo4j`，
   连接参数取自环境变量或仓库根 `.env` 的 `NEO4J_URI` / `NEO4J_USER` /
   `NEO4J_PASSWORD` / `NEO4J_DATABASE`，不硬编码）。`dbName` 参数仅作为场景名写入
   产物的 `meta.scenario`；图库本身由 `NEO4J_DATABASE` 决定。
@@ -41,10 +41,11 @@ bash provenance-engine/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
   （`(p:Process)-[st:FileEvent{optype:"..."}]->(f:File{name:"..."})`），
   `name` 经兼容层映射到 `File.path`。入口限额默认 5，用 `--entry-limit N` 覆盖。
   各场景的 POI 见 `provenance-navigator/config/scenarios.json`。
-- 场景范围：当前五场景各自一个独立库（前缀 `attack-`，命名约定见根 AGENTS.md），
+- 场景范围：当前十场景各自一个独立库（前缀 `attack-`，命名约定见根 AGENTS.md），
   跑某个场景时用 `NEO4J_DATABASE` 指向对应场景库，并用 `run-baseline.sh` 的场景名与
   产物目录参数区分场景；产物落 `output/engine-baseline/<场景>/`（`baseline.json` +
   `groundtruth-eval.txt`）。流程与对比方法不变，但不同场景的基线产物之间不可比。
+  当前只处理单次 capture 的单主机图；跨主机横向移动需要额外的网络端点对齐，不在本系统自动闭环内。
 - 顶点 id：Neo4j 图没有数字顶点 id，`Neo4jNodeRegistry` 在启动时按
   （标签, MERGE 键）升序枚举全部顶点分配 1..N，同一份库内容在任何机器上得到相同
   id，保证产物可复现。
@@ -52,7 +53,7 @@ bash provenance-engine/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
   （`optype→syscall`、`amount→bytes`）对应，由 `Neo4jServerTraversal` 兼容层翻译；
   Network 顶点的 ip 属性（lip/lport/rip/rport）不带 `/32` cidr 后缀，匹配时自动剥离。
 - 入口排名权重通过 `-Dprogql.llm.config` 指向 `baseline/progql-llm.properties`
-  （impact 0.55 / time 0.45）固定，与运行目录无关；这是全项目约定，见 AGENTS.md 第 7 节。
+  （impact 0.55 / time 0.45）固定，与运行目录无关；取值以该配置文件为准。
 - 产物：`output/engine-baseline/<outDir>/baseline.json`（该目录被 `.gitignore` 忽略，
   不随仓库版本化，跨机器需手动保留）。
 - 依赖：JDK 17+ 与本机 `~/.m2/repository` 中的依赖 jar（清单见脚本内 `CP`；
@@ -75,7 +76,7 @@ bash provenance-engine/baseline/run-baseline.sh 1_Web_Exploit_Ransomware \
 - `final_vertex_mix`、`final_event_distribution`：最终图构成；
 - `final_vertices` / `final_edges`：最终图全部顶点（含声誉）与边；每条边含规范化边键、
   融合权重，以及内嵌的 `syscall` 与 `starttime`/`endtime`（秒，浮点，取自事件边）；
-  因此 `tools/evaluate_gt.py` 可直接用产物评分，不必回库反查；
+  因此 `tools/score_graph_product.py` 可直接用产物评分，不必回库反查；
 - `b_raw_edge_keys`：反向遍历结果全部规范化边键（CPR 合并前的原始内容）；
 - `b_score_edges`：b_score 阶段全部规范化边键及融合权重；
 - `forward_union_edge_keys`：正向扩展合并图的全部规范化边键。

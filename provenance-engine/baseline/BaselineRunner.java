@@ -60,7 +60,7 @@ import util.GraphOperations;
 
 /**
  * Deterministic re-execution of the investigation flow of the ProGQL query layer,
- * against the Neo4j provenance store (sysdig-parser import), producing a JSON
+ * against the Neo4j provenance store (provenance-parser import), producing a JSON
  * artifact for regression comparison.
  *
  * The flow replicates the pipeline logic of main.Main.processSingleProGQLQuery
@@ -80,7 +80,7 @@ import util.GraphOperations;
  *
  * 入口数默认 5，可用 `--entry-limit N` 覆盖。
  * final_edges 内嵌 `syscall/starttime/endtime`（秒，浮点），使产物自足、
- * 评分（tools/evaluate_gt.py）无需回库。
+ * 评分（tools/score_graph_product.py）无需回库。
  */
 public class BaselineRunner {
    private static final double CPR_MERGE_WINDOW = 10.0;
@@ -656,6 +656,10 @@ public class BaselineRunner {
       fact.put("syscall", edge.getEvent() == null ? JSONObject.NULL : edge.getEvent());
       fact.put("starttime", edge.getStartTime() == null ? JSONObject.NULL : edge.getStartTime().doubleValue());
       fact.put("endtime", edge.getEndTime() == null ? JSONObject.NULL : edge.getEndTime().doubleValue());
+      // 成败证据：result 为系统调用返回值原值（null = 该边不记录返回值）；effect 为归一化成败。
+      Long result = edge.getResult();
+      fact.put("result", result == null ? JSONObject.NULL : result);
+      fact.put("effect", result == null ? JSONObject.NULL : (result < 0 ? "failure" : "success"));
       return fact;
    }
 

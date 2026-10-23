@@ -15,7 +15,7 @@ import org.neo4j.driver.Value;
  * Deterministic numeric identity for Neo4j graph vertices.
  *
  * The engine (EntityNode equality, edge keys, baseline artifacts) is built on
- * long vertex ids. The sysdig-parser Neo4j store keys vertices by their
+ * long vertex ids. The provenance-parser Neo4j store keys vertices by their
  * content key (Process: process_id = pid+name, File: path, Network:
  * "lip:lport->rip:rport") and carries no numeric id, so at initialization the
  * registry enumerates every vertex once, in a content-determined order

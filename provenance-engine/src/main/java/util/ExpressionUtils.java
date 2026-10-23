@@ -176,7 +176,11 @@ public class ExpressionUtils {
       Long startTime = (Long)r.getProperty("starttime");
       Long endTime = (Long)r.getProperty("endtime");
       String hostName = r.getProperty("hostname").toString();
-      return new EventEdge(srcNode, endNode, (long)eventId, opType, size, startTime, endTime, "", hostName);
+      EventEdge edge = new EventEdge(srcNode, endNode, (long)eventId, opType, size, startTime, endTime, "", hostName);
+      if (r.hasProperty("result") && r.getProperty("result") != null) {
+         edge.setResult(((Number)r.getProperty("result")).longValue());
+      }
+      return edge;
    }
 
    public static EventEdge createEventEdge(EntityNode srcNode, EntityNode endNode, ResultSet rs) throws SQLException {
@@ -186,7 +190,13 @@ public class ExpressionUtils {
       Long startTime = rs.getLong("starttime");
       Long endTime = rs.getLong("endtime");
       String hostName = rs.getString("hostname");
-      return new EventEdge(srcNode, endNode, eventId, opType, size, startTime, endTime, "", hostName);
+      EventEdge edge = new EventEdge(srcNode, endNode, eventId, opType, size, startTime, endTime, "", hostName);
+      // result 可能是 null（accept/create/clone 等无返回值的边），也可能是 Integer/Long。
+      Object resultValue = rs.getObject("result");
+      if (resultValue instanceof Number) {
+         edge.setResult(((Number)resultValue).longValue());
+      }
+      return edge;
    }
 
    public static String extractCollectExp(Queue<String> expQueue) {

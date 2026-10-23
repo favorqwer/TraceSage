@@ -22,7 +22,7 @@ import util.TextualOperatorsEvaluator;
  * threshold, and the parent inherits the edge's endtime as its own (max-kept)
  * threshold.
  *
- * No per-relationship syscall filter is applied: sysdig-parser only emits
+ * No per-relationship syscall filter is applied: provenance-parser only emits
  * edges for provenance-relevant syscalls (unmatched events never become
  * edges), so every edge in the store is traversable. Filtering here against a
  * second copy of the parser's vocabulary silently dropped real edges whenever
@@ -218,7 +218,8 @@ public class Neo4jBackwardExpander {
       String curMatch = Neo4jNodeRegistry.matchCurClause("cur", label, key, params);
       String edgeColumns = "r.event_id AS eventid, coalesce(r.start_ns, r.starttime) AS starttime, "
          + "coalesce(r.end_ns, r.endtime) AS endtime, coalesce(r.syscall, r.action) AS optype, "
-         + "CASE WHEN coalesce(r.result, r.bytes, 0) > 0 THEN coalesce(r.result, r.bytes, 0) ELSE 0 END AS amount, \"\" AS hostname";
+         + "CASE WHEN coalesce(r.result, r.bytes, 0) > 0 THEN coalesce(r.result, r.bytes, 0) ELSE 0 END AS amount, "
+         + "r.result AS result, \"\" AS hostname";
 
       StringBuilder cypher = new StringBuilder();
       if (Neo4jNodeRegistry.LABEL_PROCESS.equals(label)) {
@@ -255,7 +256,7 @@ public class Neo4jBackwardExpander {
       }
       return new Neo4jRowCursor(
          rows,
-         List.of("eventid", "starttime", "endtime", "optype", "amount", "hostname", "parentkey", "parentlabel")
+         List.of("eventid", "starttime", "endtime", "optype", "amount", "result", "hostname", "parentkey", "parentlabel")
       );
    }
 }
