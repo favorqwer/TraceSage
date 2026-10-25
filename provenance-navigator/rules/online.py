@@ -138,8 +138,17 @@ class MatchIndex:
             self._role_cache[s] = role
         return role
 
+    @staticmethod
+    def is_motif_admitted(motif: Dict[str, Any], *, min_conf: float = 0.50,
+                           min_lor: float = 2.5) -> bool:
+        """基模准入判据：满足高置信度或（FDR 显著且对数优势比置信下界达标）。"""
+        if motif.get("train_precision", 0.0) >= min_conf:
+            return True
+        return bool(motif.get("is_fdr_sig", False) and motif.get("lor_lower", 0.0) >= min_lor)
+
     # --- 匹配 ---
-    def match(self, motifs: List[Dict[str, Any]], *, min_conf: float = 0.5,
+    def match(self, motifs: List[Dict[str, Any]], *, min_conf: float = 0.50,
+              min_lor: float = 2.5,
               seed_edges: Optional[Dict[Tuple, Dict[str, Any]]] = None) -> Dict[Tuple, Dict[str, Any]]:
         """执行 1 跳 / 2 跳基模、进程血缘、敏感读取闭环，返回 {边三元组: 命中来源}。"""
         self.filtered_by_conf = 0
@@ -160,7 +169,7 @@ class MatchIndex:
         for motif in motifs:
             if motif.get("hops") != 1:
                 continue
-            conf = motif.get("train_precision", 1.0)
+            admitted = self.is_motif_admitted(motif, min_conf=min_conf, min_lor=min_lor)
             src_role = motif.get("src_role")
             dst_role = motif.get("dst_role")
             for sc in motif.get("syscalls") or []:
@@ -168,7 +177,7 @@ class MatchIndex:
                     if pe.login_skip or not pe.taint_ok:
                         continue
                     if self.role_of(pe.s) == src_role and self.role_of(pe.d) == dst_role:
-                        if conf >= min_conf:
+                        if admitted:
                             matched[pe.key] = motif
                             high |= pe.all_id_vars
                         else:
@@ -184,7 +193,7 @@ class MatchIndex:
             hop1, hop2 = chain[0], chain[1]
             sc1, sc2 = str(hop1.get("syscall")), str(hop2.get("syscall"))
             r1, r_mid, r3 = hop1.get("src_role"), hop1.get("dst_role"), hop2.get("dst_role")
-            conf = motif.get("train_precision", 1.0)
+            admitted = self.is_motif_admitted(motif, min_conf=min_conf, min_lor=min_lor)
             for pe1 in self.by_sys_role.get((sc1, r1), ()):
                 mid = pe1.d
                 if self.role_of(mid) != r_mid:
@@ -198,7 +207,7 @@ class MatchIndex:
                     t1_2 = pe2.e.get("t1") or 0
                     if t0_1 > 0 and t1_2 > 0 and t0_1 > t1_2:
                         continue
-                    if conf >= min_conf:
+                    if admitted:
                         matched[pe1.key] = motif
                         matched[pe2.key] = motif
                         high |= pe1.all_id_vars
@@ -260,10 +269,12 @@ class PatternMatcher:
 
     def __init__(self, topology_facts: TopologyFacts,
                  patterns: Optional[List[Dict[str, Any]]] = None,
-                 min_conf: float = 0.50):
+                 min_conf: float = 0.50,
+                 min_lor: float = 2.5):
         self.tf = topology_facts
         self.patterns = patterns or []
         self.min_conf = min_conf
+        self.min_lor = min_lor
         self.high_conf_pids: Set[str] = set()
         self.filtered_by_conf = 0
 
@@ -271,7 +282,12 @@ class PatternMatcher:
               confirmed_seeds: Optional[Dict[Tuple, Dict[str, Any]]] = None
               ) -> Dict[Tuple, Dict[str, Any]]:
         index = MatchIndex(candidate_pool, self.tf)
-        matched = index.match(self.patterns, min_conf=self.min_conf, seed_edges=confirmed_seeds)
+        matched = index.match(
+            self.patterns,
+            min_conf=self.min_conf,
+            min_lor=self.min_lor,
+            seed_edges=confirmed_seeds,
+        )
         self.filtered_by_conf = index.filtered_by_conf
         self.high_conf_pids = index.high_conf_pids
         return matched

@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import hashlib
+import math
+import scipy.stats as stats
 import json
 import os
 import sys
@@ -395,6 +397,20 @@ class OfflineDistiller:
                 lift = p_bayes / pi
             passed = (tot_pos >= 1 and lift >= self.min_lift)
 
+            # 统计显著性指标：Fisher 单侧精确检验与对数优势比 95% 置信下界
+            if tot_pos > 0:
+                table = [[tot_pos, tot_neg], [max(0, prior_pos - tot_pos), max(0, prior_neg - tot_neg)]]
+                _, p_val = stats.fisher_exact(table, alternative="greater")
+            else:
+                p_val = 1.0
+
+            tp_c, fp_c = tot_pos + 0.5, tot_neg + 0.5
+            fn_c = max(0, prior_pos - tot_pos) + 0.5
+            tn_c = max(0, prior_neg - tot_neg) + 0.5
+            lor = math.log((tp_c * tn_c) / (fp_c * fn_c))
+            se_lor = math.sqrt(1/tp_c + 1/fp_c + 1/fn_c + 1/tn_c)
+            lor_lower = lor - 1.96 * se_lor
+
             considered.append({
                 "id": motif["id"],
                 "name": motif.get("name", ""),
@@ -405,6 +421,9 @@ class OfflineDistiller:
                 "train_precision": round(precision, 6),
                 "bayes_precision": round(p_bayes, 6),
                 "bayes_lift": round(lift, 4),
+                "p_val": float(p_val),
+                "lor": float(round(lor, 4)),
+                "lor_lower": float(round(lor_lower, 4)),
                 "passed": passed,
             })
 
@@ -417,7 +436,16 @@ class OfflineDistiller:
                 distilled["train_precision"] = precision
                 distilled["bayes_precision"] = p_bayes
                 distilled["lift"] = lift
+                distilled["p_val"] = float(p_val)
+                distilled["lor"] = float(round(lor, 4))
+                distilled["lor_lower"] = float(round(lor_lower, 4))
                 distilled_motifs.append(distilled)
+
+        # Benjamini-Hochberg FDR 校正 (alpha = 0.05)
+        distilled_motifs.sort(key=lambda x: x.get("p_val", 1.0))
+        M_cnt = len(distilled_motifs)
+        for rank_i, m_item in enumerate(distilled_motifs, 1):
+            m_item["is_fdr_sig"] = bool(m_item.get("p_val", 1.0) <= (rank_i / M_cnt) * 0.05 if M_cnt > 0 else False)
 
         self.last_report = {
             "train_scenarios": list(train_scenarios),

@@ -109,7 +109,7 @@ def route(confirmed_edges: List[Dict[str, Any]],
 
     # 通道二：符号促进
     if "motif" in spec.channels:
-        matcher = PatternMatcher(tf, patterns or [])
+        matcher = PatternMatcher(tf, patterns or [], min_conf=0.50, min_lor=2.5)
         matcher_min_conf = matcher.min_conf
         matched = matcher.match(clean_unexcluded, confirmed_seeds=final_confirmed)
         conf_filtered_count = matcher.filtered_by_conf
@@ -190,6 +190,7 @@ def route(confirmed_edges: List[Dict[str, Any]],
             "debris_pruned_count": len(debris_pruned),
             "promoted_by_motif": promoted_by_motif,
             "matcher_min_conf": matcher_min_conf,
+            "matcher_min_lor": getattr(matcher, "min_lor", 2.5) if matcher else None,
             "conf_filtered_count": conf_filtered_count,
             "fast_path_rules": len(rule_promoted),
             "slow_path_llm_confirmed": len(llm_confirmed),
