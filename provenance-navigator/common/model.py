@@ -193,16 +193,23 @@ class BudgetCallback(BaseCallbackHandler):
 
 
 def make_model(*, temperature: float = 0.0, model_name: Optional[str] = None) -> ChatOpenAI:
+    base_url = cfg.llm_base_url()
+    default_headers: dict[str, str] = {}
+    if "opencode.ai" in (base_url or ""):
+        default_headers["x-opencode-session"] = "ses_tracesage_navigator"
+
     kwargs: dict[str, Any] = {
         "model": model_name or cfg.llm_model(),
         "temperature": temperature,
         "api_key": cfg.llm_api_key(),
-        "base_url": cfg.llm_base_url(),
+        "base_url": base_url,
         # 网关（ALB）自己会在 ~60s 返 504，所以客户端超时不需要很长；
         # 重试交给下面的 _invoke_with_retry（带退避），不用 SDK 内置重试。
         "timeout": cfg.llm_timeout_seconds(),
         "max_retries": cfg.llm_sdk_retries(),
     }
+    if default_headers:
+        kwargs["default_headers"] = default_headers
     if not cfg.thinking_enabled():
         # 思考模式默认关闭（DeepSeek 官方字段；官方默认是 enabled）。理由与实测见 cfg.thinking_enabled。
         kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
