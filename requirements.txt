@@ -2,4 +2,5 @@ langchain-core>=1.6.3
 langchain-openai>=1.6.2
 neo4j>=5.28
 orjson>=3.12.0
+scipy>=1.18
 xxhash>=4.0.1

@@ -56,14 +56,15 @@ def _anchor_triples(deps: Any) -> List[Tuple[str, str, str]]:
 
 
 def extract_raw_closure(scenario_name: str, return_deps: bool = False,
-                        light: bool = False) -> Any:
+                        light: bool = False,
+                        log: Callable[[str], None] = print) -> Any:
     """自主连接 Neo4j，从终点事件展开完整的反向因果闭包候选边集合。"""
     cfg.load_dotenv()
     sc = cfg.load_scenario(scenario_name)
     run_id = f"pnavigator-{int(time.time())}"
 
     t0 = time.time()
-    deps = build_deps(sc, run_id)
+    deps = build_deps(sc, run_id, log=log)
     walk.intake(deps)
     prep = fold.prepare(deps)
 

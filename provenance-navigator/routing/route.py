@@ -66,7 +66,9 @@ def route(confirmed_edges: List[Dict[str, Any]],
           *,
           patterns: Optional[List[Dict[str, Any]]] = None,
           llm_channel: Optional[Any] = None,
-          mode: str = "hybrid") -> RouteOutcome:
+          mode: str = "hybrid",
+          min_conf: float = 0.50,
+          min_lor: float = 2.5) -> RouteOutcome:
     spec = MODES.get(mode)
     if spec is None:
         raise ValueError(f"未知模式 {mode!r}；可选 {sorted(MODES)}")
@@ -109,7 +111,7 @@ def route(confirmed_edges: List[Dict[str, Any]],
 
     # 通道二：符号促进
     if "motif" in spec.channels:
-        matcher = PatternMatcher(tf, patterns or [], min_conf=0.50, min_lor=2.5)
+        matcher = PatternMatcher(tf, patterns or [], min_conf=min_conf, min_lor=min_lor)
         matcher_min_conf = matcher.min_conf
         matched = matcher.match(clean_unexcluded, confirmed_seeds=final_confirmed)
         conf_filtered_count = matcher.filtered_by_conf

@@ -14,7 +14,7 @@
   ],
   "generated_at": "2026-10-23 19:20:50",
   "fingerprint": {
-    "digest": "aa91d09498fcf216e29463eee7dfa315af371b72cf25040244a817309aa299b0",
+    "digest": "1b4beaac05741ca446115938fe67cbd3ce3679ba50944181b216b4d0feff3a00",
     "components": {
       "gt": {
         "10_Tomcat_Weakcreds_DNS_Exfiltration": "8eebc4dd81fd826673b47101af2c4834f626c309679c1de935e11c67bf21abbd",
@@ -29,9 +29,9 @@
         "9_Exposed_Container_Escape": "20e0bf22394224bc6efd76441dbcc24b13584d0edac9b8b34655975ea7177293"
       },
       "code": {
-        "provenance-navigator/rules/offline.py": "a63fd443478173f116b71f3349b6252bd59cfdae4b2e468878d8d67979d98c29",
-        "provenance-navigator/rules/online.py": "660e4d9e79d9f6a9791da4771b98698260ff5174ccc235b31dbeb1e094e83e80",
-        "provenance-navigator/closure/extractor.py": "febcbbb912e70e5a9e844f0ec76c7a845777f65840af55ed34f2e52bc34f3ef0",
+        "provenance-navigator/rules/offline.py": "63aa9ee60e3ff52e12041fff962c4bf931d5454f7b5d0a312e55cdbf5b5cd96d",
+        "provenance-navigator/rules/online.py": "aef328acf78f174f2ebf23958f9a97117972eb837a151c52ab9e5f17fae7ddcc",
+        "provenance-navigator/closure/extractor.py": "9bf9de715a5da18b8be7a08201040caa1294a8d6989fda45ae91ba55ebd7f761",
         "provenance-navigator/closure/fold.py": "031c4b6c092544017e6b0dde765a15bba80b0783d69c75d2890b26997fa1c703",
         "provenance-navigator/closure/walk.py": "ba60169c9a04f7046f1faabb000c27b1bdc006ddfb56be5c5076bb8b6934b9c5",
         "provenance-navigator/common/facts.py": "7525cb05278081bf478bddc1d937d1c360ad0535732382df6d49c4b0a66b7286",
