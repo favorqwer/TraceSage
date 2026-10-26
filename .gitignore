@@ -17,3 +17,7 @@ provenance-engine/.baseline-build/
 
 # 工具运行期临时缓存
 gt-annotator/tmp/
+
+# Web 前端依赖与构建产物
+web/node_modules/
+web/dist/
