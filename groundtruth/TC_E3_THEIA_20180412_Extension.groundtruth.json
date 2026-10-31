@@ -1,0 +1,291 @@
+{
+ "scenario": "TC_E3_THEIA_20180412_Extension",
+ "source": "TC_Ground_Truth_Report_E3_Update.pdf 3.11 (20180412 THEIA Browser Extension w/ Drakon Dropper)",
+ "database": "attack-e3-theia-v2",
+ "window": {
+  "from": "2018-04-12T16:40:00Z",
+  "to": "2018-04-12T17:40:00Z"
+ },
+ "tz": "UTC",
+ "granularity": "边级：must 边取自图内实测（PDF 锚点 + gt-annotator activity 会话子树）",
+ "provenance": "gt-annotator activity/edges 检索 + PDF 章节对齐",
+ "scorable": true,
+ "caveat": "must 只含攻击会话子树的动作与 PDF 点名的连接；浏览器/邮件客户端背景流量已剔除。持续载荷传输与端口扫描以 possible 规则表达。其中 6 条边的数据源没有返回值，effect 按 gt-annotator facts.effect_of 的口径记为 success（成败未核）。",
+ "entry": {
+  "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+  "action": "connect",
+  "dst": "n:tc-e3-theia:128.55.12.110:38445->141.43.176.203:80",
+  "effect": "success",
+  "edge_key": "ProcessToNetwork:2007249842:connect",
+  "syscall": "connect",
+  "time": "2018-04-12 16:44:41.000",
+  "why": "攻击链最早可归属动作"
+ },
+ "poi": {
+  "src": "p:tc-e3-theia/:/home/admin/profile (deleted)",
+  "action": "unlink",
+  "dst": "f:tc-e3-theia/:/var/log/mail",
+  "effect": "success",
+  "edge_key": "ProcessToFile:2007664084:unlink",
+  "syscall": "unlink",
+  "time": "2018-04-12 17:26:30.000",
+  "why": "该场攻击的终局锚点"
+ },
+ "counts": {
+  "actions": 5,
+  "must_entries": 13,
+  "rules": 1,
+  "steps_total": 14,
+  "edges_total_with_dupes": 13,
+  "edges_unique": 13
+ },
+ "attack_path": [
+  {
+   "id": "P1",
+   "phase": "[P1] 载荷落盘 / 改写 / 删除（文件动作）",
+   "time": "2018-04-12 16:57:22.000 ~ 2018-04-12 17:26:30.000",
+   "what": "载荷落盘 / 改写 / 删除（文件动作）",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "p:tc-e3-theia/:/home/admin/profile (deleted)",
+     "action": "write",
+     "dst": "f:tc-e3-theia/:/var/log/wdev",
+     "effect": "success",
+     "edge_key": "ProcessToFile:2007316560:write",
+     "syscall": "write",
+     "event_id": 2007316560,
+     "time": "2018-04-12 16:57:22.000",
+     "result": 166640
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/profile (deleted)",
+     "action": "unlink",
+     "dst": "f:tc-e3-theia/:/var/log/wdev",
+     "effect": "success",
+     "edge_key": "ProcessToFile:2007323668:unlink",
+     "syscall": "unlink",
+     "event_id": 2007323668,
+     "time": "2018-04-12 17:01:30.000",
+     "result": null
+    },
+    {
+     "src": "p:tc-e3-theia/:/etc/firefox/native-messaging-hosts/gtcache",
+     "action": "write",
+     "dst": "f:tc-e3-theia/:/tmp/memtrace.so",
+     "effect": "success",
+     "edge_key": "ProcessToFile:2007359893:write",
+     "syscall": "write",
+     "event_id": 2007359893,
+     "time": "2018-04-12 17:02:51.000",
+     "result": 166640
+    },
+    {
+     "src": "p:tc-e3-theia/:/etc/firefox/native-messaging-hosts/gtcache",
+     "action": "unlink",
+     "dst": "f:tc-e3-theia/:/tmp/memtrace.so",
+     "effect": "success",
+     "edge_key": "ProcessToFile:2007505992:unlink",
+     "syscall": "unlink",
+     "event_id": 2007505992,
+     "time": "2018-04-12 17:10:32.000",
+     "result": null
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/profile (deleted)",
+     "action": "write",
+     "dst": "f:tc-e3-theia/:/var/log/mail",
+     "effect": "success",
+     "edge_key": "ProcessToFile:2007581594:write",
+     "syscall": "write",
+     "event_id": 2007581594,
+     "time": "2018-04-12 17:16:49.000",
+     "result": 95015
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/profile (deleted)",
+     "action": "unlink",
+     "dst": "f:tc-e3-theia/:/var/log/mail",
+     "effect": "success",
+     "edge_key": "ProcessToFile:2007664084:unlink",
+     "syscall": "unlink",
+     "event_id": 2007664084,
+     "time": "2018-04-12 17:26:30.000",
+     "result": null
+    }
+   ]
+  },
+  {
+   "id": "P2",
+   "phase": "[P2] 载荷赋权与执行",
+   "time": "2018-04-12 17:17:04.000 ~ 2018-04-12 17:17:04.000",
+   "what": "载荷赋权与执行",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "f:tc-e3-theia/:/var/log/mail",
+     "action": "exec",
+     "dst": "p:tc-e3-theia/:/var/log/mail",
+     "effect": "success",
+     "edge_key": "FileToProcess:2007582093:exec",
+     "syscall": "exec",
+     "event_id": 2007582093,
+     "time": "2018-04-12 17:17:04.000",
+     "result": null
+    }
+   ]
+  },
+  {
+   "id": "P3",
+   "phase": "[P3] 外联下载与 C2 连接（connect）",
+   "time": "2018-04-12 16:44:41.000 ~ 2018-04-12 17:17:04.000",
+   "what": "外联下载与 C2 连接（connect）",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:38445->141.43.176.203:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:2007249842:connect",
+     "syscall": "connect",
+     "event_id": 2007249842,
+     "time": "2018-04-12 16:44:41.000",
+     "result": 0
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:38467->141.43.176.203:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:2007287182:connect",
+     "syscall": "connect",
+     "event_id": 2007287182,
+     "time": "2018-04-12 16:50:18.000",
+     "result": 0
+    },
+    {
+     "src": "p:tc-e3-theia/:/bin/dash",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:49721->146.153.68.151:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:2007287554:connect",
+     "syscall": "connect",
+     "event_id": 2007287554,
+     "time": "2018-04-12 16:50:18.000",
+     "result": 0
+    },
+    {
+     "src": "p:tc-e3-theia/:/var/log/mail",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:43730->149.52.198.23:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:2007582111:connect",
+     "syscall": "connect",
+     "event_id": 2007582111,
+     "time": "2018-04-12 17:17:04.000",
+     "result": 0
+    }
+   ]
+  },
+  {
+   "id": "P4",
+   "phase": "[P4] 植入体进程派生（控制流）",
+   "time": "2018-04-12 17:02:51.822 ~ 2018-04-12 17:17:04.223",
+   "what": "植入体进程派生（控制流）",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "p:tc-e3-theia/:/bin/dash",
+     "action": "clone",
+     "dst": "p:tc-e3-theia/:/etc/firefox/native-messaging-hosts/gtcache",
+     "effect": "success",
+     "edge_key": "ProcessToProcess:2007359891:clone",
+     "syscall": "clone",
+     "event_id": 2007359891,
+     "time": "2018-04-12 17:02:51.822",
+     "result": null
+    },
+    {
+     "src": "p:tc-e3-theia/:/var/log/mail",
+     "action": "clone",
+     "dst": "p:tc-e3-theia/:/var/log/mail",
+     "effect": "success",
+     "edge_key": "ProcessToProcess:2007582114:clone",
+     "syscall": "clone",
+     "event_id": 2007582114,
+     "time": "2018-04-12 17:17:04.223",
+     "result": null
+    }
+   ]
+  },
+  {
+   "id": "R1",
+   "phase": "[R1] 持续载荷传输与扫描（可能集合）",
+   "time": "",
+   "what": "数量随环境膨胀的批量边，用规则表达；与 must 边互斥（none_of 排除已列端点）",
+   "collection": "possible",
+   "rules": [
+    {
+     "rule_id": "R1",
+     "direction": "src_to_dst",
+     "action": [
+      "connect"
+     ],
+     "source": {
+      "vertex": "process",
+      "match": "exact",
+      "value": "/var/log/mail"
+     },
+     "target": {
+      "vertex": "network",
+      "match": "any",
+      "none_of": [
+       {
+        "vertex": "network",
+        "match": "path_suffix",
+        "value": "146.153.68.151:80"
+       },
+       {
+        "vertex": "network",
+        "match": "path_suffix",
+        "value": "141.43.176.203:80"
+       },
+       {
+        "vertex": "network",
+        "match": "path_suffix",
+        "value": "149.52.198.23:80"
+       }
+      ]
+     },
+     "note": "植入体 /var/log/mail 发起 2980 次 connect 的扫描/横向尝试"
+    }
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "step": "stream",
+   "why": "21 条攻击连接上的 send/recv 未写成规则：TRACE 的进程内容为 <NA>，规则无法与背景流量区分，且校验器在该形态下 0 匹配"
+  },
+  {
+   "step": "connectivity",
+   "why": "GT 为 3 个连通分量；图里不存在跨会话因果边，补齐即伪造，故如实保留"
+  }
+ ],
+ "connectivity": {
+  "connected": false,
+  "components": 3,
+  "component_sizes": [
+   5,
+   4,
+   3
+  ],
+  "why": "同一场攻击在数据里被传感器记成三个互不相连的会话：micro 会话（/var/log/mail）、gtcache 会话（/etc/firefox/native-messaging-hosts/gtcache，经原生消息宿主挂载到 firefox）、firefox 自身的外联。三者在图上没有 clone / exec / 文件关系：gtcache 的邻居只有 /bin/dash 与 loader 连接；micro 的邻居只有它自己、执行它的文件与 ->NA:0 的扫描连接。",
+  "search": [
+   "1 跳邻居精确检索：三个分量之间 0 条桥接边",
+   "15 跳因果路径深搜：在 3.1M 边的库上 30 分钟未返回，已中止"
+  ],
+  "decision": "按人工决定保留单份 GT，不补造边；校验器的连通性门禁因此长期为 fail，属已知且已披露的缺陷"
+ }
+}

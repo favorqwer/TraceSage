@@ -1,0 +1,76 @@
+{
+ "scenario": "TC_E3_THEIA_20180410_Phishing",
+ "source": "TC_Ground_Truth_Report_E3_Update.pdf 4.6 (20180410 1300 THEIA Phishing E-mail w/ Link)",
+ "database": "attack-e3-theia-v2",
+ "window": {
+  "from": "2018-04-10T17:30:00Z",
+  "to": "2018-04-10T19:30:00Z"
+ },
+ "tz": "UTC",
+ "granularity": "边级：must 边取自图内实测（PDF 锚点 + gt-annotator activity 会话子树）",
+ "provenance": "gt-annotator activity/edges 检索 + PDF 章节对齐",
+ "scorable": true,
+ "caveat": "must 只含攻击会话子树的动作与 PDF 点名的连接；浏览器/邮件客户端背景流量已剔除。持续载荷传输与端口扫描以 possible 规则表达。其中 0 条边的数据源没有返回值，effect 按 gt-annotator facts.effect_of 的口径记为 success（成败未核）。",
+ "entry": {
+  "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+  "action": "send",
+  "dst": "n:tc-e3-theia:128.55.12.110:38167->208.75.117.3:80",
+  "effect": "success",
+  "edge_key": "ProcessToNetwork:1001084059:send",
+  "syscall": "sendto",
+  "time": "2018-04-10 17:42:54.000",
+  "why": "攻击链最早可归属动作"
+ },
+ "poi": {
+  "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+  "action": "send",
+  "dst": "n:tc-e3-theia:128.55.12.110:50742->208.75.117.2:80",
+  "effect": "success",
+  "edge_key": "ProcessToNetwork:1001128707:send",
+  "syscall": "sendto",
+  "time": "2018-04-10 17:44:36.000",
+  "why": "该场攻击的终局锚点"
+ },
+ "counts": {
+  "actions": 1,
+  "must_entries": 2,
+  "rules": 0,
+  "steps_total": 2,
+  "edges_total_with_dupes": 2,
+  "edges_unique": 2
+ },
+ "attack_path": [
+  {
+   "id": "P3",
+   "phase": "[P3] 外联下载与 C2 连接（connect）",
+   "time": "2018-04-10 17:42:54.000 ~ 2018-04-10 17:44:36.000",
+   "what": "外联下载与 C2 连接（connect）",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+     "action": "send",
+     "dst": "n:tc-e3-theia:128.55.12.110:38167->208.75.117.3:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:1001084059:send",
+     "syscall": "sendto",
+     "event_id": 1001084059,
+     "time": "2018-04-10 17:42:54.000",
+     "result": 311
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+     "action": "send",
+     "dst": "n:tc-e3-theia:128.55.12.110:50742->208.75.117.2:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:1001128707:send",
+     "syscall": "sendto",
+     "event_id": 1001128707,
+     "time": "2018-04-10 17:44:36.000",
+     "result": 482
+    }
+   ]
+  }
+ ],
+ "notes": []
+}

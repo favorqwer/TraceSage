@@ -1,0 +1,273 @@
+{
+ "scenario": "TC_E3_THEIA_20180410_Firefox",
+ "source": "TC_Ground_Truth_Report_E3_Update.pdf 3.3 (20180410 1400 THEIA Firefox Backdoor w/ Drakon In-Memory)",
+ "database": "attack-e3-theia-v2",
+ "window": {
+  "from": "2018-04-10T17:30:00Z",
+  "to": "2018-04-10T19:30:00Z"
+ },
+ "tz": "UTC",
+ "granularity": "边级：must 边取自图内实测（PDF 锚点 + gt-annotator activity 会话子树）",
+ "provenance": "gt-annotator activity/edges 检索 + PDF 章节对齐",
+ "scorable": true,
+ "caveat": "must 只含攻击会话子树的动作与 PDF 点名的连接；浏览器/邮件客户端背景流量已剔除。持续载荷传输与端口扫描以 possible 规则表达。其中 6 条边的数据源没有返回值，effect 按 gt-annotator facts.effect_of 的口径记为 success（成败未核）。",
+ "entry": {
+  "src": "p:tc-e3-theia/:/usr/bin/fluxbox",
+  "action": "connect",
+  "dst": "n:tc-e3-theia:128.55.12.110:42087->61.130.69.232:80",
+  "effect": "success",
+  "edge_key": "ProcessToNetwork:1001420207:connect",
+  "syscall": "connect",
+  "time": "2018-04-10 18:25:32.000",
+  "why": "攻击链最早可归属动作"
+ },
+ "poi": {
+  "src": "p:tc-e3-theia/:/home/admin/profile (deleted)",
+  "action": "write",
+  "dst": "f:tc-e3-theia/:/var/log/xdev",
+  "effect": "success",
+  "edge_key": "ProcessToFile:1004275572:write",
+  "syscall": "write",
+  "time": "2018-04-10 18:58:29.000",
+  "why": "该场攻击的终局锚点"
+ },
+ "counts": {
+  "actions": 4,
+  "must_entries": 17,
+  "rules": 0,
+  "steps_total": 17,
+  "edges_total_with_dupes": 17,
+  "edges_unique": 17
+ },
+ "attack_path": [
+  {
+   "id": "P1",
+   "phase": "[P1] 载荷落盘 / 改写 / 删除（文件动作）",
+   "time": "2018-04-10 18:35:17.000 ~ 2018-04-10 18:58:29.000",
+   "what": "载荷落盘 / 改写 / 删除（文件动作）",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+     "action": "write",
+     "dst": "f:tc-e3-theia/:/home/admin/clean",
+     "effect": "success",
+     "edge_key": "ProcessToFile:1003928682:write",
+     "syscall": "write",
+     "event_id": 1003928682,
+     "time": "2018-04-10 18:35:17.000",
+     "result": 166784
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+     "action": "write",
+     "dst": "f:tc-e3-theia/:/home/admin/profile",
+     "effect": "success",
+     "edge_key": "ProcessToFile:1004233516:write",
+     "syscall": "write",
+     "event_id": 1004233516,
+     "time": "2018-04-10 18:56:32.000",
+     "result": 166784
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/profile (deleted)",
+     "action": "write",
+     "dst": "f:tc-e3-theia/:/var/log/xdev",
+     "effect": "success",
+     "edge_key": "ProcessToFile:1004275572:write",
+     "syscall": "write",
+     "event_id": 1004275572,
+     "time": "2018-04-10 18:58:29.000",
+     "result": 166640
+    }
+   ]
+  },
+  {
+   "id": "P2",
+   "phase": "[P2] 载荷赋权与执行",
+   "time": "2018-04-10 18:35:30.000 ~ 2018-04-10 18:56:39.000",
+   "what": "载荷赋权与执行",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "f:tc-e3-theia/:/home/admin/clean",
+     "action": "exec",
+     "dst": "p:tc-e3-theia/:/home/admin/clean",
+     "effect": "success",
+     "edge_key": "FileToProcess:1003928813:exec",
+     "syscall": "exec",
+     "event_id": 1003928813,
+     "time": "2018-04-10 18:35:30.000",
+     "result": null
+    },
+    {
+     "src": "f:tc-e3-theia/:/home/admin/profile",
+     "action": "exec",
+     "dst": "p:tc-e3-theia/:/home/admin/profile",
+     "effect": "success",
+     "edge_key": "FileToProcess:1004237978:exec",
+     "syscall": "exec",
+     "event_id": 1004237978,
+     "time": "2018-04-10 18:56:39.000",
+     "result": null
+    }
+   ]
+  },
+  {
+   "id": "P3",
+   "phase": "[P3] 外联下载与 C2 连接（connect）",
+   "time": "2018-04-10 18:25:32.000 ~ 2018-04-10 18:56:39.000",
+   "what": "外联下载与 C2 连接（connect）",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "p:tc-e3-theia/:/usr/bin/fluxbox",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:42087->61.130.69.232:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:1001420207:connect",
+     "syscall": "connect",
+     "event_id": 1001420207,
+     "time": "2018-04-10 18:25:32.000",
+     "result": 0
+    },
+    {
+     "src": "p:tc-e3-theia/:/usr/bin/fluxbox",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:33100->141.43.176.203:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:1003909649:connect",
+     "syscall": "connect",
+     "event_id": 1003909649,
+     "time": "2018-04-10 18:31:22.000",
+     "result": 0
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:44354->146.153.68.151:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:1003910415:connect",
+     "syscall": "connect",
+     "event_id": 1003910415,
+     "time": "2018-04-10 18:31:22.000",
+     "result": 0
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/clean",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:45226->161.116.88.72:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:1003928831:connect",
+     "syscall": "connect",
+     "event_id": 1003928831,
+     "time": "2018-04-10 18:35:30.000",
+     "result": 0
+    },
+    {
+     "src": "p:tc-e3-theia/:/usr/bin/fluxbox",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:33157->141.43.176.203:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:1004135388:connect",
+     "syscall": "connect",
+     "event_id": 1004135388,
+     "time": "2018-04-10 18:54:16.000",
+     "result": 0
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:44411->146.153.68.151:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:1004136152:connect",
+     "syscall": "connect",
+     "event_id": 1004136152,
+     "time": "2018-04-10 18:54:16.000",
+     "result": 0
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/profile",
+     "action": "connect",
+     "dst": "n:tc-e3-theia:128.55.12.110:45668->161.116.88.72:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:1004237996:connect",
+     "syscall": "connect",
+     "event_id": 1004237996,
+     "time": "2018-04-10 18:56:39.000",
+     "result": 0
+    }
+   ]
+  },
+  {
+   "id": "P4",
+   "phase": "[P4] 植入体进程派生（控制流）",
+   "time": "2018-04-10 18:30:31.832 ~ 2018-04-10 18:56:55.862",
+   "what": "植入体进程派生（控制流）",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "p:tc-e3-theia/:/usr/bin/fluxbox",
+     "action": "clone",
+     "dst": "p:tc-e3-theia/:/home/admin/Downloads/firefox/firefox",
+     "effect": "success",
+     "edge_key": "ProcessToProcess:1003860408:clone",
+     "syscall": "clone",
+     "event_id": 1003860408,
+     "time": "2018-04-10 18:30:31.832",
+     "result": null
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/clean",
+     "action": "clone",
+     "dst": "p:tc-e3-theia/:/home/admin/clean",
+     "effect": "success",
+     "edge_key": "ProcessToProcess:1003928842:clone",
+     "syscall": "clone",
+     "event_id": 1003928842,
+     "time": "2018-04-10 18:35:30.224",
+     "result": null
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/clean",
+     "action": "clone",
+     "dst": "p:tc-e3-theia/:/home/admin/clean (deleted)",
+     "effect": "success",
+     "edge_key": "ProcessToProcess:1003929310:clone",
+     "syscall": "clone",
+     "event_id": 1003929310,
+     "time": "2018-04-10 18:36:01.867",
+     "result": null
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/profile",
+     "action": "clone",
+     "dst": "p:tc-e3-theia/:/home/admin/profile",
+     "effect": "success",
+     "edge_key": "ProcessToProcess:1004238016:clone",
+     "syscall": "clone",
+     "event_id": 1004238016,
+     "time": "2018-04-10 18:56:39.838",
+     "result": null
+    },
+    {
+     "src": "p:tc-e3-theia/:/home/admin/profile",
+     "action": "clone",
+     "dst": "p:tc-e3-theia/:/home/admin/profile (deleted)",
+     "effect": "success",
+     "edge_key": "ProcessToProcess:1004247434:clone",
+     "syscall": "clone",
+     "event_id": 1004247434,
+     "time": "2018-04-10 18:56:55.862",
+     "result": null
+    }
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "step": "stream",
+   "why": "157 条攻击连接上的 send/recv 未写成规则：TRACE 的进程内容为 <NA>，规则无法与背景流量区分，且校验器在该形态下 0 匹配"
+  }
+ ]
+}

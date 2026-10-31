@@ -1,0 +1,147 @@
+{
+ "scenario": "TC_E3_TRACE_20180413_Pine",
+ "source": "TC_Ground_Truth_Report_E3_Update.pdf 3.15 (20180413 1200 TRACE Pine Backdoor w/ Drakon Dropper)",
+ "database": "attack-e3-trace-v2",
+ "window": {
+  "from": "2018-04-13T16:30:00Z",
+  "to": "2018-04-13T17:10:00Z"
+ },
+ "tz": "UTC",
+ "granularity": "边级：must 边取自图内实测（PDF 锚点 + gt-annotator activity 会话子树）",
+ "provenance": "gt-annotator activity/edges 检索 + PDF 章节对齐",
+ "scorable": true,
+ "caveat": "must 只含攻击会话子树的动作与 PDF 点名的连接；浏览器/邮件客户端背景流量已剔除。持续载荷传输与端口扫描以 possible 规则表达。其中 6 条边的数据源没有返回值，effect 按 gt-annotator facts.effect_of 的口径记为 success（成败未核）。",
+ "entry": {
+  "src": "p:tc-e3-trace/:<NA>",
+  "action": "write",
+  "dst": "f:tc-e3-trace/:/tmp/ztmp",
+  "effect": "success",
+  "edge_key": "ProcessToFile:1011191583:write",
+  "syscall": "write",
+  "time": "2018-04-13 16:46:08.000",
+  "why": "攻击链最早可归属动作"
+ },
+ "poi": {
+  "src": "p:tc-e3-trace/:<NA>",
+  "action": "unlink",
+  "dst": "f:tc-e3-trace/:/tmp/ztmp",
+  "effect": "success",
+  "edge_key": "ProcessToFile:1011247771:unlink",
+  "syscall": "unlink",
+  "time": "2018-04-13 16:50:50.000",
+  "why": "该场攻击的终局锚点"
+ },
+ "counts": {
+  "actions": 3,
+  "must_entries": 6,
+  "rules": 0,
+  "steps_total": 6,
+  "edges_total_with_dupes": 6,
+  "edges_unique": 6
+ },
+ "attack_path": [
+  {
+   "id": "P1",
+   "phase": "[P1] 载荷落盘 / 改写 / 删除（文件动作）",
+   "time": "2018-04-13 16:46:08.000 ~ 2018-04-13 16:50:50.000",
+   "what": "载荷落盘 / 改写 / 删除（文件动作）",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "p:tc-e3-trace/:<NA>",
+     "action": "write",
+     "dst": "f:tc-e3-trace/:/tmp/ztmp",
+     "effect": "success",
+     "edge_key": "ProcessToFile:1011191583:write",
+     "syscall": "write",
+     "event_id": 1011191583,
+     "time": "2018-04-13 16:46:08.000",
+     "result": 95015
+    },
+    {
+     "src": "p:tc-e3-trace/:<NA>",
+     "action": "chmod",
+     "dst": "f:tc-e3-trace/:/tmp/ztmp",
+     "effect": "success",
+     "edge_key": "ProcessToFile:1011191585:chmod",
+     "syscall": "chmod",
+     "event_id": 1011191585,
+     "time": "2018-04-13 16:46:08.000",
+     "result": null
+    },
+    {
+     "src": "p:tc-e3-trace/:<NA>",
+     "action": "create",
+     "dst": "f:tc-e3-trace/:/tmp/ztmp",
+     "effect": "success",
+     "edge_key": "ProcessToFile:1011191582:create",
+     "syscall": "create",
+     "event_id": 1011191582,
+     "time": "2018-04-13 16:46:08.165",
+     "result": null
+    },
+    {
+     "src": "p:tc-e3-trace/:<NA>",
+     "action": "unlink",
+     "dst": "f:tc-e3-trace/:/tmp/ztmp",
+     "effect": "success",
+     "edge_key": "ProcessToFile:1011247771:unlink",
+     "syscall": "unlink",
+     "event_id": 1011247771,
+     "time": "2018-04-13 16:50:50.000",
+     "result": null
+    }
+   ]
+  },
+  {
+   "id": "P3",
+   "phase": "[P3] 外联下载与 C2 连接（connect）",
+   "time": "2018-04-13 16:47:46.000 ~ 2018-04-13 16:52:57.000",
+   "what": "外联下载与 C2 连接（connect）",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "p:tc-e3-trace/:<NA>",
+     "action": "connect",
+     "dst": "n:tc-e3-trace:128.55.12.118:59065->162.66.239.75:80",
+     "effect": "success",
+     "edge_key": "ProcessToNetwork:1011195547:connect",
+     "syscall": "connect",
+     "event_id": 1011195547,
+     "time": "2018-04-13 16:47:46.000",
+     "result": null
+    }
+   ]
+  },
+  {
+   "id": "P4",
+   "phase": "[P4] 植入体进程派生（控制流）",
+   "time": "2018-04-13 16:46:08.165 ~ 2018-04-13 16:52:57.985",
+   "what": "植入体进程派生（控制流）",
+   "collection": "must",
+   "edges": [
+    {
+     "src": "p:tc-e3-trace/:<NA>",
+     "action": "clone",
+     "dst": "p:tc-e3-trace/:<NA>",
+     "effect": "success",
+     "edge_key": "ProcessToProcess:1011191581:clone",
+     "syscall": "clone",
+     "event_id": 1011191581,
+     "time": "2018-04-13 16:46:08.165",
+     "result": null
+    }
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "step": "scan",
+   "why": "植入体（内容=<NA>）共 721 次 connect 的扫描/横向尝试未写成规则：进程内容不具区分度，规则会同时命中背景流量，违反纯度定律"
+  },
+  {
+   "step": "stream",
+   "why": "60 条攻击连接上的 send/recv 未写成规则：TRACE 的进程内容为 <NA>，规则无法与背景流量区分，且校验器在该形态下 0 匹配"
+  }
+ ]
+}
