@@ -1,0 +1,425 @@
+# CDM18 事件 -> 图动作映射表（CDM 数据源的唯一转录点）
+#
+# 数据来源：DARPA Transparent Computing Engagement 3 的 CDM18 JSONL
+# （ta1-trace / ta1-theia）。事件类型取自 schema/TCCDMDatum.avsc 的 EventType 枚举，
+# 共 50 个，本表逐条覆盖，未登记的 EVENT_* 一律落 UNMAPPED 桶并在报告里列名
+# （见 tests/test_cdm_mapping.py）。
+#
+# 字段：
+#   name    —— CDM 的 Event.type 原值（不落图，落图的 action 见分支）
+#   gate    —— always  = 对象在调用前已存在，成败都建边
+#              success = 对象由本次调用产生：result<0 记 ATTEMPT 不建边；
+#                        result 缺失（数据源没给返回值）时仍建边、result 留空，
+#                        并计入 gaps.result_absent_edges（「成败未核」）
+#   result  —— data  = 取 properties.map.rc，缺失时取 Event.size（数据类字节数）
+#              errno = 只取 properties.map.rc（缺失即不写该属性）
+#              none  = 一律不写（事件本身没有返回值语义，例如 exit/clone）
+#   [event.<类>] —— 客体类别决定分支；类可以是 file / net / subject
+#      edge    —— 关系类型（五类之一）
+#      action  —— 边属性 action
+#      syscall —— 边属性 syscall（缺省等于 action；family 名与 sysdig 口径对齐）
+#      skip    —— 不建边时落哪个账本桶（handle / attr / no_object / drop / unmapped）
+#
+# 客体类别不在表里声明时（srcsink / memory / pipe / packet / other 等无名对象），
+# 一律落 NO_OBJECT 桶，reason 记 `unnamed_object:<类>`：按项目公理（R3）无名对象
+# 不建顶点，所以这类事件在物理上没有可写的端点。
+#
+# special 字段把整条事件交给 emit.py 里的具名处理函数，用于客体类别不能决定动作的
+# 情形（exec 的双形态、mmap 的 protection、rename 的 to_path、exit 的父进程回退）。
+
+# ---------------------------------------------------------------- 数据流：文件
+[[event]]
+name = "EVENT_WRITE"
+gate = "always"
+result = "data"
+note = "TRACE 上多数写事件的客体是无名对象（2018-04-13 16:30-17:10Z 窗口实测：FileObject 21,607 条 / 索引外 uuid 307,508 条）；无名部分按 R3 落 NO_OBJECT"
+[event.file]
+edge = "ProcessToFile"
+action = "write"
+[event.net]
+edge = "ProcessToNetwork"
+action = "send"
+syscall = "sendto"
+
+[[event]]
+name = "EVENT_READ"
+gate = "always"
+result = "data"
+[event.file]
+edge = "FileToProcess"
+action = "read"
+[event.net]
+edge = "NetworkToProcess"
+action = "recv"
+syscall = "recvfrom"
+
+[[event]]
+name = "EVENT_SENDMSG"
+gate = "always"
+result = "data"
+[event.file]
+edge = "ProcessToFile"
+action = "send"
+syscall = "sendto"
+note = "unix 域套接字的 send 落 ProcessToFile（项目方向约定）"
+[event.net]
+edge = "ProcessToNetwork"
+action = "send"
+syscall = "sendto"
+
+[[event]]
+name = "EVENT_SENDTO"
+gate = "always"
+result = "data"
+[event.file]
+edge = "ProcessToFile"
+action = "send"
+[event.net]
+edge = "ProcessToNetwork"
+action = "send"
+syscall = "sendto"
+
+[[event]]
+name = "EVENT_RECVMSG"
+gate = "always"
+result = "data"
+[event.file]
+edge = "FileToProcess"
+action = "recv"
+syscall = "recvfrom"
+[event.net]
+edge = "NetworkToProcess"
+action = "recv"
+syscall = "recvfrom"
+
+[[event]]
+name = "EVENT_RECVFROM"
+gate = "always"
+result = "data"
+[event.file]
+edge = "FileToProcess"
+action = "recv"
+syscall = "recvfrom"
+[event.net]
+edge = "NetworkToProcess"
+action = "recv"
+syscall = "recvfrom"
+
+# ---------------------------------------------------------------- 连接
+[[event]]
+name = "EVENT_CONNECT"
+gate = "always"
+result = "errno"
+note = "unix 域套接字的 connect 落 ProcessToFile（项目方向约定）"
+[event.file]
+edge = "ProcessToFile"
+action = "connect"
+[event.net]
+edge = "ProcessToNetwork"
+action = "connect"
+
+[[event]]
+name = "EVENT_BIND"
+gate = "always"
+result = "errno"
+[event.file]
+edge = "ProcessToFile"
+action = "bind"
+[event.net]
+edge = "ProcessToNetwork"
+action = "bind"
+
+[[event]]
+name = "EVENT_ACCEPT"
+gate = "always"
+result = "none"
+note = "unix accept 只登记不建边（项目口径）；IP accept 出 NetworkToProcess"
+[event.file]
+skip = "handle"
+[event.net]
+edge = "NetworkToProcess"
+action = "accept"
+
+# ---------------------------------------------------------------- 文件生命周期
+[[event]]
+name = "EVENT_CREATE_OBJECT"
+gate = "success"
+result = "errno"
+[event.file]
+edge = "ProcessToFile"
+action = "create"
+
+[[event]]
+name = "EVENT_UNLINK"
+gate = "always"
+result = "errno"
+[event.file]
+edge = "ProcessToFile"
+action = "unlink"
+
+[[event]]
+name = "EVENT_TRUNCATE"
+gate = "always"
+result = "errno"
+[event.file]
+edge = "ProcessToFile"
+action = "truncate"
+
+[[event]]
+name = "EVENT_MOUNT"
+gate = "always"
+result = "errno"
+[event.file]
+edge = "ProcessToFile"
+action = "mount"
+
+[[event]]
+name = "EVENT_UMOUNT"
+gate = "success"
+result = "errno"
+[event.file]
+edge = "ProcessToFile"
+action = "umount"
+
+# ---------------------------------------------------------------- 进程
+[[event]]
+name = "EVENT_CLONE"
+gate = "always"
+result = "none"
+note = "subject=父进程，predicateObject=子 Subject；clone 的返回子 pid 不落 result"
+[event.subject]
+edge = "ProcessToProcess"
+action = "clone"
+
+[[event]]
+name = "EVENT_FORK"
+gate = "always"
+result = "none"
+[event.subject]
+edge = "ProcessToProcess"
+action = "clone"
+
+[[event]]
+name = "EVENT_CREATE_THREAD"
+gate = "always"
+result = "none"
+special = "handle"
+note = "线程不建边（与 sysdig 侧 CLONE_THREAD 同一口径）"
+
+[[event]]
+name = "EVENT_EXECUTE"
+gate = "always"
+result = "errno"
+special = "exec"
+note = "THEIA：predicateObject 是 FileObject；TRACE：predicateObject 是新 Subject"
+
+[[event]]
+name = "EVENT_EXIT"
+gate = "always"
+result = "none"
+special = "exit"
+note = "predicateObject 与 subject 同一 uuid；父进程取 Subject.parentSubject，回退 ppid"
+
+[[event]]
+name = "EVENT_SIGNAL"
+gate = "always"
+result = "errno"
+special = "signal"
+
+[[event]]
+name = "EVENT_WAIT"
+gate = "always"
+result = "errno"
+special = "wait"
+note = "方向按项目口径：目标 -> 当前"
+
+# ---------------------------------------------------------------- 元数据 / 无名对象
+[[event]]
+name = "EVENT_OPEN"
+gate = "always"
+result = "none"
+special = "open_attr"
+note = "只回填 File.file_type，不建边（与 sysdig 侧 open 同一口径）"
+
+[[event]]
+name = "EVENT_CLOSE"
+gate = "always"
+result = "none"
+special = "handle"
+
+[[event]]
+name = "EVENT_DUP"
+gate = "always"
+result = "none"
+special = "handle"
+
+[[event]]
+name = "EVENT_FCNTL"
+gate = "always"
+result = "none"
+special = "handle"
+
+[[event]]
+name = "EVENT_LSEEK"
+gate = "always"
+result = "none"
+special = "handle"
+
+[[event]]
+name = "EVENT_READ_SOCKET_PARAMS"
+gate = "always"
+result = "none"
+special = "handle"
+
+[[event]]
+name = "EVENT_WRITE_SOCKET_PARAMS"
+gate = "always"
+result = "none"
+special = "handle"
+
+[[event]]
+name = "EVENT_CHANGE_PRINCIPAL"
+gate = "always"
+result = "none"
+special = "attr"
+note = "刷新进程的 uid/euid，不建边"
+
+[[event]]
+name = "EVENT_ADD_OBJECT_ATTRIBUTE"
+gate = "always"
+result = "none"
+special = "attr"
+
+[[event]]
+name = "EVENT_MMAP"
+gate = "always"
+result = "errno"
+special = "mmap"
+note = "文件客体按 protection/flags 出 mmap_read / mmap_write / mmap_exec；内存客体落 NO_OBJECT"
+
+[[event]]
+name = "EVENT_MODIFY_FILE_ATTRIBUTES"
+gate = "always"
+result = "errno"
+special = "chmod"
+note = "properties.map.mode 出现时落边属性 mode"
+
+[[event]]
+name = "EVENT_RENAME"
+gate = "success"
+result = "errno"
+special = "rename"
+note = "另出 FileToProcess（源路径 -> 进程）；to_path 取 predicateObject2"
+
+[[event]]
+name = "EVENT_LINK"
+gate = "success"
+result = "errno"
+special = "link"
+note = "to_path 取 predicateObject2"
+
+[[event]]
+name = "EVENT_CHECK_FILE_ATTRIBUTES"
+gate = "always"
+result = "errno"
+[event.file]
+edge = "FileToProcess"
+action = "stat"
+
+[[event]]
+name = "EVENT_MPROTECT"
+gate = "always"
+result = "none"
+special = "drop_kernel"
+note = "内存保护位变更，客体是 MemoryObject（无名），不建顶点"
+
+[[event]]
+name = "EVENT_SHM"
+gate = "always"
+result = "none"
+special = "drop_kernel"
+
+[[event]]
+name = "EVENT_BOOT"
+gate = "always"
+result = "none"
+special = "no_owner"
+note = "subject/predicateObject 都是全零 uuid"
+
+[[event]]
+name = "EVENT_BLIND"
+gate = "always"
+result = "none"
+special = "blind"
+
+# ---------------------------------------------------------------- 明确不映射
+# 下列事件在项目 action 词表里没有对应动作。硬塞 read / mmap_exec 会伪造语义，
+# 因此全部落 UNMAPPED 桶并逐类型计数，等口径确定后再改本表。
+[[event]]
+name = "EVENT_LOADLIBRARY"
+gate = "always"
+result = "none"
+special = "unmapped"
+note = "动态库装载；项目原文没有 load_library 动作"
+
+[[event]]
+name = "EVENT_MODIFY_PROCESS"
+gate = "always"
+result = "none"
+special = "unmapped"
+
+[[event]]
+name = "EVENT_FLOWS_TO"
+gate = "always"
+result = "none"
+special = "unmapped"
+note = "TA1 自带的数据流推断边；采信它等于把上游推断当观测"
+
+[[event]]
+name = "EVENT_UNIT"
+gate = "always"
+result = "none"
+special = "unmapped"
+note = "TA1 私有单位语义（TRACE 2,395,405 条）"
+
+[[event]]
+name = "EVENT_UPDATE"
+gate = "always"
+result = "none"
+special = "unmapped"
+
+[[event]]
+name = "EVENT_OTHER"
+gate = "always"
+result = "none"
+special = "unmapped"
+
+[[event]]
+name = "EVENT_LOGIN"
+gate = "always"
+result = "none"
+special = "unmapped"
+
+[[event]]
+name = "EVENT_LOGOUT"
+gate = "always"
+result = "none"
+special = "unmapped"
+
+[[event]]
+name = "EVENT_LOGCLEAR"
+gate = "always"
+result = "none"
+special = "unmapped"
+
+[[event]]
+name = "EVENT_SERVICEINSTALL"
+gate = "always"
+result = "none"
+special = "unmapped"
+
+[[event]]
+name = "EVENT_STARTSERVICE"
+gate = "always"
+result = "none"
+special = "unmapped"
