@@ -51,7 +51,8 @@ class MatchIndex:
     在线匹配与离线试模共用这一份谓词；`match()` 返回 {边三元组: 命中的基模或来源字典}。
     """
 
-    def __init__(self, pool: List[Dict[str, Any]], tf: TopologyFacts):
+    def __init__(self, pool: List[Dict[str, Any]], tf: TopologyFacts,
+                 role_cuts: Optional[Any] = None):
         self.pool = pool
         self.tf = tf
         self.out: Dict[str, List[_PreparedEdge]] = defaultdict(list)
@@ -66,6 +67,11 @@ class MatchIndex:
         self._sens_index: Dict[str, Set[int]] = defaultdict(set)
         self.filtered_by_conf = 0
         self.high_conf_pids: Set[str] = set()
+
+        from common.roles import RoleCuts, build_context, role_map
+        self._ctx = build_context(pool)
+        self._cuts = role_cuts if role_cuts is not None else self._ctx.to_cuts()
+        self._roles = role_map(self._ctx, self._cuts)
 
         prepared: List[_PreparedEdge] = []
         for idx, e in enumerate(pool):
@@ -124,9 +130,12 @@ class MatchIndex:
                     self._sens_index[v].add(idx)
         self.edges = prepared
 
+        from common.roles import profile_role as _profile_role
         for pe in prepared:
-            self._role_cache.setdefault(pe.s, evaluate_node_behavioral_role(pe.s, self.inn, self.out, tf))
-            self._role_cache.setdefault(pe.d, evaluate_node_behavioral_role(pe.d, self.inn, self.out, tf))
+            self._role_cache.setdefault(
+                pe.s, self._roles.get(pe.s) or _profile_role(pe.s, self._ctx, self._cuts))
+            self._role_cache.setdefault(
+                pe.d, self._roles.get(pe.d) or _profile_role(pe.d, self._ctx, self._cuts))
         for pe in prepared:
             self.by_sys_role[(pe.sc, self._role_cache.get(pe.s, ""))].append(pe)
 
@@ -134,21 +143,25 @@ class MatchIndex:
         s = str(node)
         role = self._role_cache.get(s)
         if role is None:
-            role = evaluate_node_behavioral_role(s, self.inn, self.out, self.tf)
+            from common.roles import profile_role
+            role = self._roles.get(s) or profile_role(s, self._ctx, self._cuts)
             self._role_cache[s] = role
         return role
 
     @staticmethod
-    def is_motif_admitted(motif: Dict[str, Any], *, min_conf: float = 0.50,
-                           min_lor: float = 2.5) -> bool:
-        """基模准入判据：满足高置信度或（FDR 显著且对数优势比置信下界达标）。"""
-        if motif.get("train_precision", 0.0) >= min_conf:
+    def is_motif_admitted(motif: Dict[str, Any], *,
+                          admitted: Optional[Set[str]] = None) -> bool:
+        """基模准入：由规则库的 selected 名单决定，不含任何数值阈值。
+
+        `admitted` 为 None 表示不筛选，用于离线覆盖表构建（等价于旧的 min_conf=0.0）。
+        """
+        if admitted is None:
             return True
-        return bool(motif.get("is_fdr_sig", False) and motif.get("lor_lower", 0.0) >= min_lor)
+        return str(motif.get("id") or "") in admitted
 
     # --- 匹配 ---
-    def match(self, motifs: List[Dict[str, Any]], *, min_conf: float = 0.50,
-              min_lor: float = 2.5,
+    def match(self, motifs: List[Dict[str, Any]], *,
+              admitted: Optional[Set[str]] = None,
               seed_edges: Optional[Dict[Tuple, Dict[str, Any]]] = None) -> Dict[Tuple, Dict[str, Any]]:
         """执行 1 跳 / 2 跳基模、进程血缘、敏感读取闭环，返回 {边三元组: 命中来源}。"""
         self.filtered_by_conf = 0
@@ -169,7 +182,7 @@ class MatchIndex:
         for motif in motifs:
             if motif.get("hops") != 1:
                 continue
-            admitted = self.is_motif_admitted(motif, min_conf=min_conf, min_lor=min_lor)
+            admitted_flag = self.is_motif_admitted(motif, admitted=admitted)
             src_role = motif.get("src_role")
             dst_role = motif.get("dst_role")
             for sc in motif.get("syscalls") or []:
@@ -177,7 +190,7 @@ class MatchIndex:
                     if pe.login_skip or not pe.taint_ok:
                         continue
                     if self.role_of(pe.s) == src_role and self.role_of(pe.d) == dst_role:
-                        if admitted:
+                        if admitted_flag:
                             matched[pe.key] = motif
                             high |= pe.all_id_vars
                         else:
@@ -193,7 +206,7 @@ class MatchIndex:
             hop1, hop2 = chain[0], chain[1]
             sc1, sc2 = str(hop1.get("syscall")), str(hop2.get("syscall"))
             r1, r_mid, r3 = hop1.get("src_role"), hop1.get("dst_role"), hop2.get("dst_role")
-            admitted = self.is_motif_admitted(motif, min_conf=min_conf, min_lor=min_lor)
+            admitted_flag = self.is_motif_admitted(motif, admitted=admitted)
             for pe1 in self.by_sys_role.get((sc1, r1), ()):
                 mid = pe1.d
                 if self.role_of(mid) != r_mid:
@@ -207,7 +220,7 @@ class MatchIndex:
                     t1_2 = pe2.e.get("t1") or 0
                     if t0_1 > 0 and t1_2 > 0 and t0_1 > t1_2:
                         continue
-                    if admitted:
+                    if admitted_flag:
                         matched[pe1.key] = motif
                         matched[pe2.key] = motif
                         high |= pe1.all_id_vars
@@ -269,23 +282,22 @@ class PatternMatcher:
 
     def __init__(self, topology_facts: TopologyFacts,
                  patterns: Optional[List[Dict[str, Any]]] = None,
-                 min_conf: float = 0.50,
-                 min_lor: float = 2.5):
+                 admitted: Optional[Set[str]] = None,
+                 role_cuts: Optional[Any] = None):
         self.tf = topology_facts
         self.patterns = patterns or []
-        self.min_conf = min_conf
-        self.min_lor = min_lor
+        self.admitted = set(admitted) if admitted is not None else None
+        self.role_cuts = role_cuts
         self.high_conf_pids: Set[str] = set()
         self.filtered_by_conf = 0
 
     def match(self, candidate_pool: List[Dict[str, Any]],
               confirmed_seeds: Optional[Dict[Tuple, Dict[str, Any]]] = None
               ) -> Dict[Tuple, Dict[str, Any]]:
-        index = MatchIndex(candidate_pool, self.tf)
+        index = MatchIndex(candidate_pool, self.tf, role_cuts=self.role_cuts)
         matched = index.match(
             self.patterns,
-            min_conf=self.min_conf,
-            min_lor=self.min_lor,
+            admitted=self.admitted,
             seed_edges=confirmed_seeds,
         )
         self.filtered_by_conf = index.filtered_by_conf
@@ -296,18 +308,19 @@ class PatternMatcher:
 class PoolContext:
     """旧训练期池上下文的兼容入口：预计算一次，按单个基模求值。"""
 
-    def __init__(self, pool: List[Dict[str, Any]], tf: TopologyFacts):
+    def __init__(self, pool: List[Dict[str, Any]], tf: TopologyFacts,
+                 role_cuts: Optional[Any] = None):
         self.pool = pool
         self.tf = tf
         self.index = MatchIndex(pool, tf)
 
     def match_single(self, motif: Dict[str, Any]) -> Dict[Tuple, Dict[str, Any]]:
-        return self.index.match([motif], min_conf=0.0)
+        return self.index.match([motif], admitted=None)
 
 
 def match_single_legacy(pool: List[Dict[str, Any]], tf: TopologyFacts,
                         motif: Dict[str, Any]) -> Dict[Tuple, Dict[str, Any]]:
-    return PatternMatcher(tf, [motif], min_conf=0.0).match(pool)
+    return PatternMatcher(tf, [motif], admitted=None).match(pool)
 
 
 def same_matched(a: Dict[Tuple, Dict[str, Any]], b: Dict[Tuple, Dict[str, Any]]) -> bool:
