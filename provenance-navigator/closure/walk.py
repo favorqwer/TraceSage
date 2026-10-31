@@ -233,7 +233,7 @@ def is_forward_carrier(path: str) -> bool:
 
 
 # ==== 3. 顶点-时间索引 ====
-FORMAT_VERSION = 8   # 8：索引记录增加成败（effect）；7：解析器路径/句柄口径变更
+FORMAT_VERSION = 9   # 9：进程显示名增加命令行首词兜底、删除 cwd；8：索引记录增加成败（effect）
 BUCKET_COUNT = 64
 
 # 定长记录：'<' 无对齐填充
@@ -245,15 +245,22 @@ _BUCKET = struct.Struct("<IIIBHqqqqB")   # 48 字节（多一个 block_id）
 _REL_CODE = {"p2f": 0, "f2p": 1, "p2n": 2, "n2p": 3, "p2p": 4}
 REL_BY_CODE = {v: k for k, v in _REL_CODE.items()}   # 公开：取数来源按编号还原关系名
 
+# 进程显示名取序：完整可执行路径 → 短路径 → name → 命令行首词（必须是绝对路径）。
+# 与调查引擎 `Neo4jNodeRegistry.buildNode` 的取序一致，避免两端对同一个进程显示不同名字。
+_PROC_NAME_EXPR = (
+    "coalesce(p.exe_path, p.exepath, p.name, "
+    "CASE WHEN trim(coalesce(p.cmdline, p.args, '')) STARTS WITH '/' "
+    "THEN split(trim(coalesce(p.cmdline, p.args, '')), ' ')[0] END)"
+)
+
 _VERTEX_QUERIES = {
     "Process": (
         "MATCH (p:Process) RETURN "
         "coalesce(p.process_id, coalesce(p.host_id, '') + '|' + coalesce(p.container_id, '') + '|' + toString(p.pid) + '|' + toString(p.start_ns)) AS key, "
-        "coalesce(p.exe_path, p.exepath, p.name) AS content, "
+        f"{_PROC_NAME_EXPR} AS content, "
         "p.pid AS pid, coalesce(p.name, '') AS name, "
-        "coalesce(p.exe_path, p.exepath, p.name) AS exepath, "
+        f"{_PROC_NAME_EXPR} AS exepath, "
         "coalesce(p.cmdline, p.args, '') AS args, "
-        "coalesce(p.cwd, '') AS cwd, "
         "coalesce(p.ppid, 0) AS ppid"
     ),
     "File": (
@@ -395,7 +402,7 @@ def build_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
                     continue
                 vertex_ids[(kind, key)] = len(vertices)
                 item = {"kind": kind, "key": key, "content": str(row.get("content") or key)}
-                for extra in ("pid", "name", "exepath", "args", "cwd", "protocol", "ppid"):
+                for extra in ("pid", "name", "exepath", "args", "protocol", "ppid"):
                     if row.get(extra) is not None:
                         item[extra] = row[extra]
                 vertices.append(item)
@@ -517,9 +524,8 @@ def ensure_snapshot(graph: Any, *, log: Any = print) -> dict[str, Any]:
 _PROCESS_INFO_RETURN = (
     "coalesce(p.process_id, coalesce(p.host_id, '') + '|' + coalesce(p.container_id, '') + '|' + toString(p.pid) + '|' + toString(p.start_ns)) AS process_id, "
     "p.pid AS pid, coalesce(p.name, '') AS name, "
-    "coalesce(p.exe_path, p.exepath, p.name) AS exepath, "
-    "coalesce(p.cmdline, p.args, '') AS args, "
-    "coalesce(p.cwd, '') AS cwd"
+    f"{_PROC_NAME_EXPR} AS exepath, "
+    "coalesce(p.cmdline, p.args, '') AS args"
 )
 _PROCESS_INFO_ONE = (
     f"MATCH (p:Process) WHERE (p.process_id = $pid OR "
@@ -1146,7 +1152,7 @@ class SnapshotReader:
             vertex = self.vertices[vid]
             cache_process_info(self.database, pid, {
                 "process_id": pid, "pid": vertex.get("pid"), "name": vertex.get("name"),
-                "exepath": vertex.get("exepath"), "args": vertex.get("args"), "cwd": vertex.get("cwd"),
+                "exepath": vertex.get("exepath"), "args": vertex.get("args"),
             })
 
     def network_protocols(self) -> dict[str, str]:
@@ -1195,7 +1201,7 @@ RETURN e.event_id AS event_id,
             WHEN e.bytes IS NOT NULL THEN e.bytes
             ELSE 0 END AS bytes,
        coalesce(p.process_id, coalesce(p.host_id, '') + '|' + coalesce(p.container_id, '') + '|' + toString(p.pid) + '|' + toString(p.start_ns)) AS process_id,
-       coalesce(p.exe_path, p.exepath, p.name) AS process_content,
+       {proc_name} AS process_content,
        coalesce(o.path, o.endpoints, o.file_id, o.network_id) AS other,
        labels(o)[0] AS other_label,
        coalesce(o.proto, o.protocol, '') AS other_protocol
@@ -1207,7 +1213,9 @@ def intake(deps: "Deps") -> dict[str, Any]:
     """POI 命中校验 + 时间范围现算（实例数/时间范围不写进配置）。"""
     poi = deps.scenario.poi.as_dict()
     rel_match = cypher_rel_match(poi["rel"])
-    cypher = _POI_EDGES_CYPHER.format(rel_match=rel_match, label="File" if poi["kind"] == "file" else "Network")
+    cypher = _POI_EDGES_CYPHER.format(
+        rel_match=rel_match, label="File" if poi["kind"] == "file" else "Network",
+        proc_name=_PROC_NAME_EXPR)
     rows = deps.graph.run(cypher, {"key": poi["key"], "sc": poi["syscall"]})
     if not rows:
         raise RuntimeError(f"POI 在库中未命中：{poi}")

@@ -267,14 +267,13 @@ def _origins(by_process: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str,
 
 def summarize_process(graph: Any, process_id: str, owner: str,
                       rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """一个进程的身份摘要（命令行、工作目录、时间范围、边数）。"""
+    """一个进程的身份摘要（命令行、时间范围、边数）。"""
     info = process_info(graph, process_id)
     return {
         "process_id": process_id,
         "owner": owner,
         "owner_args": info.get("cmdline") or info.get("args") or "",
         "owner_pid": info.get("pid") or "",
-        "cwd": info.get("cwd") or "",
         "t0": min(int(r["starttime"]) for r in rows),
         "t1": max(int(r.get("endtime") or r["starttime"]) for r in rows),
         "n_edges": len(rows),
