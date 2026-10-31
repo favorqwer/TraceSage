@@ -10,7 +10,7 @@ import os
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List
 
 from common import config as cfg
 from common.graph import (

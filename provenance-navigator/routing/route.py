@@ -67,8 +67,8 @@ def route(confirmed_edges: List[Dict[str, Any]],
           patterns: Optional[List[Dict[str, Any]]] = None,
           llm_channel: Optional[Any] = None,
           mode: str = "hybrid",
-          min_conf: float = 0.50,
-          min_lor: float = 2.5) -> RouteOutcome:
+          admitted: Optional[Any] = None,
+          role_cuts: Optional[Any] = None) -> RouteOutcome:
     spec = MODES.get(mode)
     if spec is None:
         raise ValueError(f"未知模式 {mode!r}；可选 {sorted(MODES)}")
@@ -105,14 +105,15 @@ def route(confirmed_edges: List[Dict[str, Any]],
 
     rule_promoted: List[Dict[str, Any]] = []
     promoted_by_motif: Dict[str, int] = {}
-    matcher_min_conf: Optional[float] = None
+    matcher_admitted_count: Optional[int] = None
     conf_filtered_count = 0
     matcher = None
 
     # 通道二：符号促进
     if "motif" in spec.channels:
-        matcher = PatternMatcher(tf, patterns or [], min_conf=min_conf, min_lor=min_lor)
-        matcher_min_conf = matcher.min_conf
+        matcher = PatternMatcher(tf, patterns or [], admitted=admitted, role_cuts=role_cuts)
+        matcher_admitted_count = (len(matcher.admitted) if matcher.admitted is not None
+                                  else len(matcher.patterns))
         matched = matcher.match(clean_unexcluded, confirmed_seeds=final_confirmed)
         conf_filtered_count = matcher.filtered_by_conf
         for e in clean_unexcluded:
@@ -191,8 +192,7 @@ def route(confirmed_edges: List[Dict[str, Any]],
             "anchor_confirmed_count": len(anchor_confirmed),
             "debris_pruned_count": len(debris_pruned),
             "promoted_by_motif": promoted_by_motif,
-            "matcher_min_conf": matcher_min_conf,
-            "matcher_min_lor": getattr(matcher, "min_lor", 2.5) if matcher else None,
+            "matcher_admitted_count": matcher_admitted_count,
             "conf_filtered_count": conf_filtered_count,
             "fast_path_rules": len(rule_promoted),
             "slow_path_llm_confirmed": len(llm_confirmed),

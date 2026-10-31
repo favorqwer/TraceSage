@@ -45,8 +45,9 @@ def build_report(
     anchor_confirmed_count: int = 0,
     promoted_by_motif: dict = None,
     mode: str = "hybrid",
-    matcher_min_conf: float = None,
+    matcher_admitted_count: int = None,
     conf_filtered_count: int = 0,
+    library: dict = None,
 ) -> dict:
     if excluded_edges is None:
         excluded_edges = []
@@ -69,7 +70,7 @@ def build_report(
             "pruned_noise_count": pruned_count,
             "promoted_count": promoted_count,
             "promoted_by_motif": promoted_by_motif or {},
-            "matcher_min_conf": matcher_min_conf,
+            "matcher_admitted_count": matcher_admitted_count,
             "conf_filtered_count": int(conf_filtered_count),
             "anchor_confirmed_count": anchor_confirmed_count,
             "llm_enabled": bool(llm_enabled),
@@ -77,12 +78,13 @@ def build_report(
             "elapsed_seconds": round(elapsed_seconds, 3),
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         },
+        "rules_library": library or {},
     }
 
 
 def build_report_from_outcome(outcome: RouteOutcome, scenario_name: str, *,
                               elapsed_seconds: float = 0.0, llm_calls: int = 0,
-                              llm_enabled: bool = False) -> dict:
+                              llm_enabled: bool = False, library: dict = None) -> dict:
     audit = outcome.audit
     return build_report(
         scenario_name=scenario_name,
@@ -97,8 +99,9 @@ def build_report_from_outcome(outcome: RouteOutcome, scenario_name: str, *,
         anchor_confirmed_count=audit.get("anchor_confirmed_count", 0),
         promoted_by_motif=audit.get("promoted_by_motif", {}),
         mode=audit.get("mode", "hybrid"),
-        matcher_min_conf=audit.get("matcher_min_conf"),
+        matcher_admitted_count=audit.get("matcher_admitted_count"),
         conf_filtered_count=audit.get("conf_filtered_count", 0),
+        library=library,
     )
 
 
