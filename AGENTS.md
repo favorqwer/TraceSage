@@ -40,6 +40,10 @@
 11. **主干同构基线（起点真）**：对照组必须 100% 运行既有验证的主干完整流程，严禁自写“简化版/旁路流程”替代基线；启动对比前必须复核对照组数据，偏离已知历史基准立即阻断排查，严禁在漂移基线上算增益。
 12. **实体差分归因（过程真）**：任何指标提升必须附带具体的差分清单（Diff List，列出具体多召回或精准剔除了哪些对象），严禁仅凭宏观总数增长宣称有效；必须确认差分对象确实由新机制产生，严禁将系统中既有能力的衍生副产物冒充为新收益。
 13. **零假设首段直报（终点真）**：算法验证默认秉持零假设（默认无效甚至有害）；若实测增益为 0、恶化或被既有机制覆盖，必须在交付第一段直接汇报无效结论与物理瓶颈，严禁调参凑数，严禁粉饰交付。
+14. **本地模型推理与硬件精度硬底线（严禁擅自降级）**：
+   - 既定硬件与精度口径：`Qwen3-Embedding-4B` 必须且仅允许采用 `FP8`（`Float8WeightOnlyConfig`）运行于 CUDA；`Qwen3-Reranker-0.6B` 采用原生 `FP16` 运行于 CUDA。
+   - 严禁静默降级：严禁私自将模型迁移至 CPU，严禁私自更换量化方式或精度；在任何情况下，如果 GPU 环境或库调用遇到异常，必须立即执行「阻断诚实法则」停机汇报，严禁「自作主张寻找替代品」。
+   - 变更必须报备：任何涉及计算设备（CPU/CUDA）、模型精度（FP8/FP16/BF16）与模型框架底层实现的变动，必须先列出 Diff 清单并显式获得许可后方可实施。
 
 ### 讲解与沟通约定
 - 默认用户没看过代码、看不懂代码、公式、数学符号及缩写：提到文件、函数、变量先用自然语言说清它是干什么的；专业术语首次出现当场定义（是什么、取值、用途），全文同名；通用行业词（如召回率、查准率、候选集）可直接用。
@@ -123,11 +127,11 @@ TraceSage/
 ### 常用核心工具
 | 脚本 | 用途 |
 |---|---|
-| `tools/score_graph_product.py` | 引擎产出 vs 标准答案评分（召回按步骤、查准按边）；产物未内藏 syscall 时按 `-v2` 库反查补全，反查不到即阻断 |
-| `tools/score_report_product.py` | 智能体 / 导航器报告 vs 标准答案评分（与上一条同一口径） |
+| `tools/score_graph_product.py` | 引擎产出 vs 标准答案评分（召回按步骤、查准按四元组，同一条边多次发生只计一次）；产物未内藏 syscall 时按 `-v2` 库反查补全，反查不到即阻断 |
+| `tools/score_report_product.py` | 智能体 / 导航器报告 vs 标准答案评分（与上一条同一口径：召回按步骤、查准按四元组） |
 | `tools/rules_match.py` | 评分公共模块：可能集合规则与端点条件判定，动作名 ↔ syscall 词表 |
 | `tools/run_all_engine_v2.py` | 批量在 `-v2` 库上跑调查引擎并自动评分 |
-| `tools/promote_navigator_baseline.py` | 导航器留一交叉（10 场景逐折）结果校验后写成正式基线报告 |
+| `tools/promote_loo_baseline.py` | 导航器留一交叉（10 场景逐折）结果校验后写成正式基线报告 |
 | `tools/l1_index.py` | 手动建 / 重建导航器第 1 层顶点-时间索引 |
 | `tools/neo4j_desktop_start.*` / `neo4j_desktop_stop.*` | 本机 Neo4j 桌面版启停 |
 
@@ -143,11 +147,13 @@ python provenance-parser/main.py \
   --neo4j-database attack-<场景名小写连字符>-v2
 ```
 
-**导航器评测：**
+**导航器评测（一律用留一交叉）**：测场景 k 时规则库只由其余 9 个场景生成，场景 k 的标准答案与候选边池不参与蒸馏。
 ```bash
+# 全量留一（rules / hybrid 各一轮）
+python provenance-navigator/run_loo_folds.py --mode rules  --out output/navigator-runs/loo        --keep-reports tmp/loo_rules_reports
+python provenance-navigator/run_loo_folds.py --mode hybrid --out output/navigator-runs/loo-hybrid --keep-reports tmp/loo_hybrid_reports
+# 单场景：自动取该场景的留一折库（没有折库的新场景才退回全量库）
 python provenance-navigator/main.py --scenario <场景全名>
-# 或全量留一交叉
-python provenance-navigator/run_leave_one_out.py
 ```
 单场景报告默认写 `output/navigator-runs/<场景全名>.json`。
 
@@ -181,7 +187,7 @@ python tools/score_report_product.py --report output/navigator-runs/<场景全�
 
 ### 基线产物落盘位置
 - 调查引擎（provenance-engine）的基线一律写 `output/engine-baseline/<场景名>/`：`baseline.json` 是引擎交付的最终图，`groundtruth-eval.txt` 是 `tools/score_graph_product.py` 对同一份产物的完整评分输出；汇总与口径写在 `output/engine-baseline/OVERVIEW.md`。
-- 导航器（provenance-navigator）的基线一律写 `output/navigator-baseline/`（三模式逐场景结果与 `OVERVIEW.md`），由 `tools/promote_navigator_baseline.py` 校验后落盘。
+- 导航器（provenance-navigator）的基线一律写 `output/navigator-baseline/`（留一口径：rules/hybrid 逐场景结果、10 份折库与 `OVERVIEW.md`），由 `tools/promote_loo_baseline.py` 校验后落盘。
 - 当次用的运行产物写 `output/engine-runs/`、`output/navigator-runs/`；这两处不得当作基线，也不得被引用为成绩来源。
 - `tools/run_all_engine_v2.py` 与 `provenance-engine/baseline/run-baseline.sh` 不带输出目录参数时都会写 `output/engine-baseline/`：前者用于批量重跑基线，后者只用于基线复跑；当次测试必须显式传 `output/engine-runs/<场景名>`，否则会覆盖正式基线。
 
