@@ -14,6 +14,7 @@ import json
 import os
 import re
 import tomllib
+from dataclasses import dataclass, field
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -311,16 +312,17 @@ def llm_format_retries() -> int:
     return _pick_int("llm", "format_retries", 2, 0)
 
 
-# --- 场景与 POI ---
-@dataclass(frozen=True)
-class Poi:
-    kind: str                 # "file" | "network"
-    rel: str                  # "p2f" | "p2n"
-    syscall: str              # 家族基本名，如 "write" / "sendto"
-    key: str                  # file_id 或 network_id
+# ---- 场景清单与配置文件读取 ----
 
-    def describe(self) -> str:
-        return f"{self.rel} {self.syscall} -> {self.key}"
+@dataclass(frozen=True)
+class EndpointSpec:
+    """场景的调查起点事件（POI）或攻击入口事件（entry）描述。"""
+
+    kind: str          # "file" | "network"
+    rel: str           # "p2f" | "p2n" | "n2p" | "f2p" ...
+    syscall: str
+    key: str           # file_id 或 network_id
+    raw: dict = field(default_factory=dict, repr=False)
 
     def as_dict(self) -> dict[str, Any]:
         return {"kind": self.kind, "rel": self.rel, "syscall": self.syscall, "key": self.key}
@@ -328,57 +330,68 @@ class Poi:
 
 @dataclass(frozen=True)
 class Scenario:
+    """一个采集场景的配置：数据库名 + POI + 入口事件。"""
+
     name: str
     database: str
-    poi: Poi
+    poi: EndpointSpec
+    entry: Optional[EndpointSpec] = None
 
 
-def _load_raw(path: Optional[Path] = None) -> dict[str, Any]:
-    target = path or SCENARIOS_FILE
+def _endpoint_spec(node: Any) -> EndpointSpec:
+    if not isinstance(node, dict):
+        raise ValueError(f"场景端点必须是对象，实测 {type(node)!r}")
+    kind = str(node.get("kind") or "")
+    rel = str(node.get("rel") or "")
+    syscall = str(node.get("syscall") or "")
+    key = node.get("file_id") or node.get("network_id") or node.get("key") or ""
+    if not (kind and rel and syscall and key):
+        raise ValueError(f"场景端点缺字段（kind/rel/syscall/file_id|network_id）：{node!r}")
+    return EndpointSpec(kind=kind, rel=rel, syscall=syscall, key=str(key), raw=dict(node))
+
+
+def _load_raw(path: Optional[Path] = None) -> dict:
+    target = SCENARIOS_FILE if path is None else Path(path)
     if not target.is_file():
-        raise FileNotFoundError(f"场景配置不存在：{target}")
-    return json.loads(target.read_text(encoding="utf-8"))
+        raise RuntimeError(f"场景清单缺失：{target}")
+    data = json.loads(target.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("scenarios"), dict):
+        raise RuntimeError(f"场景清单结构不符（需要顶层 scenarios 对象）：{target}")
+    return data
 
 
 def available_scenarios(path: Optional[Path] = None) -> list[str]:
+    """全部场景名，按字符串排序（与历史一致）。"""
     return sorted(_load_raw(path)["scenarios"].keys())
 
 
 def load_scenario(name: str, path: Optional[Path] = None) -> Scenario:
     raw = _load_raw(path)["scenarios"]
     if name not in raw:
-        raise KeyError(f"未知场景 {name!r}；可选：{sorted(raw)}")
-    entry = raw[name]
-    poi = entry["poi"]
-    key_name = "file_id" if poi["kind"] == "file" else "network_id"
-    poi_key = poi.get("key") or poi.get(key_name) or poi.get("path") or poi.get("endpoints") or ""
-    db = os.environ.get("NAVIGATOR_DB_OVERRIDE") or (
-        entry["database"] + os.environ.get("NAVIGATOR_DB_SUFFIX", "")
-    )
+        raise KeyError(f"未知场景 {name}；可选：{sorted(raw.keys())}")
+    node = raw[name]
+    entry = node.get("entry")
     return Scenario(
         name=name,
-        database=db,
-        poi=Poi(kind=poi["kind"], rel=poi["rel"], syscall=poi["syscall"], key=poi_key),
+        database=str(node["database"]),
+        poi=_endpoint_spec(node["poi"]),
+        entry=_endpoint_spec(entry) if entry else None,
     )
 
 
-# --- 提示词与规则表（按原样返回，进程内缓存）---
 def load_prompt(name: str) -> str:
-    cached = _PROMPT_CACHE.get(name)
-    if cached is None:
-        cached = (PROMPTS_DIR / name).read_text(encoding="utf-8")
-        _PROMPT_CACHE[name] = cached
-    return cached
+    target = CONFIG_DIR / "prompts" / name
+    if not target.is_file():
+        raise RuntimeError(f"提示词缺失：{target}")
+    return target.read_text(encoding="utf-8")
 
 
 def load_rule_table(name: str) -> Any:
-    cached = _TABLE_CACHE.get(name)
-    if cached is None:
-        cached = json.loads((RULES_DIR / name).read_text(encoding="utf-8"))
-        _TABLE_CACHE[name] = cached
-    return cached
+    target = CONFIG_DIR / name
+    if not target.is_file():
+        raise RuntimeError(f"规则表缺失：{target}")
+    return json.loads(target.read_text(encoding="utf-8"))
 
 
 def load_json(name: str) -> Any:
-    """按名字读 `config/` 下的 JSON（阶段 2 起，规则库与取数判据表统一走这里）。"""
-    return json.loads((CONFIG_DIR / name).read_text(encoding="utf-8"))
+    return load_rule_table(name)
