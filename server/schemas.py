@@ -94,8 +94,6 @@ class EventEnvelope(BaseModel):
 
 
 class InvestigationParameters(BaseModel):
-    matcher_min_lor: float = Field(default=2.5, ge=0.0, le=10.0, description="基模准入对数优势比(LOR)置信下界阈值")
-    matcher_min_conf: float = Field(default=0.50, ge=0.0, le=1.0, description="基模准入最小精确率阈值")
     max_closure_rounds: Optional[int] = Field(default=None, ge=1, le=30, description="因果闭包最大迭代展开轮数")
     hitl_enabled: bool = Field(default=False, description="是否启用人在回路中断审查")
     hitl_lease_timeout_sec: int = Field(default=120, ge=30, le=600, description="人在回路租约等待超时秒数")

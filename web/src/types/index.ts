@@ -83,8 +83,6 @@ export interface InvestigationProgress {
 }
 
 export interface InvestigationParameters {
-  matcher_min_lor: number;
-  matcher_min_conf: number;
   max_closure_rounds: number | null;
   hitl_enabled: boolean;
   hitl_lease_timeout_sec: number;

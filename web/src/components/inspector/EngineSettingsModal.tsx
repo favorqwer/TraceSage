@@ -3,8 +3,6 @@ import { Sliders, X, RotateCcw, Check, ShieldAlert, Cpu, Sparkles } from "lucide
 import { InvestigationParameters } from "../../types";
 
 export const DEFAULT_ENGINE_PARAMETERS: InvestigationParameters = {
-  matcher_min_lor: 2.5,
-  matcher_min_conf: 0.5,
   max_closure_rounds: null,
   hitl_enabled: false,
   hitl_lease_timeout_sec: 120,
@@ -57,66 +55,19 @@ export const EngineSettingsModal: React.FC<EngineSettingsModalProps> = ({
 
         {/* 参数表单主体 */}
         <div className="p-5 overflow-y-auto space-y-5 text-xs text-slate-300">
-          {/* 1. 快速符号通道基模准入阈值 */}
-          <div className="bg-slate-950/60 p-3.5 rounded-lg border border-slate-800/90 space-y-3">
+          {/* 1. 快速符号通道准入（由规则库 selected 名单决定，无数值阈值） */}
+          <div className="bg-slate-950/60 p-3.5 rounded-lg border border-slate-800/90 space-y-2">
             <div className="flex items-center gap-2 text-sky-300 font-semibold text-xs">
               <Cpu className="w-3.5 h-3.5" />
-              <span>快速符号通道：Fisher-FDR 基模准入阈值</span>
+              <span>快速符号通道：因果形态准入</span>
             </div>
-
-            {/* 对数优势比 LOR 置信下界 */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <span className="font-mono text-slate-200">基模对数优势比 (LOR) 下界:</span>
-                <span className="font-mono font-bold text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/60">
-                  {formParams.matcher_min_lor.toFixed(1)}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0.0"
-                max="5.0"
-                step="0.1"
-                value={formParams.matcher_min_lor}
-                onChange={(e) =>
-                  setFormParams({
-                    ...formParams,
-                    matcher_min_lor: parseFloat(e.target.value),
-                  })
-                }
-                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
-              />
-              <p className="text-[11px] text-slate-400">
-                定义在双侧 Fisher 精确检验中，因果边与攻击场景强相关的置信下界（默认 2.5）。
-              </p>
-            </div>
-
-            {/* 最小精确率阈值 */}
-            <div className="space-y-1.5 pt-2 border-t border-slate-800/70">
-              <div className="flex justify-between items-center">
-                <span className="font-mono text-slate-200">基模准入最小精确率阈值:</span>
-                <span className="font-mono font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60">
-                  {Math.round(formParams.matcher_min_conf * 100)}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0.10"
-                max="0.90"
-                step="0.05"
-                value={formParams.matcher_min_conf}
-                onChange={(e) =>
-                  setFormParams({
-                    ...formParams,
-                    matcher_min_conf: parseFloat(e.target.value),
-                  })
-                }
-                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-              />
-              <p className="text-[11px] text-slate-400">
-                基模匹配命中时所要求的精确率下限（默认 50%），数值越高剔除噪声越严格。
-              </p>
-            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              准入由规则库冻结的 <span className="font-mono text-sky-300">selected</span> 名单决定：
+              形态按「边际查准率」排序，选到不再有新攻击边可覆盖为止，全过程不含任何数值阈值。
+              具体放行了哪些形态、第几步入选、边际收益与成本，见调查报告的
+              <span className="font-mono text-sky-300"> rules_library </span>字段与规则库的
+              <span className="font-mono text-sky-300"> greedy_trace</span>。
+            </p>
           </div>
 
           {/* 2. 反向闭包拓扑展开 */}
