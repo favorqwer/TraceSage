@@ -14,8 +14,13 @@ from pipeline import investigate  # noqa: E402
 
 
 def run_scenario(scenario_name: str, input_report: str = None, output_report: str = None,
-                 mode: str = "hybrid", use_llm: bool = None, rules_from: str = "frozen"):
-    """兼容旧调用：`use_llm` 为真等价于 hybrid。"""
+                 mode: str = "hybrid", use_llm: bool = None, rules_from: str = "frozen",
+                 library_path: str = None):
+    """兼容旧调用：`use_llm` 为真等价于 hybrid。
+
+    默认按场景取留一折库（最去测试场景自己的答案）；场景没有折库时视为未参与训练的新场景，
+    退回全量库。`library_path` 可手动指定。
+    """
     if use_llm is not None:
         mode = "hybrid" if use_llm else "rules"
     return investigate(
@@ -24,6 +29,7 @@ def run_scenario(scenario_name: str, input_report: str = None, output_report: st
         rules_from=rules_from,
         input_report=input_report,
         output_report=output_report,
+        library_path=library_path,
     )
 
 
@@ -40,7 +46,9 @@ def main() -> int:
                         help="运行模式：rules / hybrid / llm-only")
     parser.add_argument("--use-llm", action="store_true", help="兼容参数：等价于 --mode hybrid")
     parser.add_argument("--rules-from", choices=["frozen", "fresh"], default="frozen",
-                        help="规则库来源：frozen = 读冻结产物（默认）；fresh = 现蒸馏")
+                        help="规则库来源：frozen = 读折库/冻结产物（默认）；fresh = 现蒸馏")
+    parser.add_argument("--library", default=None,
+                        help="手动指定规则库文件（留一折库或全量库均可），优先于默认取库")
     args = parser.parse_args()
 
     mode = args.mode or ("hybrid" if args.use_llm else "rules")
@@ -50,6 +58,7 @@ def main() -> int:
         rules_from=args.rules_from,
         input_report=args.input,
         output_report=args.output,
+        library_path=args.library,
     )
     return 0
 

@@ -321,9 +321,13 @@ class AsyncPipelineExecutor:
                     "anchor_count": len(anchor_triples),
                 },
             )
-            await self.bus.emit_progress("MATCHING_RULES", 90.0, "加载准入规则库，执行 Fisher-FDR 显著性因果基模匹配...")
-            patterns, library_audit = load_patterns(self.mode, self.rules_from)
-            await self.bus.emit_log(f"已装载因果拓扑基模规则库，规则数: {len(patterns)} 条")
+            await self.bus.emit_progress("MATCHING_RULES", 90.0, "加载准入规则库，执行边际查准率因果形态匹配...")
+            patterns, library_audit = load_patterns(self.mode, self.rules_from,
+                                                      scenario=self.scenario_name)
+            admitted_ids = set(library_audit.get("selected") or [])
+            await self.bus.emit_log(
+                f"已装载因果拓扑形态库，候选 {len(library_audit.get('motifs') or patterns)} 条，"
+                f"准入 {len(admitted_ids)} 条")
 
             # 3. 路由推理与仲裁
             t_route_0 = time.time()
@@ -331,7 +335,7 @@ class AsyncPipelineExecutor:
 
             # 执行主干路由决策
             await self.bus.emit_log(
-                f"正在执行因果拓扑双向路由编排 (模式: {self.mode}, LOR>={self.params.matcher_min_lor}, Prec>={int(self.params.matcher_min_conf*100)}%)..."
+                f"正在执行因果拓扑双向路由编排 (模式: {self.mode}, 准入形态 {len(admitted_ids)} 条)..."
             )
             outcome = await loop.run_in_executor(
                 None,
@@ -343,8 +347,7 @@ class AsyncPipelineExecutor:
                     patterns=patterns,
                     llm_channel=llm_channel,
                     mode=self.mode,
-                    min_conf=self.params.matcher_min_conf,
-                    min_lor=self.params.matcher_min_lor,
+                    admitted=admitted_ids,
                 ),
             )
             route_time = time.time() - t_route_0
