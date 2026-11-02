@@ -1,4 +1,4 @@
-"""把留一交叉（LOO）的 rules / hybrid 两模式结果固化为官方基线。
+"""把留一交叉（LOO）的指定模式结果固化为官方基线。
 
 本工具只处理留一口径（旧的「全部场景蒸馏一份库、所有场景共用」那套评测与固化工具已删除）：
 
@@ -6,16 +6,18 @@
   · 每个场景只用自己的那一折库评分，10 折合并为总成绩。
 
 做五件事，每件都留审计：
-  1. 校验：两模式汇总的场景集必须等于 config/scenarios.json；逐折报告必须齐全，
+  1. 校验：所选模式的汇总场景集必须等于 config/scenarios.json；逐折报告必须齐全，
      且报告里的确认边/未排除边条数必须与汇总行一致（防止拿旧报告顶替）；
   2. 用官方评测工具对每折的**未排除段**单独打分（把 unexcluded 当作上报边集合）；
   3. 把现有 output/navigator-baseline/ 整目录备份到 output/navigator-baseline-bak-<时间戳>/；
-  4. 清空并重建 output/navigator-baseline/（rules/ hybrid/ distill/ 两个汇总 两个未排除指标 OVERVIEW.md）；
-  5. OVERVIEW.md 全部由实测数据渲染，不手抄数字。
+  4. 清空并重建 output/navigator-baseline/（仅写入 --modes 指定的模式；未跑的模式不写、
+     旧数据随备份移出，避免不同代码版本的旧数字混进新基线）；
+  5. OVERVIEW.md 全部由实测数据渲染，不手抄数字；阶段一耗时只在显式传入实测值时才写数字。
 
 用法：
   .venv/Scripts/python.exe tools/promote_loo_baseline.py --dry-run
-  .venv/Scripts/python.exe tools/promote_loo_baseline.py
+  .venv/Scripts/python.exe tools/promote_loo_baseline.py --modes rules --stage1-cached 37.7
+  .venv/Scripts/python.exe tools/promote_loo_baseline.py --modes rules,hybrid
 """
 
 from __future__ import annotations
@@ -44,25 +46,46 @@ MODE_TITLE = {
     "rules": "纯蒸馏规则模式（0 次大模型调用）",
     "hybrid": "智能导航模式（规则 + 大模型仲裁）",
 }
+ALL_MODES = ("rules", "hybrid")
 LIBDIR = REPO / "provenance-navigator" / "config" / "rules-library"
 EVAL = REPO / "tools" / "score_report_product.py"
 WORK = REPO / "tmp" / "loo_promote"
 FINGERPRINT_FILES = [
     "provenance-navigator/pipeline.py",
     "provenance-navigator/run_loo_folds.py",
-    "provenance-navigator/closure/walk.py",
+    "provenance-navigator/closure/policy.py",
+    "provenance-navigator/closure/storage.py",
+    "provenance-navigator/closure/traversal.py",
+    "provenance-navigator/closure/snapshot.py",
     "provenance-navigator/closure/fold.py",
-    "provenance-navigator/closure/extractor.py",
+    "provenance-navigator/closure/intake.py",
+    "provenance-navigator/closure/neo4j.py",
+    "provenance-navigator/closure/trace.py",
     "provenance-navigator/rules/offline.py",
     "provenance-navigator/rules/online.py",
     "provenance-navigator/rules/admission.py",
     "provenance-navigator/rules/coverage.py",
-    "provenance-navigator/common/roles.py",
-    "provenance-navigator/common/facts.py",
+    "provenance-navigator/rules/library.py",
+    "provenance-navigator/rules/roles.py",
+    "provenance-navigator/rules/legacy_roles.py",
+    "provenance-navigator/domain/edge.py",
+    "provenance-navigator/domain/keys.py",
+    "provenance-navigator/domain/taxonomy.py",
+    "provenance-navigator/domain/network.py",
+    "provenance-navigator/domain/pool.py",
+    "provenance-navigator/domain/state.py",
     "provenance-navigator/routing/route.py",
+    "provenance-navigator/routing/prepare.py",
+    "provenance-navigator/routing/channels.py",
     "provenance-navigator/routing/filters.py",
     "provenance-navigator/routing/report.py",
     "provenance-navigator/llm/judge.py",
+    "provenance-navigator/llm/client.py",
+    "provenance-navigator/llm/text.py",
+    "provenance-navigator/llm/verdict.py",
+    "provenance-navigator/settings.py",
+    "tools/rules_match.py",
+    "tools/score_report_product.py",
     "provenance-navigator/config/closure_rules.json",
     "provenance-navigator/config/navigator.toml",
     "provenance-navigator/config/scenarios.json",
@@ -88,14 +111,14 @@ def min_med_max(values):
 
 # ---------- 1. 校验 ----------
 
-def check() -> dict:
+def check(modes) -> dict:
     expected = sorted(load_json(REPO / "provenance-navigator/config/scenarios.json")["scenarios"])
     data = {"summary": {}, "reports": {}, "fold_libs": {}}
 
     lib_name = (LIBDIR / "latest.txt").read_text(encoding="utf-8").strip()
     data["lib_name"] = lib_name
 
-    for mode in ("rules", "hybrid"):
+    for mode in modes:
         sp = SRC[mode] / f"summary_{mode}.json"
         if not sp.is_file():
             raise SystemExit(f"[阻断] 缺少汇总：{sp}")
@@ -141,10 +164,10 @@ def check() -> dict:
 
 # ---------- 2. 未排除段评分 ----------
 
-def unex_metrics(data) -> dict:
+def unex_metrics(data, modes) -> dict:
     out = {}
     WORK.mkdir(parents=True, exist_ok=True)
-    for mode in ("rules", "hybrid"):
+    for mode in modes:
         per = {}
         for sc, rp in data["reports"][mode].items():
             rep = load_json(rp)
@@ -186,14 +209,14 @@ CATS = [
 ]
 
 
-def channels(data) -> dict:
+def channels(data, modes) -> dict:
     """按报告里每条边的 reason 字段逐条归类。
 
     不用 stats.promoted_by_motif：那个计数按形态累加，同一条边被多个形态命中会重复计入，
     合计会大于确认边总数。这里每一类之和必须等于确认边总数，并在函数内断言。
     """
     out = {}
-    for mode in ("rules", "hybrid"):
+    for mode in modes:
         per, tot = {}, {k: 0 for k, _, _ in CATS}
         other = 0
         tot["other"] = 0
@@ -222,7 +245,7 @@ def channels(data) -> dict:
 
 # ---------- 4. 写入 ----------
 
-def write_tree(data, unex, chan, stamp, backup=True) -> None:
+def write_tree(data, unex, chan, stamp, modes, backup=True) -> None:
     backup_dir = REPO / f"output/navigator-baseline-bak-{stamp}"
     if backup and DST.exists():
         shutil.copytree(DST, backup_dir)
@@ -234,7 +257,7 @@ def write_tree(data, unex, chan, stamp, backup=True) -> None:
         elif p.is_dir():
             p.rmdir()
 
-    for mode in ("rules", "hybrid"):
+    for mode in modes:
         d = DST / mode
         d.mkdir(parents=True, exist_ok=True)
         for sc, rp in data["reports"][mode].items():
@@ -268,7 +291,8 @@ def write_tree(data, unex, chan, stamp, backup=True) -> None:
 
 # ---------- 5. OVERVIEW ----------
 
-def render(data, unex, chan, stamp, backup_name) -> str:
+def render(data, unex, chan, stamp, backup_name, modes,
+           stage1_cached=None, stage1_uncached=None) -> str:
     L: list[str] = []
     add = L.append
     s = data["summary"]
@@ -284,6 +308,10 @@ def render(data, unex, chan, stamp, backup_name) -> str:
         "② 形态从 9 个场景的攻击边上重新枚举；③ 命中位图按该档位重算（10 折共出现 4 组档位，"
         "其中 4 折与冻结库相同、直接复用并做过逐位断言）；④ 名单只在 9 个场景上跑贪心。")
     add("- 每折的入选形态数、训练场景清单、档位分界，见 `distill/fold-libraries/` 与 `distill/manifest.json`。")
+    not_run = [m for m in ALL_MODES if m not in modes]
+    if not_run:
+        add(f"- **本轮范围：只运行了 {'、'.join(f'`{m}`' for m in modes)} 模式；"
+            f"{'、'.join(f'`{m}`' for m in not_run)} 本轮未运行，其旧数据没有写入本基线。**")
     add("")
     add("---")
     add("")
@@ -291,7 +319,7 @@ def render(data, unex, chan, stamp, backup_name) -> str:
     add("")
     add("| 模式 | 已确认 召回 | 已确认 查准 | 未排除 召回 | 未排除 查准 | 大模型调用 | 全折耗时 |")
     add("|---|---|---|---|---|---|---|")
-    for mode in ("rules", "hybrid"):
+    for mode in modes:
         m, u = s[mode]["micro"], unex[mode]["micro"]
         add(f"| {MODE_TITLE[mode]} `{mode}` | **{pct(m['recall'])}**（{m['hit']}/{m['total']}） "
             f"| **{pct(m['precision'])}**（{m['correct']}/{m['reported']}） "
@@ -300,7 +328,7 @@ def render(data, unex, chan, stamp, backup_name) -> str:
             f"| {m['calls']} | {m['elapsed']:.1f}s |")
     add("")
     add("## 表二：逐场景明细")
-    for mode in ("rules", "hybrid"):
+    for mode in modes:
         add("")
         add(f"### {MODE_TITLE[mode]} `{mode}`")
         add("")
@@ -330,7 +358,7 @@ def render(data, unex, chan, stamp, backup_name) -> str:
     add("")
     add("| 模式 | 召回 最小/中位/最大 | 查准 最小/中位/最大 |")
     add("|---|---|---|")
-    for mode in ("rules", "hybrid"):
+    for mode in modes:
         rmin, rmed, rmax = min_med_max([r["recall"] for r in s[mode]["results"]])
         pmin, pmed, pmax = min_med_max([r["precision"] for r in s[mode]["results"]])
         add(f"| `{mode}` | {pct(rmin)} / {pct(rmed)} / {pct(rmax)} | {pct(pmin)} / {pct(pmed)} / {pct(pmax)} |")
@@ -339,7 +367,7 @@ def render(data, unex, chan, stamp, backup_name) -> str:
     add("")
     add("| 场景 | 步骤数 | 步骤占比 | 上报边数 | 上报边占比 |")
     add("|---|---|---|---|---|")
-    for d in s["rules"]["denominators"]:
+    for d in s[modes[0]]["denominators"]:
         add(f"| {d['scenario']} | {d['steps']} | {pct(d['step_share'])} | {d['reported']} | {pct(d['report_share'])} |")
 
     add("")
@@ -349,20 +377,28 @@ def render(data, unex, chan, stamp, backup_name) -> str:
     add("")
     add("| 模式 | " + " | ".join(t for _, t, _ in CATS) + " | 其它 | 合计 |")
     add("|---" * (len(CATS) + 3) + "|")
-    for mode in ("rules", "hybrid"):
+    for mode in modes:
         t = chan[mode]["total"]
         add(f"| `{mode}` | " + " | ".join(str(t[k]) for k, _, _ in CATS)
             + f" | {t['other']} | {t['confirmed']} |")
 
-    add("## 表五：与旧口径（同场景蒸馏）的对照")
-    add("")
-    add("旧口径 = 10 个场景的标准答案与候选池蒸馏一份库、所有场景共用，测场景 k 时 k 自己的答案也在库里。"
-        "该口径的成绩已作废，仅作对照保留。")
-    add("")
-    add("| 模式 | 旧 召回 | 旧 查准 | 留一 召回 | 留一 查准 | 召回差 |")
+    old_is_loo = bool(data.get("old_is_loo"))
+    if old_is_loo:
+        add("## 表五：与上一版基线（同为留一交叉）的对照")
+        add("")
+        add("上一版基线同样是留一交叉；两列差异来自代码版本与规则库版本，不是口径变化。")
+        add("")
+        add("| 模式 | 上一版 召回 | 上一版 查准 | 留一 召回 | 留一 查准 | 召回差 |")
+    else:
+        add("## 表五：与旧口径（同场景蒸馏）的对照")
+        add("")
+        add("旧口径 = 10 个场景的标准答案与候选池蒸馏一份库、所有场景共用，测场景 k 时 k 自己的答案也在库里。"
+            "该口径的成绩已作废，仅作对照保留。")
+        add("")
+        add("| 模式 | 旧 召回 | 旧 查准 | 留一 召回 | 留一 查准 | 召回差 |")
     add("|---|---|---|---|---|---|")
     old = data.get("old") or {}
-    for mode in ("rules", "hybrid"):
+    for mode in modes:
         o = old.get(f"summary_{mode}.json")
         if not o:
             add(f"| `{mode}` | （旧基线缺失） | — | {pct(s[mode]['micro']['recall'])} | — | — |")
@@ -379,9 +415,19 @@ def render(data, unex, chan, stamp, backup_name) -> str:
     add("")
     add("## 口径补充")
     add("")
-    add("1. **单折耗时** = 该场景闭包抽取 + 路由编排 + 官方评分（不含阶段一的逐折建库）。阶段一（读冻结覆盖表、"
-        "建 10 个场景的角色上下文、逐折枚举形态、按档位重算命中位图、逐折贪心）本轮实测：有缓存 39.2 秒，"
-        "无缓存 684.5 秒。")
+    if stage1_cached is None and stage1_uncached is None:
+        stage1_text = "阶段一耗时本轮未记录"
+    else:
+        parts = []
+        if stage1_cached is not None:
+            parts.append(f"有缓存 {stage1_cached:.1f} 秒")
+        if stage1_uncached is not None:
+            parts.append(f"无缓存 {stage1_uncached:.1f} 秒")
+        stage1_text = ("阶段一（读冻结覆盖表、建 10 个场景的角色上下文、逐折枚举形态、"
+                       "按档位重算命中位图、逐折贪心）本轮实测：" + "，".join(parts))
+    add("1. **单折耗时** = 该场景闭包抽取 + 路由编排 + 官方评分（不含阶段一的逐折建库）。"
+        "表一的「全折耗时」= 从加载冻结库到评分结束的总时长（含阶段一），不是 10 个单折耗时之和。"
+        f"{stage1_text}。")
     add("2. **未排除段** = 把该段当作上报边集合、用官方工具评分；它是保守兜底池，反映覆盖的保守程度而非判定质量。")
     add("3. **大模型调用次数** = 报告 `stats.llm_calls`，为真实记账值。")
     add("4. **POI 锚点**：调查起点来自 `config/scenarios.json` 的人工指定（外部前置输入）；"
@@ -394,14 +440,16 @@ def render(data, unex, chan, stamp, backup_name) -> str:
     add("")
     add("```bash")
     add("# 逐折建库 + 评测（阶段一有缓存时约 4 分钟，无缓存约 15 分钟）")
-    add(".venv/Scripts/python.exe provenance-navigator/run_loo_folds.py --mode rules \\")
-    add("    --out output/navigator-runs/loo --keep-reports tmp/loo_rules_reports")
-    add(".venv/Scripts/python.exe provenance-navigator/run_loo_folds.py --mode hybrid \\")
-    add("    --out output/navigator-runs/loo-hybrid --keep-reports tmp/loo_hybrid_reports")
+    for mode, outdir, keep in (("rules", "loo", "loo_rules_reports"),
+                               ("hybrid", "loo-hybrid", "loo_hybrid_reports")):
+        if mode not in modes:
+            continue
+        add(f".venv/Scripts/python.exe provenance-navigator/run_loo_folds.py --mode {mode} \\")
+        add(f"    --out output/navigator-runs/{outdir} --keep-reports tmp/{keep}")
     add("# 位图自检（判定重用位图是否与冻结库逐位相同）")
     add(".venv/Scripts/python.exe provenance-navigator/run_loo_folds.py --selftest")
     add("# 写入本目录")
-    add(".venv/Scripts/python.exe tools/promote_loo_baseline.py")
+    add(f".venv/Scripts/python.exe tools/promote_loo_baseline.py --modes {','.join(modes)}")
     add("```")
     add("")
     add("## 附录：代码版本指纹（SHA256 前 16 位）")
@@ -420,17 +468,37 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-backup", action="store_true", help="不备份现有基线（重写同一版时用）")
     ap.add_argument("--backup-name", default="", help="写进 OVERVIEW 的旧基线备份路径说明")
+    ap.add_argument("--modes", default="rules,hybrid",
+                    help="要写入基线的模式，逗号分隔（例如 rules；默认两模式）")
+    ap.add_argument("--stage1-cached", type=float, default=None,
+                    help="本轮阶段一有缓存的实测秒数（写进 OVERVIEW；不传则不写数字）")
+    ap.add_argument("--stage1-uncached", type=float, default=None,
+                    help="本轮阶段一无缓存的实测秒数（写进 OVERVIEW；不传则不写数字）")
     args = ap.parse_args()
 
-    data = check()
+    modes = tuple(m.strip() for m in args.modes.split(",") if m.strip())
+    if not modes or any(m not in ALL_MODES for m in modes) or len(set(modes)) != len(modes):
+        raise SystemExit(f"[阻断] --modes 不合法：{args.modes!r}；可选 {ALL_MODES}")
+
+    data = check(modes)
+    old_src = DST
+    if args.backup_name:
+        cand = Path(args.backup_name)
+        if not cand.is_absolute():
+            cand = REPO / cand
+        if cand.is_dir():
+            old_src = cand
     old = {}
     for name in ("summary_rules.json", "summary_hybrid.json"):
-        if (DST / name).is_file():
-            old[name] = load_json(DST / name)
+        if (old_src / name).is_file():
+            old[name] = load_json(old_src / name)
     data["old"] = old
+    old_overview = old_src / "OVERVIEW.md"
+    data["old_is_loo"] = (old_overview.is_file()
+                         and "口径：留一交叉" in old_overview.read_text(encoding="utf-8"))
 
-    unex = unex_metrics(data)
-    chan = channels(data)
+    unex = unex_metrics(data, modes)
+    chan = channels(data, modes)
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
     if args.backup_name:
         backup_name = args.backup_name
@@ -441,9 +509,9 @@ def main() -> None:
     else:
         backup_name = f"output/navigator-baseline-bak-{time.strftime('%Y%m%d-%H%M')}"
 
-    print(f"[校验通过] 场景 {len(data['fold_libs'])} 个；两模式报告与汇总条数一致；"
-          f"每折训练场景 9 个且不含被测试场景")
-    for mode in ("rules", "hybrid"):
+    print(f"[校验通过] 模式 {'、'.join(modes)}；场景 {len(data['fold_libs'])} 个；"
+          f"逐折报告与汇总条数一致；每折训练场景 9 个且不含被测试场景")
+    for mode in modes:
         m, u = data["summary"][mode]["micro"], unex[mode]["micro"]
         print(f"  {mode:<7} 召回 {m['hit']}/{m['total']} = {pct(m['recall'])}  "
               f"查准 {m['correct']}/{m['reported']} = {pct(m['precision'])}  "
@@ -452,23 +520,28 @@ def main() -> None:
 
     if args.dry_run:
         print("[dry-run] 不写入。OVERVIEW 预览前 30 行：")
-        print("\n".join(render(data, unex, chan, stamp, backup_name).splitlines()[:30]))
+        print("\n".join(render(data, unex, chan, stamp, backup_name, modes,
+                               args.stage1_cached, args.stage1_uncached).splitlines()[:30]))
         return
 
-    write_tree(data, unex, chan, time.strftime("%Y%m%d-%H%M"), backup=not args.no_backup)
-    (DST / "OVERVIEW.md").write_text(render(data, unex, chan, stamp, backup_name), encoding="utf-8")
+    write_tree(data, unex, chan, time.strftime("%Y%m%d-%H%M"), modes, backup=not args.no_backup)
+    (DST / "OVERVIEW.md").write_text(
+        render(data, unex, chan, stamp, backup_name, modes,
+               args.stage1_cached, args.stage1_uncached), encoding="utf-8")
 
-    expected = {"OVERVIEW.md", "summary_rules.json", "summary_hybrid.json",
-                "unex_metrics_rules.json", "unex_metrics_hybrid.json",
-                "distill/manifest.json", "rules", "hybrid"}
+    expected = {"OVERVIEW.md", "distill/manifest.json"}
+    for mode in modes:
+        expected.add(mode)
+        expected.add(f"summary_{mode}.json")
+        expected.add(f"unex_metrics_{mode}.json")
     got = {p.name if p.parent == DST else p.relative_to(DST).as_posix()
            for p in DST.rglob("*")}
     missing = expected - got
     if missing:
         raise SystemExit(f"[阻断] 写入后缺少：{sorted(missing)}")
     print(f"[写入完成] {DST.relative_to(REPO)}："
-          f"rules {len(list((DST / 'rules').iterdir()))} 份、hybrid {len(list((DST / 'hybrid').iterdir()))} 份、"
-          f"折库 {len(list((DST / 'distill/fold-libraries').iterdir()))} 份")
+          + "、".join(f"{mode} {len(list((DST / mode).iterdir()))} 份" for mode in modes)
+          + f"、折库 {len(list((DST / 'distill/fold-libraries').iterdir()))} 份")
 
 
 if __name__ == "__main__":
