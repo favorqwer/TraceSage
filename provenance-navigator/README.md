@@ -40,7 +40,7 @@
 为把对抗数据转成可跨场景复用的检测规则，系统采用两步：从标准答案攻击边上枚举抽象拓扑骨架，再按覆盖表的边际查准率贪心决定哪些骨架进入规则库。**全程不含任何数值阈值。**
 
 1. **端点角色的多档位结构编码**：
-   蒸馏与在线匹配共用 `common/roles.py` 的 `profile_role`，端点的结构统计被编码成定长字符串，不含路径字面量或程序名判定：
+   蒸馏与在线匹配共用 `rules/roles.py` 的 `profile_role`，端点的结构统计被编码成定长字符串，不含路径字面量或程序名判定：
    - 进程 `P.<网络方向>.<派生形态>.<实例数档>.<是否改权>`：方向取 `in`/`out`/`both`/`none`（由该进程是否收过 `accept`、是否发出外联系统调用决定），派生形态取 `multi`（同时有 `clone` 与 `execve`）/`exec`/`clone`/`leaf`，实例数档按同一程序在本池内的 `(pid, start_ns)` 计数分档，是否改权看它是否发出 `chmod`/`chown` 一类调用；
    - 文件 `F.<读写执行删位图>.<写入者档>.<敏感名标记>.<位置档>`；
    - 网络端点 `N.<方向>.<对端数档>`：方向取 `listen`/`dial`/`both`。
@@ -78,7 +78,7 @@
 
 ### 1.4 创新维度三：解耦拓扑确定性与深层语义的神经符号双通道
 
-系统全面解耦为**高内聚、低耦合**的四大独立子模块：
+系统按功能解耦为五个模块与一个配置/装配层：
 
 ```
                     [目标异常事件 (POI: File/Network)]
@@ -92,19 +92,19 @@
                                    │
                                    ▼
         ┌──────────────────────────────────────────────────┐
-        │ 4. routing (路由编排与调查报告: route.py)        │
+        │ 4. routing (路由编排与判定通道: route.py)        │
         │                                                  │
         │ ┌──────────────────────────────────────────────┐ │
-        │ │ 通道一：静态只读因果初筛 (filters.py)        │ │
+        │ │ 通道一：静态只读因果初筛 (prepare.py)        │ │
         │ │ -> 毫秒级剥离无前序污染且无交付的静态只读库  │ │
         │ └──────────────────────────────────────────────┘ │
         │                         │                        │
         │                         ▼                        │
         │ ┌──────────────────────────────────────────────┐ │
-        │ │ 通道二：离线抽象基模匹配 (2. rules 模块)     │ │
+        │ │ 通道二：基模匹配 (rules) + 符号促进 (channels)│ │
         │ │ -> online.py 匹配 offline.py 蒸馏规则库      │ │
         │ │ -> 按规则库 selected 名单确认攻击边    │ │
-        │ │ -> 边界穿越故事通道 (Boundary-Story) 补充    │ │
+        │ │ -> routing/channels.py 补血缘、敏感读取、桥接│ │
         │ └──────────────────────────────────────────────┘ │
         │                         │ (未命中歧义边)         │
         │                         ▼                        │
@@ -152,51 +152,66 @@
 
 | 位置 | 字面量 | 用途 | 性质 |
 |---|---|---|---|
-| `common/facts.py` | 20 项可执行名（`sh` `bash` `dash` `zsh` `python` `python3` `perl` `php` `tar` `curl` `wget` `socat` `nc` `netcat` `ncat` `busybox` `awk` `sed` `ruby` `lua`） | 入站会话派生进程的污染传播：命中即把父子进程标记为受污染 | 可执行名列表，不区分攻防用途 |
-| `common/facts.py`、`rules/online.py` | 共享守护进程名（`sshd` `nginx` `apache2` `httpd` `systemd` `cron` `dbus-daemon` `rsyslogd` `mysqld` `mariadb` `redis-server` `postgres` `mongod` `slapd` `java`） | 活跃会话网络桥接时，避免按外部地址盲目扩散导致误报 | 服务名常量 |
-| `common/facts.py`、`rules/online.py` | 系统敏感认证路径、持久化路径前缀、系统库前缀 | 节点角色抽象与静态只读噪声排除 | POSIX／FHS 标准领域常识 |
-| `routing/filters.py` | 静态只读路径前缀（`/proc/`、`/sys/`、`/lib/`、`/usr/lib/`、`/usr/share/`、`/etc/ld.so.`、`/etc/locale`、`/usr/include/`、`/dev/urandom`、`/dev/null`） | 第一级因果初筛，剥离无污染的静态读取 | Linux 惯例路径 |
-| `common/facts.py`、`rules/online.py` | 登录机制路径前缀（`/etc/update-motd.d`、`/usr/lib/update-notifier`、`/usr/lib/ubuntu-release-upgrader`、`/snap/snapd-desktop-integration`） | 排除发行版自带的登录横幅等常态机制噪声 | Ubuntu 22.04 特有，换发行版需重新核对 |
+| `domain/taxonomy.py` | 20 项可执行名（`sh` `bash` `dash` `zsh` `python` `python3` `perl` `php` `tar` `curl` `wget` `socat` `nc` `netcat` `ncat` `busybox` `awk` `sed` `ruby` `lua`） | 入站会话派生进程的污染传播：命中即把父子进程标记为受污染 | 可执行名列表，不区分攻防用途 |
+| `domain/taxonomy.py`、`routing/channels.py` | 共享守护进程名（`sshd` `nginx` `apache2` `httpd` `systemd` `cron` `dbus-daemon` `rsyslogd` `mysqld` `mariadb` `redis-server` `postgres` `mongod` `slapd` `java`） | 活跃会话网络桥接时，避免按外部地址盲目扩散导致误报 | 服务名常量 |
+| `domain/taxonomy.py`、`rules/roles.py` | 系统敏感认证路径、持久化路径前缀、系统库前缀 | 节点角色抽象与静态只读噪声排除 | POSIX／FHS 标准领域常识 |
+| `domain/taxonomy.py`、`routing/prepare.py` | 静态只读路径前缀（`/proc/`、`/sys/`、`/lib/`、`/usr/lib/`、`/usr/share/`、`/etc/ld.so.`、`/etc/locale`、`/usr/include/`、`/dev/urandom`、`/dev/null`） | 第一级因果初筛，剥离无污染的静态读取 | Linux 惯例路径 |
+| `domain/taxonomy.py`、`routing/channels.py` | 登录机制路径前缀（`/etc/update-motd.d`、`/usr/lib/update-notifier`、`/usr/lib/ubuntu-release-upgrader`、`/snap/snapd-desktop-integration`） | 排除发行版自带的登录横幅等常态机制噪声 | Ubuntu 22.04 特有，换发行版需重新核对 |
 
 ---
 
-### 2.2 四大功能模块与共用基础层
+### 2.2 功能模块结构
 
 ```
 provenance-navigator/
-├── README.md                      # 本文档
 ├── main.py                        # 单场景 CLI（--mode {rules, hybrid, llm-only}）
-├── run_loo_folds.py               # 留一交叉运行器（每折规则库只由其余 9 个场景蒸馏）
 ├── pipeline.py                    # 单次调查装配：闭包 → 规则库 → 路由 → 报告
-├── common/                        # 四块共用的基础层
-│   ├── config.py                  # 参数、场景、路径、提示词加载
-│   ├── graph.py                   # 只读 Neo4j、边语义、端点键、调查记录
-│   ├── facts.py                   # 路径本体、系统调用分类、污染事实、角色抽取
-│   └── model.py                   # 模型接入、网关适配、预算记账、JSON 调用
+├── run_loo_folds.py               # 留一交叉运行器
+├── settings.py                    # 参数、场景、路径、提示词与规则表读取
+├── domain/                        # 图事件语义、键解析、系统知识、候选池事实
+│   ├── edge.py                    # 关系类型、方向、内容三元组、入闭包通道位
+│   ├── keys.py                    # 路径/容器/进程键与身份变体
+│   ├── taxonomy.py                # 路径、程序名、系统调用分类与对象谓词
+│   ├── network.py                 # 网络端点字符串解析与本地/外部地址判定
+│   ├── pool.py                    # 候选池统一索引：事实、邻接、管道、本地 IP
+│   └── state.py                   # 调查记录（迁移期保留）
 ├── closure/                       # 【一、闭包抽取】
-│   ├── walk.py                    # POI 定位、快照索引(FORMAT_VERSION=9)、反向闭包、前向补链
-│   ├── fold.py                    # 边折叠、进程身份摘要(_PROC_NAME_EXPR 对齐)、展开编排
-│   └── extractor.py               # 装配 Deps 并提取候选边池
-├── rules/                         # 【二、规则通道】
-│   ├── offline.py                 # 形态枚举、三值标签、覆盖表构建、边际查准率贪心、增量接入(ingest)
-│   └── online.py                  # MatchIndex 在线匹配、按 selected 名单准入、血缘/敏感读取/桥接促进
+│   ├── intake.py                  # 入口：装配依赖、POI 定位与候选边提取
+│   ├── policy.py                  # 取数期判据表求值与生命周期判据
+│   ├── storage.py                 # 索引二进制格式与全部 Cypher 文本
+│   ├── snapshot.py                # L1 顶点-时间索引、SnapshotReader、进程属性
+│   ├── traversal.py               # 反向闭包、前向补链
+│   ├── fold.py                    # 折叠、进程身份摘要、展开编排
+│   ├── neo4j.py                   # 只读 Neo4j 访问与查询审计
+│   └── trace.py                   # 运行轨迹
+├── rules/                         # 【二、蒸馏规则通道】
+│   ├── offline.py                 # 形态枚举、三值标签、覆盖表构建、贪心、增量接入
+│   ├── online.py                  # MatchIndex 形态匹配与 selected 名单准入
+│   ├── roles.py                   # 角色编码与 RoleCuts
+│   ├── coverage.py                # 覆盖表与位图
+│   ├── admission.py               # 指纹、命中重放、贪心选择
+│   ├── library.py                 # 折库/全量库/现蒸馏装载
+│   └── legacy_roles.py            # 旧角色口径兼容
 ├── llm/                           # 【三、大模型慢速通道】
-│   └── judge.py                   # 束划分(Levels 1-5)、四道结构闸门、批量仲裁
-├── routing/                       # 【四、路由编排】
-│   ├── route.py                   # 模式表驱动、锚点注入、通道编排、结果合并与审计
-│   ├── filters.py                 # 静态只读初筛 + 冗余边剪枝
-│   └── report.py                  # 三段式调查报告生成 (edges / unexcluded / excluded)
+│   ├── judge.py                   # 束划分、结构闸门、批量仲裁
+│   ├── client.py                  # 模型接入、网关适配、预算记账
+│   ├── text.py                    # 文本截断与相对时间
+│   └── verdict.py                 # 束结论解析
+├── routing/                       # 【四、路由编排与判定通道】
+│   ├── route.py                   # 模式表驱动、通道编排、结果合并与审计
+│   ├── prepare.py                 # 静态只读初筛
+│   ├── channels.py                # 血缘、敏感读取、会话桥接、边界穿越
+│   ├── filters.py                 # 后置碎片剪枝
+│   └── report.py                  # 三段式报告
 ├── config/                        # 配置文件区
-│   ├── navigator.toml             # 全局超参数
-│   ├── scenarios.json             # 场景与 POI 锚点唯一真源
-│   ├── closure_rules.json         # 闭包取数判据表
-│   ├── rules-library/             # 版本化规则库：rules-library-<时间戳>.json + 覆盖表 + 位图 + latest.txt
-│   └── prompts/judge_bundle.md    # 大模型束判定系统提示词
-├── tools/                         # 规则库维护：rebuild_library.py（重建）、ingest_scenario.py（增量接入）
+│   ├── navigator.toml
+│   ├── scenarios.json
+│   ├── closure_rules.json
+│   ├── rules-library/
+│   └── prompts/judge_bundle.md
+├── tools/                         # 规则库维护
 └── tests/                         # 单元测试与 Golden 契约校验
 ```
-
----
 
 ### 2.3 评测基准数据索引
 
@@ -256,7 +271,7 @@ provenance-navigator/
 
 ### 2.5 边界穿越故事通道（Boundary-Story Channel）
 
-与 `rules/online.py` 的基模匹配、血缘闭环、会话桥接与双端诱导闭环并列的符号促进通路，同属「通道二」的促进环节，**只增不减**：它只把候选边提升为已确认，不删除任何既有确认边。在 `rules` 与 `hybrid` 两个模式下运行（`llm-only` 跳过全部符号通道）。
+与 `rules/online.py` 的基模匹配及 `routing/channels.py` 的血缘、敏感读取、会话桥接、双端诱导闭环并列的符号促进通路，同属「通道二」的促进环节，**只增不减**：它只把候选边提升为已确认，不删除任何既有确认边。在 `rules` 与 `hybrid` 两个模式下运行（`llm-only` 跳过全部符号通道）。
 
 **判据（六步，全部与标准答案无关）**：
 1. **宽入口（观测边界穿越）**：同一个连接对象上同时出现 `connect` 与 `accept` 表示两端都在本机被观测到；只出现其一表示另一端在观测窗口之外，属于候选入口。
@@ -270,8 +285,9 @@ provenance-navigator/
 
 | 模式 | 步骤召回率 | 边查准率 | 大模型调用次数 | 全折耗时 |
 |---|---|---|---|---|
-| `rules`（本通道默认开启） | 69.9%（633/906） | 35.6%（13609/38264） | 0 | 215.4s |
-| `hybrid`（本通道默认开启） | 77.3%（700/906） | 31.9%（14321/44846） | 157 | 412.2s |
+| `rules`（本通道默认开启） | 69.9%（633/906） | 35.6%（13609/38264） | 0 | 247.5s |
+
+本轮未运行 hybrid；hybrid 的旧成绩已不写入当前基线。
 
 各通道确认边数（按报告每条边的 `reason` 逐条统计）见 [output/navigator-baseline/OVERVIEW.md](../output/navigator-baseline/OVERVIEW.md) 表四：本通道在 `rules` 模式确认 3,571 条边，占确认边总数（38,752 条）的 9.2%。
 
