@@ -15,7 +15,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from config_support import temp_config  # noqa: E402
-from common import config as settings  # noqa: E402
+import settings as settings  # noqa: E402
 
 
 class ConfigFileTest(unittest.TestCase):

@@ -1,6 +1,6 @@
 """数据库直查来源（参照实现，只给单测用）：不进生产包。
 
-正式流程只有一种取数方式——读本地顶点-时间索引（`closure/walk.py` 的
+正式流程只有一种取数方式——读本地顶点-时间索引（`closure/snapshot.py` 的
 `SnapshotReader`）。这里保留直查版本，只为了让单测拿它和索引来源逐条对拍：索引构建错了要能发现。
 """
 
@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-import closure.walk as _rules_table
-from closure.walk import object_ruling
-from closure.walk import prefetch_process_info
-from closure.walk import Event
+import closure.policy as _rules_table
+from closure.policy import object_ruling
+from closure.storage import process_info_query
+from closure.traversal import Event
 
 # 表里全部带 not_delivery 后果的事件判据的操作名（与索引来源同一份判据）
 _NOT_DELIVERY = sorted({
@@ -118,6 +118,7 @@ class DbSource:
         self.nondelivery_not_expanded: dict[str, int] = {}   # 被跳过的非交付通道顶点展开次数（不是边数）
         self._ppid_map: Optional[dict[tuple[str, int], list[tuple[int, str]]]] = None
         self._ppid_of: dict[str, int] = {}
+        self._process_info: dict[str, dict[str, Any]] = {}
 
     def _load_ppid(self) -> None:
         """记录到的父子关系（与索引来源同一口径）：(容器, pid) → [(出生时刻, 进程键)]。"""
@@ -173,7 +174,8 @@ class DbSource:
         rows = self._run(_EXPAND_PROCESS, params)
         if seen is None:
             return [_event(row) for row in rows]
-        return [_event(row) for row in rows if int(row["event_id"]) not in seen]
+        return [_event(row) for row in rows
+                if (int(row["event_id"]), str(row["rel"])) not in seen]
 
     def expand_object(self, items: list[tuple[str, int, int]], kind: str,
                       seen: Optional[Any] = None) -> list[Event]:
@@ -198,10 +200,18 @@ class DbSource:
         rows = self._run(_EXPAND_OBJECT[kind], params)
         if seen is None:
             return [_event(row) for row in rows]
-        return [_event(row) for row in rows if int(row["event_id"]) not in seen]
+        return [_event(row) for row in rows
+                if (int(row["event_id"]), str(row["rel"])) not in seen]
 
-    def process_info_many(self, pids: list[str]) -> None:
-        prefetch_process_info(self.graph, pids)
+    def process_info(self, process_id: str) -> dict[str, Any]:
+        """进程静态属性（直查版本，只给单测用；按进程缓存一次）。"""
+        cached = self._process_info.get(process_id)
+        if cached is not None:
+            return cached
+        rows = self._run(process_info_query(many=False), {"pid": process_id})
+        info = rows[0] if rows else {}
+        self._process_info[process_id] = info
+        return info
 
     def close(self) -> None:
         return None

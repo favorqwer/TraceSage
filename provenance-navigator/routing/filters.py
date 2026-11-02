@@ -1,6 +1,5 @@
-"""路由管线的剪枝阶段：前置静态只读初筛 + 后置因果碎片剪枝。
+"""路由管线的后置剪枝阶段。
 
-- `PreFilter`：把无前序污染、无交付的静态系统读取移入未排除。
 - `DebrisPrune`：把包管理内部碎片、死端认证读取、本地 DNS 伪连接等从确认集移入未排除；
   包管理器名单与临时路径从 `config/navigator.toml` 的 `[prune]` 读取。
 
@@ -12,14 +11,12 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from common import config as cfg
-from common.facts import (
-    PSEUDO_PREFIXES as FACT_PSEUDO_PREFIXES,
-    SENSITIVE_AUTH_PATHS,
-    TopologyFacts,
-    is_loopback_dns_resolver,
-)
-from common.graph import edge_key, process_identity_variants
+import settings as cfg
+from domain.network import is_loopback_dns_resolver
+from domain.pool import TopologyFacts
+from domain.taxonomy import PSEUDO_PREFIXES as FACT_PSEUDO_PREFIXES, SENSITIVE_AUTH_PATHS
+from domain.edge import edge_key
+from domain.keys import process_identity_variants
 
 PSEUDO_PREFIXES = FACT_PSEUDO_PREFIXES + ("/dev/",)
 
@@ -35,33 +32,6 @@ PERSISTENCE_PREFIXES = (
     "/var/spool/cron",
     "/etc/rc.local",
 )
-
-
-class PreFilter:
-    """前置初筛：静态只读、无污染、无交付的系统读取。"""
-
-    def __init__(self, topology_facts: TopologyFacts):
-        self.tf = topology_facts
-
-    def apply(self, edges: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        kept: List[Dict[str, Any]] = []
-        moved: List[Dict[str, Any]] = []
-        prefixes = (
-            "/proc/", "/sys/", "/lib/", "/usr/lib/", "/usr/share/",
-            "/etc/ld.so.", "/etc/locale", "/usr/include/", "/dev/urandom", "/dev/null",
-        )
-        for e in edges:
-            sc = e.get("syscall", "")
-            src = str(e.get("src", ""))
-            if sc == "read" and any(src.startswith(p) for p in prefixes):
-                if not self.tf.is_tainted(src):
-                    rec = dict(e)
-                    rec["origin"] = "kept"
-                    rec["reason"] = "因果初筛：系统只读静态资源且无前序写入污染，归入未排除"
-                    moved.append(rec)
-                    continue
-            kept.append(e)
-        return kept, moved
 
 
 class DebrisPrune:
@@ -269,7 +239,3 @@ class DebrisPrune:
 
         return filtered, moved
 
-
-# 兼容旧类名
-CausalFilter = PreFilter
-CausalPivotRouter = DebrisPrune

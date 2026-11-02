@@ -1,6 +1,6 @@
 """LLM 模式：束划分、四道结构闸门、提示词渲染、批调用、单轮推进与通道适配。
 
-本文件只依赖 `common`，不导入 `rules`、`closure`、`routing`。
+本文件只依赖 `domain`、`settings` 与 `llm.*`，不导入 `rules`、`closure`、`routing`。
 """
 
 from __future__ import annotations
@@ -12,23 +12,20 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, Iterable, List
 
-from common import config as cfg
-from common.graph import (
+import settings as cfg
+from domain.edge import (
+    CHANNEL_BITS,
     CONSUMER_RELS,
     DERIVATION_REL,
     PRODUCER_RELS,
     content_triple_of,
     labels_of,
-    parse_bundle_verdicts,
-    rel_time,
-    short,
 )
-from common.model import BudgetCallback, call_json, make_model
+from llm.text import rel_time, short
+from llm.verdict import parse_bundle_verdicts
+from llm.client import BudgetCallback, call_json, make_model
 
 # ==== 1. 束划分与条目装配 ====
-# 入闭包通道的位定义（与第 1 层 walk.CHANNEL_BITS 口径严格一致）
-CHANNEL_BITS = (("Process", 1), ("File", 2), ("Network", 4), ("seed", 8))
-
 LEVEL_NAMES = (
     "第 1 级 程序+关系+系统调用",
     "第 2 级 +入闭包通道",
@@ -41,7 +38,7 @@ LEVEL_NAMES = (
 def channel_class(bits: Any) -> str:
     """通道位掩码 -> 可读类别（同一批边可能从多条通道进入闭包）。"""
     value = int(bits or 0)
-    names = [name for name, bit in CHANNEL_BITS if value & bit]
+    names = [name for name, bit in CHANNEL_BITS.items() if value & bit]
     return "+".join(names) if names else "(无)"
 
 

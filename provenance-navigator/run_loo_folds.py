@@ -45,7 +45,7 @@ sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(REPO))
 
 from pipeline import investigate, load_rule_matcher  # noqa: E402
-from common.roles import build_context, merge_contexts  # noqa: E402
+from rules.roles import build_context, merge_contexts  # noqa: E402
 from rules.admission import assign_ids, compute_hits, greedy_select, motif_sort_key  # noqa: E402
 from rules.coverage import CoverageStore, load_bitmaps  # noqa: E402
 from rules.offline import FrequentSubgraphMiner  # noqa: E402

@@ -1,5 +1,5 @@
 import unittest
-from common.graph import Investigation
+from domain.state import Investigation
 
 class DummyDeps:
     def __init__(self, record):

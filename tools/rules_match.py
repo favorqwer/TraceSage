@@ -60,7 +60,7 @@ sys.path.insert(0, str(ROOT / "provenance-navigator"))
 from provenance.core.syscalls import (  # noqa: E402
     CREATE_ALWAYS, OPEN_FAMILY, canonical_syscall,
 )
-from common.graph import path_part  # noqa: E402
+from domain.keys import path_part  # noqa: E402
 
 SCENARIOS = ROOT / "provenance-navigator" / "config" / "scenarios.json"
 

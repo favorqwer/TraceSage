@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import time
 
-from common.graph import process_content_or_na, split_process_key
+from domain.keys import process_content_or_na, split_process_key
 from routing.route import RouteOutcome
 
 

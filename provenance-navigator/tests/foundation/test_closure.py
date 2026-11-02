@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import unittest
 
-from common import graph as graph_facts
-import closure.walk as C
+from domain import edge as graph_facts
+import closure.traversal as C
 
 
 class FakeSource:
@@ -46,8 +46,14 @@ class FakeSource:
                 out.append(ev)
         return out
 
-    def process_info_many(self, pids):
+    def parent_of_process(self, key):
         return None
+
+    def birth_of_process(self, key):
+        return 0
+
+    def process_info(self, process_id):
+        return {}
 
     def network_protocols(self):
         return {}

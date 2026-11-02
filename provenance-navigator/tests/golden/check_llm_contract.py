@@ -15,8 +15,8 @@ if str(NAV_DIR) not in sys.path:
     sys.path.insert(0, str(NAV_DIR))
 
 import llm.judge as J  # noqa: E402
-from common.graph import Investigation  # noqa: E402
-from common.model import LlmBudget  # noqa: E402
+from domain.state import Investigation  # noqa: E402
+from llm.client import LlmBudget  # noqa: E402
 
 
 class _Deps:

@@ -1,6 +1,6 @@
 """第 1 层判据表的单测（不需要数据库、不需要模型）：对象角色、事件判定。
 
-口径（`config/closure_rules.json` + `closure/walk.py`）：
+口径（`config/closure_rules.json` + `closure/policy.py`）：
 - 对象判据按表顺序取第一个命中，后果是「不展开对象」与「不追交接」；
 - 事件判据：零字节的数据读取（读类边、搬 0 字节）与连接建立类（不算交付）。
 """
@@ -13,8 +13,9 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-import closure.walk as J
-import closure.walk as T
+import closure.policy as J
+import closure.policy as T
+from domain.taxonomy import is_dynamic_library, is_forward_carrier
 
 
 def row(event_id: int, *, pid: str = "7sshd", rel: str = "f2p", other: str = "/etc/passwd",
@@ -79,6 +80,22 @@ class EventRulingTest(unittest.TestCase):
 
     def test_write_is_delivery(self) -> None:
         self.assertNotIn("not_delivery", J.event_ruling("p2f", "write", 10).effects)
+
+
+class PathKnowledgeTest(unittest.TestCase):
+    def test_dynamic_library_set(self) -> None:
+        for path in ("/usr/lib/x86_64-linux-gnu/libc.so.6", "/lib/x", "/opt/app/a.so",
+                     "/usr/local/lib/a.so"):
+            self.assertTrue(is_dynamic_library(path), path)
+        for path in ("/usr/share/doc/x", "/etc/passwd", "/lib64/x", "/usr/lib64/x"):
+            self.assertFalse(is_dynamic_library(path), path)
+
+    def test_forward_carrier_set(self) -> None:
+        for path in ("/tmp/payload", "/etc/passwd", "/run/utmp", "/home/u/x"):
+            self.assertTrue(is_forward_carrier(path), path)
+        for path in ("unix:[/run/user/1000/bus", "pipe:[1]", "/dev/shm/x",
+                     "/proc/1/limits", "/sys/kernel/x"):
+            self.assertFalse(is_forward_carrier(path), path)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-from common import graph as G
+from domain import edge as G
 
 # 关系类型 -> （源端类别, 目标端类别）
 EXPECTED_LABELS = {
@@ -68,6 +68,17 @@ class RelationShapeTest(unittest.TestCase):
             self.assertFalse(G.is_derivation(rel), rel)
         self.assertEqual(set(G.PRODUCER_RELS) | set(G.CONSUMER_RELS) | {G.DERIVATION_REL},
                          set(G.ALL_RELS))
+
+    def test_vertex_kinds_and_channels(self) -> None:
+        self.assertEqual(G.VERTEX_KINDS, ("Process", "File", "Network"))
+        self.assertEqual(G.CHANNEL_BITS, {"Process": 1, "File": 2, "Network": 4, "seed": 8})
+        self.assertEqual(G.SCENARIO_KIND_LABELS, {"file": "File", "network": "Network"})
+
+    def test_full_relation_names_are_derived_from_labels(self) -> None:
+        for rel in G.ALL_RELS:
+            full = next(k for k, v in G.REL_NORM.items() if v == rel and k != rel)
+            self.assertEqual(G.normalize_rel(full), rel)
+            self.assertTrue(G.cypher_rel_match(full).endswith(f"|{rel}"))
 
     def test_unknown_relation_falls_back_to_process(self) -> None:
         """未知关系类型按"进程到进程"处理（数据模型里不该出现，但查询分支要稳）。"""

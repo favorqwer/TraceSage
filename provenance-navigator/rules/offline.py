@@ -23,9 +23,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from common import config as cfg
-from common.facts import TopologyFacts, abstract_node_role, is_static_read_background
-from common.graph import process_content_or_na, split_container, split_process_id
+import settings as cfg
+from domain.pool import TopologyFacts
+from domain.taxonomy import is_static_read_background
+from rules.legacy_roles import abstract_node_role
+from domain.keys import process_content_or_na, split_container, split_process_id
 from rules.online import MatchIndex, _key
 
 REPO_ROOT = cfg.REPO_ROOT
@@ -157,7 +159,7 @@ class FrequentSubgraphMiner:
         self.min_support = min_support
 
     def load_gt_graph(self, scenario: str) -> List[Dict[str, Any]]:
-        gt_file = REPO_ROOT / "groundtruth" / f"{scenario}.groundtruth.json"
+        gt_file = cfg.groundtruth_dir() / f"{scenario}.groundtruth.json"
         if not gt_file.exists():
             raise FileNotFoundError(f"未找到场景标准答案文件: {gt_file}")
         with open(gt_file, "r", encoding="utf-8") as f:
@@ -185,7 +187,7 @@ class FrequentSubgraphMiner:
         入参的边与角色上下文来自同一个候选池，端点字符串天然一致，
         不会出现「标准答案格式查不到候选池统计」的问题。
         """
-        from common.roles import role_map
+        from rules.roles import role_map
 
         tables = {sc: role_map(contexts[sc], cuts) for sc in scenario_pos_edges}
         self.last_cuts = cuts
@@ -307,7 +309,7 @@ class OfflineDistiller:
 
     def _load_train_positive(self, scenario: str) -> Tuple[Set[Tuple[str, str, str]], list, Any]:
         """训练场景正样本（必须条目）与人工规则（忽略集）。"""
-        gt_file = REPO_ROOT / "groundtruth" / f"{scenario}.groundtruth.json"
+        gt_file = cfg.groundtruth_dir() / f"{scenario}.groundtruth.json"
         if not gt_file.exists():
             raise FileNotFoundError(f"训练场景标准答案缺失，无法蒸馏：{gt_file}")
         with open(gt_file, "r", encoding="utf-8") as f:
@@ -389,7 +391,7 @@ class OfflineDistiller:
         if not train_scenarios:
             raise ValueError("离线蒸馏必须提供训练场景（禁止空训练集静默放行）")
 
-        from common.roles import build_context, merge_contexts
+        from rules.roles import build_context, merge_contexts
 
         prepared: Dict[str, Dict[str, Any]] = {}
         contexts: Dict[str, Any] = {}
@@ -445,7 +447,7 @@ class OfflineDistiller:
         """
         from rules import admission
         from rules.coverage import CoverageStore, ScenarioShard
-        from common.roles import build_context, merge_contexts
+        from rules.roles import build_context, merge_contexts
 
         payload = read_library_payload(base_library)
         old = CoverageStore.from_payload(payload["coverage_table"])
@@ -521,7 +523,7 @@ class OfflineDistiller:
                 f"现有场景清单：{store.names()}"
             )
 
-        from common.roles import RoleCuts, build_context
+        from rules.roles import RoleCuts, build_context
 
         known = list(payload.get("motifs") or [])
         item = self.prepare_scenario(new_scenario, pool_provider)
@@ -624,8 +626,9 @@ def _code_files() -> tuple[str, ...]:
     """按目录自动收集蒸馏相关源码；新增/删除文件会直接改变指纹。"""
     nav = cfg.NAVIGATOR_DIR
     collected: list[str] = []
-    for pattern in ("rules/*.py", "closure/*.py", "common/facts.py", "common/graph.py",
-                    "routing/filters.py"):
+    for pattern in ("rules/*.py", "closure/*.py", "domain/*.py",
+                    "routing/filters.py", "routing/prepare.py", "routing/channels.py",
+                    "settings.py"):
         for path in sorted(nav.glob(pattern)):
             if path.name == "__init__.py":
                 continue

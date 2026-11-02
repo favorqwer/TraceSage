@@ -78,6 +78,7 @@ class LevelKeyTest(unittest.TestCase):
     def test_channel_and_dir_class(self) -> None:
         self.assertEqual(bundles.channel_class(0), "(无)")
         self.assertEqual(bundles.channel_class(5), "Process+Network")
+        self.assertEqual(bundles.channel_class(15), "Process+File+Network+seed")
         self.assertEqual(bundles.dir_class("/etc/ssh/sshd_config", "File"), "/etc/ssh")
         self.assertEqual(bundles.dir_class("10.0.0.5:1->1.2.3.4:80", "Network"),
                          "主机对 1.2.3.4|10.0.0.5")

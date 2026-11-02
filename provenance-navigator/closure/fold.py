@@ -1,6 +1,7 @@
-"""折叠与展开：候选内容三元组、进程身份摘要、闭包展开编排。
+"""折叠与展开编排：候选内容三元组、进程身份摘要、闭包展开流程。
 
-本文件只依赖 `common` 与 `closure.walk`。
+本文件依赖 `domain`、`closure.traversal`、`closure.snapshot` 与 `closure.policy`；
+不导入 `rules`、`llm`、`routing`。
 """
 
 from __future__ import annotations
@@ -8,24 +9,23 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Optional
 
-from common.graph import (
+from domain.edge import (
     PRODUCER_RELS,
+    SCENARIO_KIND_LABELS,
     content_triple_of,
     is_derivation,
     labels_of,
     owner_is_source,
-    trace_event,
     triple,
 )
-from closure.walk import (
-    Event,
-    is_startup_dependency,
-    open_source,
-    process_info,
-    run_causal_closure,
-)
+from closure.trace import trace_event
+from closure.traversal import Event, run_causal_closure
+from closure.policy import is_startup_dependency
+from closure.snapshot import open_source
 
 # ==== 1. 折叠 ====
+
+
 @dataclass
 class CollapsedEdge:
     src: str
@@ -51,12 +51,15 @@ class CollapsedEdge:
     src_identities: set[tuple[str, str]] = field(default_factory=set)
     dst_identities: set[tuple[str, str]] = field(default_factory=set)
     # 结构上下文（判定时渲染给模型看，不进报告）：离终点事件最少几跳、从哪个顶点被回推出来。
-    # `via` 是给人读的显示文本（进程显示可执行路径）；`via_kind` / `via_key` 是原始标识
-    # （判定层的“上游交接明细”按它定位上一层顶点：进程侧是进程标识，对象侧是路径本身）。
+    # `via_kind` / `via_key` 是原始标识（判定层的“上游交接明细”按它定位上一层顶点：进程侧是
+    # 进程标识，对象侧是路径本身）；显示文本在 `to_dict` / `fold_records` 里渲染一次。
     dist: int = 0
-    via: str = ""
     via_kind: str = ""
     via_key: str = ""
+
+    def via_text(self) -> str:
+        """这条边从哪个顶点被回推出来（空 = 终点事件本身）。"""
+        return f"{self.via_kind} {self.via_key}" if self.via_kind else "终点事件"
 
     def to_dict(self, *, with_event_ids: bool = True) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -75,7 +78,7 @@ class CollapsedEdge:
             "src_identities": sorted([list(x) for x in self.src_identities]),
             "dst_identities": sorted([list(x) for x in self.dst_identities]),
             "dist": self.dist,
-            "via": self.via,
+            "via": self.via_text(),
             "via_kind": self.via_kind,
             "via_key": self.via_key,
             "channels": self.channels,
@@ -89,12 +92,7 @@ class CollapsedEdge:
 class FoldResult:
     edges: list[CollapsedEdge]
     raw_instances: int
-
-
-def _via_label(row: dict[str, Any]) -> str:
-    """这条边从哪个顶点被回推出来（空 = 终点事件本身）。"""
-    kind = str(row.get("via_kind") or "")
-    return f"{kind} {row.get('via_key') or ''}".strip() if kind else "终点事件"
+    dropped_startup_reads: int = 0
 
 
 def _other_identity(row: dict[str, Any]) -> tuple[str, str]:
@@ -110,7 +108,11 @@ def _other_identity(row: dict[str, Any]) -> tuple[str, str]:
 
 
 def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
-    """把事件实例折成内容三元组（只合并不删边，过滤进程启动初期未受篡改的标准动态共享库读取）。"""
+    """把事件实例折成内容三元组。
+
+    只合并不删边；唯一的例外是 `is_startup_dependency` 命中的行（进程启动期读入、且全图未被
+    写入的标准动态共享库），命中条数记在 `dropped_startup_reads` 里，由调用方写进日志。
+    """
     rows_list = list(rows) if not isinstance(rows, list) else rows
 
     # 预扫描：收集本次反向展开中被写入/创建/修改的全部客体，以及各进程首次对外产生动作的时刻
@@ -132,6 +134,7 @@ def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
 
     table: dict[tuple[str, str, str], CollapsedEdge] = {}
     raw = 0
+    dropped = 0
     for row in rows_list:
         raw += 1
         other_path = str(row.get("other") or "")
@@ -143,6 +146,7 @@ def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
         # 仅在进程启动期（首次对外动作之前）读入、且全图未曾被写入的标准动态共享库，方视为底层环境初始化依赖
         first_act = proc_first_action.get(pid, float("inf"))
         if is_startup_dependency(rel, sc, other_path, st, first_act, written_targets):
+            dropped += 1
             continue
 
         src, syscall, dst, src_label = content_triple_of(
@@ -161,7 +165,6 @@ def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
                 t0=row["starttime"],
                 t1=row["endtime"],
                 dist=int(row.get("dist") or 0),
-                via=_via_label(row),
                 via_kind=str(row.get("via_kind") or ""),
                 via_key=str(row.get("via_key") or ""),
                 channels=int(row.get("support") or 0),
@@ -172,7 +175,6 @@ def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
             if int(row.get("dist") or 0) < edge.dist:
                 # 同一个三元组可能有多个实例：结构上下文取跳数最小的那一份（确定性：相同则保留先到的）
                 edge.dist = int(row.get("dist") or 0)
-                edge.via = _via_label(row)
                 edge.via_kind = str(row.get("via_kind") or "")
                 edge.via_key = str(row.get("via_key") or "")
         edge.instances += 1
@@ -196,7 +198,7 @@ def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
         if dst_ident[1]:
             edge.dst_identities.add(dst_ident)
     edges = sorted(table.values(), key=lambda e: (e.t0, e.src, e.syscall, e.dst))
-    return FoldResult(edges=edges, raw_instances=raw)
+    return FoldResult(edges=edges, raw_instances=raw, dropped_startup_reads=dropped)
 
 
 def fold_records(rows: Iterable[dict[str, Any]], *,
@@ -211,12 +213,10 @@ def fold_records(rows: Iterable[dict[str, Any]], *,
     records: dict[tuple[str, str, str], dict[str, Any]] = {}
     for edge in folded.edges:
         rec = edge.to_dict(with_event_ids=True)
-        via = str(rec.get("via") or "")
-        if via.startswith("Process ") and process_info_fn:
-            pid = via.split(" ", 1)[1]
-            info = process_info_fn(pid)
-            shown = str(info.get("exepath") or info.get("name") or "") if info else ""
-            rec["via"] = f"Process {shown or pid}"
+        if edge.via_kind == "Process" and process_info_fn:
+            info = process_info_fn(edge.via_key) or {}
+            shown = str(info.get("exepath") or info.get("name") or "")
+            rec["via"] = f"Process {shown or edge.via_key}"
         members = sorted(rec.get("member_processes") or [])
         if members:
             rec["process_id"] = min(members, key=lambda k: (int((metas.get(k) or {}).get("t0") or 0), k))
@@ -230,10 +230,14 @@ def fold_records(rows: Iterable[dict[str, Any]], *,
         else:
             rec["network_protocol"] = ""
         records[triple(rec)] = rec
-    return records, {"raw_instances": folded.raw_instances, "collapsed_triples": len(records)}
+    return records, {"raw_instances": folded.raw_instances,
+                     "collapsed_triples": len(records),
+                     "dropped_startup_reads": folded.dropped_startup_reads}
 
 
 # ==== 2. 进程身份摘要 ====
+
+
 def _origins(by_process: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str, Any]]:
     """进程标识 -> 来源（执行新程序 / 派生 / 无记录），取时间最早的那条派生边。
 
@@ -265,10 +269,10 @@ def _origins(by_process: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str,
     return out
 
 
-def summarize_process(graph: Any, process_id: str, owner: str,
+def summarize_process(source: Any, process_id: str, owner: str,
                       rows: list[dict[str, Any]]) -> dict[str, Any]:
     """一个进程的身份摘要（命令行、时间范围、边数）。"""
-    info = process_info(graph, process_id)
+    info = source.process_info(process_id) or {}
     return {
         "process_id": process_id,
         "owner": owner,
@@ -280,7 +284,7 @@ def summarize_process(graph: Any, process_id: str, owner: str,
     }
 
 
-def build_process_context(graph: Any, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def build_process_context(source: Any, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """从闭包产出的事件行生成每个进程的身份摘要（按进程标识去重）。
 
     `rows` 已经按（开始时刻, 事件编号）排好序（闭包引擎排的），分组是顺序遍历，
@@ -293,7 +297,7 @@ def build_process_context(graph: Any, rows: list[dict[str, Any]]) -> dict[str, d
     origins = _origins(by_process)
     metas: dict[str, dict[str, Any]] = {}
     for pid, process_rows in by_process.items():
-        meta = summarize_process(graph, pid, str(process_rows[0]["owner"]), process_rows)
+        meta = summarize_process(source, pid, str(process_rows[0]["owner"]), process_rows)
         meta["origin"] = origins.get(pid) or {"kind": "none", "parent": "", "parent_content": "",
                                               "t": 0, "n": 0}
         metas[pid] = meta
@@ -301,6 +305,8 @@ def build_process_context(graph: Any, rows: list[dict[str, Any]]) -> dict[str, d
 
 
 # ==== 3. 展开编排 ====
+
+
 @dataclass
 class Prepared:
     """一次展开的结果与它需要的活资源（来源保持打开，供判定中途重跑闭包）。"""
@@ -308,12 +314,7 @@ class Prepared:
     source: Any
     seeds: list[Event]
     stats: dict[str, Any]
-    fold: dict[str, Any]
-    poi_t0: int = 0
-    closed_processes: set[str] = field(default_factory=set)
     rounds: int = 1
-    extra_seeds: int = 0
-    new_triples: list[tuple[str, str, str]] = field(default_factory=list)
 
 
 def seed_events(deps: "Deps") -> list[Event]:
@@ -326,7 +327,8 @@ def seed_events(deps: "Deps") -> list[Event]:
             syscall=str(row.get("syscall") or ""), bytes=int(row.get("bytes") or 0), start=start,
             end=int(row.get("endtime") or start), pid=str(row.get("process_id") or ""),
             owner=str(row.get("process_content") or ""), other=str(row.get("other") or ""),
-            other_label=str(row.get("other_label") or ("File" if deps.scenario.poi.kind == "file" else "Network")),
+            other_label=str(row.get("other_label")
+                            or SCENARIO_KIND_LABELS.get(deps.scenario.poi.kind, "Network")),
         ))
     return seeds
 
@@ -338,23 +340,22 @@ def prepare(deps: "Deps") -> Prepared:
     try:
         seeds = seed_events(deps)
         closure_res = run_causal_closure(source, seeds, poi_t0=int(inv.poi_t0 or 0),
-                                            forward_chain=True, log=deps.log)
+                                         forward_chain=True, log=deps.log)
         rows = closure_res["rows"]
         stats = closure_res["stats"]
         seeds = closure_res["seeds"]
-        closed_processes = closure_res["closed_processes"]
         stats["source"] = source.stats()
 
-        metas = build_process_context(deps.graph, rows)
+        metas = build_process_context(source, rows)
         inv.process_context.update(metas)
         if inv.poi_rows:
             poi_pid = str(inv.poi_rows[0].get("process_id") or "")
             if poi_pid in metas:
                 inv.poi_process = poi_pid
 
-        records, fold = fold_records(
+        records, fold_stats = fold_records(
             rows,
-            process_info_fn=lambda pid: process_info(deps.graph, pid),
+            process_info_fn=source.process_info,
             process_metas=metas,
             network_protocols=source.network_protocols(),
         )
@@ -366,51 +367,14 @@ def prepare(deps: "Deps") -> Prepared:
     deps.log(f"[expand] 闭包完成：{stats['rounds']} 轮 / 展开顶点 {stats['process_expands']} 个进程 + "
              f"{stats['object_expands']} 个文件或端点 / 收边 {stats['events_included']} 条 → "
              f"进程 {len(inv.process_context)} 个 / 折叠边 {len(inv.edges)} 条；"
+             f"折叠跳过启动期动态库读取 {fold_stats['dropped_startup_reads']} 条；"
              f"来源 {stats['source']}")
     trace_event(deps.trace, "expand_closure", rounds=stats["rounds"], processes=len(inv.process_context),
                 edges=len(inv.edges), events=stats["events_included"],
                 rows_fetched=stats["rows_fetched"],
+                dropped_startup_reads=fold_stats["dropped_startup_reads"],
                 queries=stats["source"].get("queries"), source=stats["source"].get("source"))
-    return Prepared(source=source, seeds=seeds, stats=stats, fold=fold,
-                    poi_t0=int(inv.poi_t0 or 0), closed_processes=closed_processes)
-
-
-def extend(deps: "Deps", prepared: Prepared, extra_seeds: list[Event],
-           ) -> tuple[list[tuple[str, str, str]], dict[str, Any]]:
-    """把额外种子并进闭包重跑，返回（新增的内容三元组, 本轮计数）。
-
-    新增的三元组同时写进 `record.edges`；已经存在的三元组保持不变（闭包单调，重跑只会给出
-    同一份或更多的边）。
-    """
-    inv = deps.record
-    known = set(inv.edges)
-    all_seeds = prepared.seeds + extra_seeds
-    closure_res = run_causal_closure(prepared.source, all_seeds, poi_t0=prepared.poi_t0,
-                                        forward_chain=False, log=deps.log)
-    rows = closure_res["rows"]
-    stats = closure_res["stats"]
-    prepared.closed_processes |= closure_res["closed_processes"]
-
-    metas = build_process_context(deps.graph, rows)
-    inv.process_context.update(metas)
-    records, _fold = fold_records(
-        rows,
-        process_info_fn=lambda pid: process_info(deps.graph, pid),
-        process_metas=metas,
-        network_protocols=prepared.source.network_protocols(),
-    )
-    new_triples = [key for key in records if key not in known]
-    for key in new_triples:
-        inv.edges[key] = records[key]
-    prepared.rounds += 1
-    prepared.extra_seeds = len(extra_seeds)
-    prepared.new_triples = sorted(new_triples)
-    deps.log(f"[expand] 前向补链重跑闭包：额外种子 {len(extra_seeds)} 条 / 收边 {stats['events_included']} 条 → "
-             f"新增内容三元组 {len(new_triples)} 条（候选表合计 {len(inv.edges)} 条）")
-    trace_event(deps.trace, "expand_forward", seeds=len(extra_seeds),
-                events=stats["events_included"], new_triples=len(new_triples),
-                edges=len(inv.edges))
-    return new_triples, stats
+    return Prepared(source=source, seeds=seeds, stats=stats)
 
 
 def finish(prepared: Prepared) -> None:

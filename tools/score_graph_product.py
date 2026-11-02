@@ -46,7 +46,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "provenance-navigator"))
 import rules_match as rm  # noqa: E402
-from common.graph import path_part  # noqa: E402
+from domain.keys import path_part  # noqa: E402
 # GT 文件与场景说明同放 groundtruth/。
 
 

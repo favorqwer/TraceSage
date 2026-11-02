@@ -1,7 +1,8 @@
 """候选表单测（不需要数据库、不需要模型）：折叠。
 
-口径（`l1_reach/candidates.py`）：折叠只合并不删边——把同一内容三元组的多个事件实例压成一条记录，
-实例数、字节数、首末时刻、事件编号、两端身份与入闭包通道都按同一口径汇总，**不做任何判定、也不删边**。
+口径（`closure/fold.py`）：折叠只合并不删边——把同一内容三元组的多个事件实例压成一条记录，
+实例数、字节数、首末时刻、事件编号、两端身份与入闭包通道都按同一口径汇总，**不做任何判定**。
+唯一例外是进程启动期读入且全图未被写入的动态库读取，命中条数单独计入 `dropped_startup_reads`。
 """
 
 from __future__ import annotations
@@ -88,6 +89,39 @@ class FoldTest(unittest.TestCase):
         self.assertIn(("/home/u/x", "read", "/usr/sbin/sshd"), records)
         rec = records[("/home/u/x", "read", "/usr/sbin/sshd")]
         self.assertEqual(rec["process_id"], "100bash")
+
+    def test_fold_renders_via_from_structured_fields(self) -> None:
+        """`via` 不再由字符串拆回来：直接用 via_kind / via_key 查进程名。"""
+        item = row(1, pid="100bash", other="/home/u/x", at=10)
+        item.update({"via_kind": "Process", "via_key": "100bash"})
+        records, _ = OF.fold_records(
+            [item], process_info_fn=lambda pid: {"exepath": "/bin/bash"})
+        rec = records[("/home/u/x", "read", "/usr/sbin/sshd")]
+        self.assertEqual(rec["via"], "Process /bin/bash")
+
+    def test_fold_counts_startup_library_reads(self) -> None:
+        """启动期动态库读取是唯一被折叠跳过的行，命中条数必须计数。"""
+        rows = [
+            row(1, pid="100bash", rel="f2p", syscall="read",
+                other="/usr/lib/libc.so.6", at=10),
+            row(2, pid="100bash", rel="p2f", syscall="write", other="/tmp/out", at=20),
+        ]
+        result = OF.fold(rows)
+        self.assertEqual(result.dropped_startup_reads, 1)
+        self.assertEqual([edge.dst for edge in result.edges], ["/tmp/out"])
+
+    def test_fold_keeps_library_read_once_written(self) -> None:
+        """同一个动态库在闭包内被别的进程写过：不再当作环境初始化依赖。"""
+        rows = [
+            row(1, pid="100bash", rel="f2p", syscall="read",
+                other="/usr/lib/libc.so.6", at=10),
+            row(2, pid="100bash", rel="p2f", syscall="write", other="/tmp/out", at=20),
+            row(3, pid="200evil", rel="p2f", syscall="write",
+                other="/usr/lib/libc.so.6", at=5),
+        ]
+        result = OF.fold(rows)
+        self.assertEqual(result.dropped_startup_reads, 0)
+        self.assertIn("/usr/lib/libc.so.6", {edge.src for edge in result.edges})
 
 if __name__ == "__main__":
     unittest.main()

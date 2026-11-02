@@ -26,10 +26,10 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from config_support import temp_config  # noqa: E402
-from closure.extractor import Deps  # noqa: E402
-from common import config as settings  # noqa: E402
-from common.model import LlmBudget  # noqa: E402
-from common.graph import Investigation  # noqa: E402
+from closure.intake import Deps  # noqa: E402
+import settings as settings  # noqa: E402
+from llm.client import LlmBudget  # noqa: E402
+from domain.state import Investigation  # noqa: E402
 import llm.judge as l2  # noqa: E402
 import llm.judge as judging_mod  # noqa: E402
 
@@ -85,7 +85,7 @@ def build_record() -> Investigation:
 
     三元组方向与生产流水线一致（读边的源是对象、派生边的源是父进程）。
     """
-    from common import graph as graph_facts
+    from domain import edge as graph_facts
 
     inv = Investigation(run_id=f"unit-{uuid.uuid4().hex[:8]}", scenario="unit")
     inv.poi_rows = [{"process_content": "/bin/bash", "other": "/srv/marker", "rel": "p2f",

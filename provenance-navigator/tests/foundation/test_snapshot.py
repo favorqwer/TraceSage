@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import unittest
 
-import closure.walk as snap
-import closure.walk as C
-from closure.walk import SnapshotReader
+import closure.snapshot as snap
+import closure.traversal as C
+from closure.snapshot import SnapshotReader
 from tests.foundation.db_source import DbSource
 
 DB = "unit-test-index"
@@ -184,6 +184,17 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual(idx.network_protocols(), {"10.0.0.1:1->10.0.0.2:2": "tcp"})
             vid = idx._id_of[("Network", "10.0.0.1:1->10.0.0.2:2")]
             self.assertEqual(idx.vertices[vid].get("protocol"), "tcp")
+        finally:
+            idx.close()
+
+    def test_process_info_from_index(self):
+        """进程属性由索引来源自己提供（不再经过模块级缓存）。"""
+        idx = SnapshotReader(DB)
+        try:
+            info = idx.process_info("1p1")
+            self.assertEqual(info["exepath"], "/p1")
+            self.assertEqual(info["args"], "-x")
+            self.assertEqual(idx.process_info("missing"), {})
         finally:
             idx.close()
 

@@ -28,7 +28,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from common.graph import path_part, split_container, split_process_id
+from domain.keys import path_part, split_container, split_process_id
 
 # ---- 只保留这一层路径常识（POSIX/FHS 通用） ----
 

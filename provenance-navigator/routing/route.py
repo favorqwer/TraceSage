@@ -1,7 +1,7 @@
 """路由编排：按模式表调用锚点确认、前置初筛、符号通道、LLM 通道与后置剪枝。
 
 本文件只决定“调用谁、按什么顺序、结果怎么合并”，不包含任何具体判据：
-- 前置初筛在 `routing/filters.PreFilter`；
+- 前置初筛在 `routing/prepare.PreFilter`；
 - 后置剪枝在 `routing/filters.DebrisPrune`；
 - 符号通道在 `rules/online.py`；
 - 慢速通道在 `llm/judge.py`。
@@ -13,11 +13,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from common.facts import TopologyFacts
-from common.graph import edge_key
-from rules.online import BoundaryStoryOperator, CausalBridge
-from routing.filters import DebrisPrune, PreFilter
-from rules.online import PatternMatcher
+from domain.pool import CandidatePool, TopologyFacts
+from domain.edge import edge_key
+from routing.channels import (
+    BoundaryStoryOperator, SessionActiveBridge, promote_lineage, promote_sensitive,
+)
+from routing.filters import DebrisPrune
+from routing.prepare import PreFilter
+from rules.online import MatchIndex
 
 
 @dataclass(frozen=True)
@@ -74,7 +77,8 @@ def route(confirmed_edges: List[Dict[str, Any]],
         raise ValueError(f"未知模式 {mode!r}；可选 {sorted(MODES)}")
 
     candidate_pool = list(confirmed_edges) + list(unexcluded_edges)
-    tf = TopologyFacts(candidate_pool)
+    pool = CandidatePool(candidate_pool)
+    tf = pool.facts
 
     final_confirmed: Dict[Tuple[Any, Any, Any], Dict[str, Any]] = {}
     for e in confirmed_edges:
@@ -110,11 +114,16 @@ def route(confirmed_edges: List[Dict[str, Any]],
     matcher = None
 
     # 通道二：符号促进
+    clean_pool = CandidatePool(clean_unexcluded, facts=pool.facts)
     if "motif" in spec.channels:
-        matcher = PatternMatcher(tf, patterns or [], admitted=admitted, role_cuts=role_cuts)
-        matcher_admitted_count = (len(matcher.admitted) if matcher.admitted is not None
-                                  else len(matcher.patterns))
-        matched = matcher.match(clean_unexcluded, confirmed_seeds=final_confirmed)
+        matcher = MatchIndex(clean_pool, tf, role_cuts=role_cuts)
+        matcher_admitted_count = (len(admitted) if admitted is not None else len(patterns or []))
+        matched = matcher.match(patterns or [], admitted=admitted,
+                                seed_edges=final_confirmed)
+        high = matcher.high_conf_pids
+        high = promote_lineage(matcher, matched, high)
+        high = promote_sensitive(matcher, matched, high)
+        matcher.high_conf_pids = high
         conf_filtered_count = matcher.filtered_by_conf
         for e in clean_unexcluded:
             key = _key(e)
@@ -129,8 +138,8 @@ def route(confirmed_edges: List[Dict[str, Any]],
             promoted_by_motif[pat.get("id")] = promoted_by_motif.get(pat.get("id"), 0) + 1
 
     if "bridge" in spec.channels:
-        bridged = CausalBridge().bridge(
-            clean_unexcluded, final_confirmed,
+        bridged = SessionActiveBridge().bridge(
+            clean_pool, final_confirmed,
             high_conf_pids=matcher.high_conf_pids if matcher is not None else None,
         )
         for key, rec in bridged.items():
@@ -140,7 +149,7 @@ def route(confirmed_edges: List[Dict[str, Any]],
             promoted_by_motif[motif_id] = promoted_by_motif.get(motif_id, 0) + 1
 
     if "boundary" in spec.channels:
-        story = BoundaryStoryOperator().promote(candidate_pool, final_confirmed)
+        story = BoundaryStoryOperator().promote(pool, final_confirmed)
         for key, rec in story.items():
             final_confirmed[key] = rec
             rule_promoted.append(rec)
@@ -175,7 +184,7 @@ def route(confirmed_edges: List[Dict[str, Any]],
 
     # 通道三：后置剪枝（只移入未排除）
     final_confirmed, debris_pruned = DebrisPrune(anchor_triples).apply(
-        final_confirmed, candidate_pool=candidate_pool
+        final_confirmed, candidate_pool=pool.raw
     )
     final_unexcluded = list(remaining_ambiguous) + list(pruned_background) + list(debris_pruned)
 

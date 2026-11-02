@@ -31,7 +31,7 @@ def write_config(path: pathlib.Path, sections: dict) -> pathlib.Path:
 @contextlib.contextmanager
 def temp_config(sections: dict):
     """临时换一份参数文件跑一段代码，退出时回到默认那份。"""
-    from common import config as settings
+    import settings as settings
 
     with tempfile.TemporaryDirectory() as folder:
         path = write_config(pathlib.Path(folder) / "agent.toml", sections)

@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 # --- 路径 ---
-PKG_DIR = Path(__file__).resolve().parent          # provenance-navigator/common
-NAVIGATOR_DIR = PKG_DIR.parent                     # provenance-navigator
+PKG_DIR = Path(__file__).resolve().parent          # provenance-navigator
+NAVIGATOR_DIR = PKG_DIR                           # provenance-navigator
 REPO_ROOT = NAVIGATOR_DIR.parent                   # 仓库根
 CONFIG_DIR = NAVIGATOR_DIR / "config"
 CONFIG_FILE = CONFIG_DIR / "navigator.toml"
@@ -32,6 +32,13 @@ WORK_DIR = REPO_ROOT / "tmp" / "provenance-navigator"
 STATE_DIR = WORK_DIR / "state"
 LOG_DIR = WORK_DIR / "logs"
 L1_INDEX_DIR = WORK_DIR / "l1-index"
+
+def groundtruth_dir() -> Path:
+    return REPO_ROOT / "groundtruth"
+
+def fold_library_dir() -> Path:
+    return REPO_ROOT / "output" / "navigator-baseline" / "distill" / "fold-libraries"
+
 
 _ENV_PATTERN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
 
@@ -316,7 +323,7 @@ def llm_format_retries() -> int:
 
 @dataclass(frozen=True)
 class EndpointSpec:
-    """场景的调查起点事件（POI）或攻击入口事件（entry）描述。"""
+    """场景的调查起点事件（POI）描述。"""
 
     kind: str          # "file" | "network"
     rel: str           # "p2f" | "p2n" | "n2p" | "f2p" ...
@@ -330,12 +337,11 @@ class EndpointSpec:
 
 @dataclass(frozen=True)
 class Scenario:
-    """一个采集场景的配置：数据库名 + POI + 入口事件。"""
+    """一个采集场景的配置：数据库名 + POI。"""
 
     name: str
     database: str
     poi: EndpointSpec
-    entry: Optional[EndpointSpec] = None
 
 
 def _endpoint_spec(node: Any) -> EndpointSpec:
@@ -370,12 +376,10 @@ def load_scenario(name: str, path: Optional[Path] = None) -> Scenario:
     if name not in raw:
         raise KeyError(f"未知场景 {name}；可选：{sorted(raw.keys())}")
     node = raw[name]
-    entry = node.get("entry")
     return Scenario(
         name=name,
         database=str(node["database"]),
         poi=_endpoint_spec(node["poi"]),
-        entry=_endpoint_spec(entry) if entry else None,
     )
 
 
