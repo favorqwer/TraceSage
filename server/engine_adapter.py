@@ -10,8 +10,7 @@ import functools
 import re
 import sys
 import time
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from server.bus import EventStreamBus
 from server.config import settings
@@ -23,12 +22,8 @@ nav_path = str(settings.NAVIGATOR_PATH)
 if nav_path not in sys.path:
     sys.path.insert(0, nav_path)
 
-from closure import extract_raw_closure, list_scenarios  # noqa: E402
-from common.graph import labels_of, normalize_rel  # noqa: E402
-from llm.judge import LlmChannel  # noqa: E402
-from pipeline import load_patterns  # noqa: E402
-from routing.report import build_report_from_outcome, save_report  # noqa: E402
-from routing.route import route  # noqa: E402
+from domain.edge import labels_of, normalize_rel  # noqa: E402
+import pipeline  # noqa: E402
 
 
 class AsyncPipelineExecutor:
@@ -248,14 +243,11 @@ class AsyncPipelineExecutor:
         loop = asyncio.get_running_loop()
 
         try:
-            # 1. 闭包提取阶段
+            # 1. 闭包提取 + 规则装载 + 路由：统一走 pipeline.investigate
             await self.sm.transition_to(InvestigationStage.EXTRACTING_CLOSURE)
             await self.bus.emit_log(f"开始启动场景 [{self.scenario_name}] 因果图谱调查...")
             await self.bus.emit_progress("EXTRACTING_CLOSURE", 5.0, "正在连接 Neo4j 数据库并检索 POI 告警锚点...")
 
-            need_deps = self.mode in ("hybrid", "llm-only")
-
-            # 注入实时进度回调，捕获展开轮次日志
             def progress_callback(msg: str):
                 try:
                     asyncio.run_coroutine_threadsafe(self.bus.emit_log(msg), loop)
@@ -272,16 +264,7 @@ class AsyncPipelineExecutor:
                             ),
                             loop,
                         )
-                    elif "[intake]" in msg:
-                        asyncio.run_coroutine_threadsafe(
-                            self.bus.emit_progress(
-                                stage="EXTRACTING_CLOSURE",
-                                percent=10.0,
-                                description=msg.strip(),
-                            ),
-                            loop,
-                        )
-                    elif "[expand]" in msg:
+                    elif "[intake]" in msg or "[expand]" in msg:
                         asyncio.run_coroutine_threadsafe(
                             self.bus.emit_progress(
                                 stage="EXTRACTING_CLOSURE",
@@ -293,69 +276,34 @@ class AsyncPipelineExecutor:
                 except Exception:
                     pass
 
-            # 异步执行 Neo4j 拓扑闭包展开
-            if need_deps:
-                raw_edges, closure_stats, deps = await loop.run_in_executor(
-                    None,
-                    functools.partial(extract_raw_closure, self.scenario_name, True, False, progress_callback),
-                )
-            else:
-                raw_edges, closure_stats = await loop.run_in_executor(
-                    None,
-                    functools.partial(extract_raw_closure, self.scenario_name, False, False, progress_callback),
-                )
-                deps = None
-
-            anchor_triples = [tuple(t) for t in closure_stats.get("anchor_triples") or []]
-
-            await self.bus.emit_log(
-                f"拓扑闭包计算完成：展开 {closure_stats.get('closure_rounds', 0)} 轮，收集 {len(raw_edges)} 条候选边，耗时 {closure_stats.get('closure_time_seconds', 0):.2f}s"
+            report, audit, outcome = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    pipeline.investigate,
+                    self.scenario_name,
+                    mode=self.mode,
+                    rules_from=self.rules_from,
+                    output_report=self.output_report,
+                    return_outcome=True,
+                    log=progress_callback,
+                ),
             )
 
-            # 2. 符号规则匹配阶段与闭包指标同步
             await self.sm.transition_to(
                 InvestigationStage.MATCHING_RULES,
                 {
-                    "raw_candidate_edges": len(raw_edges),
-                    "closure_time_seconds": float(closure_stats.get("closure_time_seconds") or 0.0),
-                    "anchor_count": len(anchor_triples),
+                    "raw_candidate_edges": int(audit.get("raw_closure_edges") or 0),
+                    "closure_time_seconds": float(audit.get("closure_seconds") or 0.0),
+                    "anchor_count": int(audit.get("anchor_count") or 0),
                 },
             )
-            await self.bus.emit_progress("MATCHING_RULES", 90.0, "加载准入规则库，执行边际查准率因果形态匹配...")
-            patterns, library_audit = load_patterns(self.mode, self.rules_from,
-                                                      scenario=self.scenario_name)
-            admitted_ids = set(library_audit.get("selected") or [])
             await self.bus.emit_log(
-                f"已装载因果拓扑形态库，候选 {len(library_audit.get('motifs') or patterns)} 条，"
-                f"准入 {len(admitted_ids)} 条")
-
-            # 3. 路由推理与仲裁
-            t_route_0 = time.time()
-            llm_channel = LlmChannel(deps=deps) if (need_deps and deps is not None) else None
-
-            # 执行主干路由决策
-            await self.bus.emit_log(
-                f"正在执行因果拓扑双向路由编排 (模式: {self.mode}, 准入形态 {len(admitted_ids)} 条)..."
+                f"因果闭包与规则路由完成：确认 {len(outcome.confirmed)} 条，"
+                f"未排除 {len(outcome.unexcluded)} 条，排除 {len(outcome.excluded)} 条"
             )
-            outcome = await loop.run_in_executor(
-                None,
-                functools.partial(
-                    route,
-                    [],
-                    raw_edges,
-                    anchor_triples,
-                    patterns=patterns,
-                    llm_channel=llm_channel,
-                    mode=self.mode,
-                    admitted=admitted_ids,
-                ),
-            )
-            route_time = time.time() - t_route_0
-
+            route_time = float(audit.get("route_seconds") or 0.0)
+            llm_calls = int((report.get("stats") or {}).get("llm_calls", 0))
             confirmed_raw_edges = list(outcome.confirmed.values())
-            await self.bus.emit_log(
-                f"因果拓扑路由收敛：确认攻击边 {len(outcome.confirmed)} 条，未排除候选边 {len(outcome.unexcluded)} 条，排除噪声边 {len(outcome.excluded)} 条"
-            )
 
             # 4. 前端画布投影与图拓扑推流
             # 为确保 Web 渲染帧率与图可读性，对大规模重复文件执行骨干投影
@@ -390,19 +338,9 @@ class AsyncPipelineExecutor:
             await self.sm.record_graph_elements(nodes=confirmed_nodes, edges=confirmed_items)
             await self.bus.flush()
 
-            # 生成报告落盘（保存全量无损的全部确诊边）
-            elapsed = time.time() - start_time
-            llm_calls = deps.budget.calls if (deps and deps.budget) else 0
-            report = build_report_from_outcome(
-                outcome,
-                self.scenario_name,
-                elapsed_seconds=elapsed,
-                llm_calls=llm_calls,
-                llm_enabled=need_deps,
-            )
-            Path(self.output_report).parent.mkdir(parents=True, exist_ok=True)
-            save_report(report, self.output_report)
+            # 报告已由 pipeline.investigate 落盘
             await self.bus.emit_log(f"取证报告已生成并持久化落盘: {self.output_report}")
+            elapsed = time.time() - start_time
 
             # 5. 转移至完成态
             await self.bus.emit_progress("COMPLETED", 100.0, "全流程因果调查收敛完成")
