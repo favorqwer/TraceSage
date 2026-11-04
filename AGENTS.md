@@ -90,8 +90,6 @@ TraceSage/
 ├── provenance-parser/        # SCAP 流式解析与 Neo4j 溯源图构建入库
 ├── provenance-navigator/     # 神经符号因果拓扑与离线蒸馏双向因果导航系统
 ├── provenance-engine/        # 调查引擎（基于 Neo4j 与 GQL 的纯图路径遍历）
-├── server/                   # TraceSage-Studio 工作台后端（FastAPI，复用导航器闭包提取与双向路由）
-├── web/                      # TraceSage-Studio 工作台前端（Vite + React 因果图交互界面）
 └── paper/                    # 参考论文
 ```
 

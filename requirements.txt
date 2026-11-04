@@ -1,10 +1,7 @@
-fastapi>=0.162
 langchain-core>=1.6.3
 langchain-openai>=1.6.2
 neo4j>=5.28
 orjson>=3.12.0
 pydantic>=2.13.5
-pydantic-settings>=2.16
 scipy>=1.18
-uvicorn>=0.54
 xxhash>=4.0.1
