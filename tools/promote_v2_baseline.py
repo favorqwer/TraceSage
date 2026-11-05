@@ -74,6 +74,8 @@ def main() -> None:
     ap.add_argument("--baseline-dir", default=str(ROOT / "output/navigator-baseline"))
     ap.add_argument("--backup-dir", default=str(ROOT / "output/navigator-baseline-bak-20261105-v2"))
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--mixed-prompt", action="store_true",
+                    help="按混合提示词口径写入（场景 7 scene7_fix，其余 pre_scene7_fix）；默认全部 current")
     args = ap.parse_args()
 
     reports_dir = Path(args.reports_dir)
@@ -105,7 +107,10 @@ def main() -> None:
             "report_sha256": sha256_file(report),
             "gzip": str(dest),
             "gzip_sha256": sha256_file(dest),
-            "prompt_version": "scene7_fix" if scenario == FIXED_SCENE else "pre_scene7_fix",
+            "prompt_version": (
+                ("scene7_fix" if scenario == FIXED_SCENE else "pre_scene7_fix")
+                if args.mixed_prompt else "current"
+            ),
             "llm_calls": int(stat.get("llm_calls") or 0),
             "steps_hit": ev["steps_hit"],
             "steps_total": ev["steps_total"],
@@ -135,16 +140,19 @@ def main() -> None:
         "llm_calls": calls,
     }
 
+    caveat = (
+        "混合提示词口径：场景 7 使用 scene7_fix（恢复 B1 规模段 + 规则覆盖极少不得判 none），"
+        "其余 9 个场景使用 pre_scene7_fix。不是单一代码/提示词版本的完整重跑，"
+        "不得作为后续增益对比的干净基线。"
+        if args.mixed_prompt else
+        "统一提示词口径：10 个场景使用同一套当前提示词；单次运行，未做重复，波动范围未知。"
+    )
     summary = {
         "protocol": (
             "RAG v2：规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）"
             "分开检索、分开编号、分开引用校验；留一折库；score_report_product 官方口径"
         ),
-        "caveat": (
-            "混合提示词口径：场景 7 使用 scene7_fix（恢复 B1 规模段 + 规则覆盖极少不得判 none），"
-            "其余 9 个场景使用 pre_scene7_fix。不是单一代码/提示词版本的完整重跑，"
-            "不得作为后续增益对比的干净基线。"
-        ),
+        "caveat": caveat,
         "model": os.environ.get("OPENAI_MODEL", ""),
         "kg_database": "trace-rules-kg-v1",
         "results": rows,
