@@ -1,5 +1,12 @@
 # Provenance-Navigator: 神经符号混合双向因果拓扑与离线知识蒸馏导航系统
 
+> **当前正式方案（2026-11-05）**：导航器运行时已收敛为 **RAG v2 单一模式**：
+> 规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）分开检索、分开编号、分开引用校验。
+> 入口：`main.py --scenario <场景>`。rules / hybrid / llm-only 已退出运行时。
+> 正式基线：`output/navigator-baseline/OVERVIEW.md`。
+> 下文第一、二部分保留的是旧设计说明；其中 rules/hybrid 运行模式和符号促进通道不再是运行时路径，
+> 离线蒸馏（`rules/offline.py` 等）继续用于构建折库和规则 KG。
+
 ---
 
 ## 第一部分：目标方案的详细描述 (Target Architecture & Innovation Blueprint)
@@ -121,17 +128,23 @@
         └──────────────────────────────────────────────────┘
 ```
 
-#### 系统原生支持的三大工作模式
+#### 当前运行时：RAG v2 单一模式
 
-1. **`rules`（纯规则模式）**：
-   - **适用场景**：离线物理隔离网络、极低延迟要求、资源受限计算节点；
-   - **行为特征**：初筛静态只读库后，仅由抽象基模判定攻击边，**LLM 调用量恒为 0 次**，耗时在秒级内完成；未命中规则的非初筛边安全留存于 `unexcluded` 待查池中。
-2. **`hybrid`（智能路由模式）**：
-   - **适用场景**：默认生产推荐模式，兼顾极致吞吐率、高查准率与高召回率；
-   - **行为特征**：神经符号双通道协同，符号规则优先在亚秒到秒级锁定高确信度链路（0 开销），仅将残余的高歧义候选边交由大模型进行裁决。
-3. **`llm-only`（纯 LLM 模式）**：
-   - **适用场景**：遭遇罕见未知攻击手法的零日利用场景、或对抗离线规则特征的新型渗透链；
-   - **行为特征**：初筛剥离海量静态无害库后，跳过离线规则直连慢速通道，全量歧义边由大模型进行全维因果仲裁。
+运行入口只有一个：
+
+```bash
+.venv/Scripts/python.exe provenance-navigator/main.py --scenario <场景全名>
+```
+
+每个束的判定依据分成两段，互不转化：
+
+1. **规则证据 R**：只查蒸馏规则库（Motif/Hop）。精确对齐优先，其次是部分对齐；每条规则带跳链和训练折统计。
+2. **技术证据 E**：只查 ATT&CK 行为观测（BehaviorObservable/Technique）。T-强注入，T-弱只写运行记录。
+
+引用约束：判 all 时，引用规则写 R 编号和规则里存在的跳号；引用技术写 E 编号；没有对应证据时不得编造编号。
+引用守卫只认真实规则卡上的跳号和技术证据卡上的 E 编号。
+
+旧的 `rules`、`hybrid`、`llm-only` 运行模式已删除；离线蒸馏和折库构建代码保留，不参与运行时。
 
 ---
 
@@ -164,9 +177,9 @@
 
 ```
 provenance-navigator/
-├── main.py                        # 单场景 CLI（--mode {rules, hybrid, llm-only}）
-├── pipeline.py                    # 单次调查装配：闭包 → 规则库 → 路由 → 报告
-├── run_loo_folds.py               # 留一交叉运行器
+├── main.py                        # 单场景 CLI：RAG v2（规则证据 + 技术证据）
+├── pipeline.py                    # 离线 LOO 装配（旧 rules/hybrid 路径，仅构建折库时使用）
+├── run_loo_folds.py               # 离线留一交叉/蒸馏运行器
 ├── settings.py                    # 参数、场景、路径、提示词与规则表读取
 ├── domain/                        # 图事件语义、键解析、系统知识、候选池事实
 │   ├── edge.py                    # 关系类型、方向、内容三元组、入闭包通道位
@@ -184,31 +197,40 @@ provenance-navigator/
 │   ├── fold.py                    # 折叠、进程身份摘要、展开编排
 │   ├── neo4j.py                   # 只读 Neo4j 访问与查询审计
 │   └── trace.py                   # 运行轨迹
-├── rules/                         # 【二、蒸馏规则通道】
+├── rules/                         # 【离线蒸馏与角色编码】rules 模式已退出运行时
 │   ├── offline.py                 # 形态枚举、三值标签、覆盖表构建、贪心、增量接入
-│   ├── online.py                  # MatchIndex 形态匹配与 selected 名单准入
+│   ├── online.py                  # MatchIndex 角色编码/匹配；不再作为运行模式
 │   ├── roles.py                   # 角色编码与 RoleCuts
 │   ├── coverage.py                # 覆盖表与位图
 │   ├── admission.py               # 指纹、命中重放、贪心选择
 │   ├── library.py                 # 折库/全量库/现蒸馏装载
 │   └── legacy_roles.py            # 旧角色口径兼容
+├── rag/                           # 【运行时证据检索】规则证据 + 技术证据 + Neo4j 规则库
+│   ├── graph_retrieve.py          # retrieve_rules / retrieve_techniques
+│   ├── neo4j_kg.py                # Rule KG 入库（全局 ATT&CK，按折 Motif/Hop/Case）
+│   ├── build_kg.py                # 从折库构建 Rule KG JSON
+│   ├── stats.py                   # 逐规则训练折统计
+│   ├── attack.py、link.py、schema.py
+│   └── embed.py、rerank.py、index.py、query.py  # 未接入主路径的向量实验模块
 ├── llm/                           # 【三、大模型慢速通道】
 │   ├── judge.py                   # 束划分、结构闸门、批量仲裁
 │   ├── client.py                  # 模型接入、网关适配、预算记账
 │   ├── text.py                    # 文本截断与相对时间
 │   └── verdict.py                 # 束结论解析
-├── routing/                       # 【四、路由编排与判定通道】
-│   ├── route.py                   # 模式表驱动、通道编排、结果合并与审计
-│   ├── prepare.py                 # 静态只读初筛
-│   ├── channels.py                # 血缘、敏感读取、会话桥接、边界穿越
-│   ├── filters.py                 # 后置碎片剪枝
-│   └── report.py                  # 三段式报告
+├── routing/                       # 【初筛/剪枝/报告工具】route/channels 仅离线 LOO 保留
+│   ├── route.py                   # 旧模式表驱动（仅离线 LOO）
+│   ├── prepare.py                 # 静态只读初筛（RAG 运行时使用）
+│   ├── channels.py                # 旧符号促进通道（仅离线 LOO）
+│   ├── filters.py                 # 后置碎片剪枝（RAG 运行时使用）
+│   └── report.py                  # 三段式报告（RAG 运行时使用）
 ├── config/                        # 配置文件区
 │   ├── navigator.toml
 │   ├── scenarios.json
 │   ├── closure_rules.json
 │   ├── rules-library/
-│   └── prompts/judge_bundle.md
+│   └── prompts/
+│       ├── judge_bundle_rag.md    # RAG v2 两段证据系统提示词
+│       └── judge_bundle.md        # 旧 B1 提示词（历史保留）
 ├── tools/                         # 规则库维护
 └── tests/                         # 单元测试与 Golden 契约校验
 ```
@@ -231,26 +253,20 @@ provenance-navigator/
 
 #### 1. 运行单场景自主调查（直连快照或 Neo4j）
 ```bash
-# 1. 纯规则离线模式（0 次大模型调用，秒级响应，按覆盖表入选名单准入）
-.venv/Scripts/python.exe provenance-navigator/main.py --scenario 1_Web_Exploit_Ransomware --mode rules
-
-# 2. 神经符号智能混合模式（推荐默认生产模式）
-.venv/Scripts/python.exe provenance-navigator/main.py --scenario 1_Web_Exploit_Ransomware --mode hybrid
-
-# 3. 纯 LLM 深度模式（罕见未知攻击场景）
-.venv/Scripts/python.exe provenance-navigator/main.py --scenario 1_Web_Exploit_Ransomware --mode llm-only
+# RAG v2：规则证据 + 技术证据
+.venv/Scripts/python.exe provenance-navigator/main.py --scenario 1_Web_Exploit_Ransomware \
+  --output output/navigator-runs/1_Web_Exploit_Ransomware_rag.json
 
 # 运行官方评分工具进行打分
 .venv/Scripts/python.exe tools/score_report_product.py \
-  --report output/navigator-runs/1_Web_Exploit_Ransomware.json \
+  --report output/navigator-runs/1_Web_Exploit_Ransomware_rag.json \
   --gt groundtruth/1_Web_Exploit_Ransomware.groundtruth.json
 ```
 
-#### 2. 运行全量留一交叉端到端验证
+#### 2. 离线规则库维护（非日常评测）
 ```bash
-# 留一交叉：测场景 k 时，规则库只由其余 9 个场景蒸馏，场景 k 的标准答案与候选边池不参与
-.venv/Scripts/python.exe provenance-navigator/run_loo_folds.py --mode rules     --out output/navigator-runs/loo --keep-reports tmp/loo_rules_reports
-.venv/Scripts/python.exe provenance-navigator/run_loo_folds.py --mode hybrid     --out output/navigator-runs/loo-hybrid --keep-reports tmp/loo_hybrid_reports
+# 仅在重建折库、核对覆盖表时使用；不参与导航器运行时。
+.venv/Scripts/python.exe provenance-navigator/run_loo_folds.py --mode rules --out output/navigator-runs/loo --keep-reports tmp/loo_rules_reports
 
 # 位图自检（重建的命中位图必须与冻结库逐位相同）
 .venv/Scripts/python.exe provenance-navigator/run_loo_folds.py --selftest
@@ -271,7 +287,9 @@ provenance-navigator/
 
 ### 2.5 边界穿越故事通道（Boundary-Story Channel）
 
-与 `rules/online.py` 的基模匹配及 `routing/channels.py` 的血缘、敏感读取、会话桥接、双端诱导闭环并列的符号促进通路，同属「通道二」的促进环节，**只增不减**：它只把候选边提升为已确认，不删除任何既有确认边。在 `rules` 与 `hybrid` 两个模式下运行（`llm-only` 跳过全部符号通道）。
+> 2026-11-05 更新：该符号通道已退出导航器运行时，相关代码仅保留给离线 LOO 构建；当前运行时只使用规则证据和技术证据两段。
+
+与 `rules/online.py` 的基模匹配及 `routing/channels.py` 的血缘、敏感读取、会话桥接、双端诱导闭环并列的符号促进通路，同属「通道二」的促进环节，**只增不减**：它只把候选边提升为已确认，不删除任何既有确认边。该通道在旧 `rules` / `hybrid` 运行模式下生效；这两个模式已不再作为导航器入口。
 
 **判据（六步，全部与标准答案无关）**：
 1. **宽入口（观测边界穿越）**：同一个连接对象上同时出现 `connect` 与 `accept` 表示两端都在本机被观测到；只出现其一表示另一端在观测窗口之外，属于候选入口。
@@ -281,15 +299,15 @@ provenance-navigator/
 5. **伪文件排除**：内核按需生成、不承载持久内容的伪对象（`/sys`、`/proc`、`/dev` 下设备与终端节点、`memfd:`、匿名 IPC）不计为攻击产物；`/dev/shm`、`/run/shm`、`/tmp` 等内存/临时目录故意保留。
 6. **链条继续**：沿消费攻击产物与被攻击主体派生的路径迭代扩散。
 
-**现行基线（留一交叉，10 折微平均，官方工具评分）**：
+**现行基线（10 场景微平均，官方工具评分）**：
 
-| 模式 | 步骤召回率 | 边查准率 | 大模型调用次数 | 全折耗时 |
+| 模式 | 步骤召回率 | 边查准率 | 大模型调用次数 | 口径 |
 |---|---|---|---|---|
-| `rules`（本通道默认开启） | 69.9%（633/906） | 35.6%（13609/38264） | 0 | 247.5s |
+| RAG v2（规则证据 + 技术证据） | 76.93%（697/906） | 60.02%（19541/32557） | 219 | 混合提示词口径 |
 
-本轮未运行 hybrid；hybrid 的旧成绩已不写入当前基线。
+**口径限制**：场景 7 使用新提示词（恢复 B1 规模段、规则覆盖极少不得判 none），其余 9 个场景使用修复前提示词。这是混合提示词口径，不是单一版本的完整重跑，不能作为后续增益对比的干净基线。逐场景明细、报告压缩件和代码指纹见 [output/navigator-baseline/OVERVIEW.md](../output/navigator-baseline/OVERVIEW.md)。
 
-各通道确认边数（按报告每条边的 `reason` 逐条统计）见 [output/navigator-baseline/OVERVIEW.md](../output/navigator-baseline/OVERVIEW.md) 表四：本通道在 `rules` 模式确认 3,571 条边，占确认边总数（38,752 条）的 9.2%。
+旧 `rules` 基线（69.9% / 35.6%）完整保留在 `output/navigator-baseline-bak-20261105-v2/`；hybrid 旧成绩不写入当前基线。
 
 *注：依据项目工程规范，步骤召回率与边查准率分母不同，禁止合成单一的综合分或 F1 分值。*
 

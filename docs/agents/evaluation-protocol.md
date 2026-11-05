@@ -5,7 +5,7 @@
 ## 基线产物落盘位置
 
 - 调查引擎（provenance-engine）的基线一律写 `output/engine-baseline/<场景名>/`：`baseline.json` 是引擎交付的最终图，`groundtruth-eval.txt` 是 `tools/score_graph_product.py` 对同一份产物的完整评分输出；汇总与口径写在 `output/engine-baseline/OVERVIEW.md`。
-- 导航器（provenance-navigator）的基线一律写 `output/navigator-baseline/`（留一口径：rules/hybrid 逐场景结果、10 份折库与 `OVERVIEW.md`），由 `tools/promote_loo_baseline.py` 校验后落盘。
+- 导航器（provenance-navigator）的基线写 `output/navigator-baseline/`：RAG v2 的 10 份压缩报告、`summary_v2.json`、代码指纹与 `OVERVIEW.md`，由 `tools/promote_v2_baseline.py` 校验后落盘。当前基线是混合提示词口径（场景 7 新提示词、其余 9 个修复前提示词），不得当作单一版本的干净基线。
 - 当次用的运行产物写 `output/engine-runs/`、`output/navigator-runs/`；这两处不得当作基线，也不得被引用为成绩来源。
 - `tools/run_all_engine_v2.py` 与 `provenance-engine/baseline/run-baseline.sh` 不带输出目录参数时都会写 `output/engine-baseline/`：前者用于批量重跑基线，后者只用于基线复跑；当次测试必须显式传 `output/engine-runs/<场景名>`，否则会覆盖正式基线。
 

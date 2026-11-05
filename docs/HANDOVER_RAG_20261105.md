@@ -1,5 +1,11 @@
 # RAG 全量替换 B1 交接文档
 
+> **2026-11-05 更新**：本文件描述的是 v2 扶正前的实验实现，其中的旧入口和命令已删除。
+> 当前正式入口为 `provenance-navigator/main.py --scenario <场景>`；正式基线为
+> `output/navigator-baseline/OVERVIEW.md`（10 场景 76.93% / 60.02%，混合提示词口径）。
+> 旧 `experiments/run_rag.py`、`run_b1_real_2hop.py`、`run_frozen_pair.py`、`rag_judge.py`
+> 以及边级原型已删除；离线蒸馏代码保留。
+
 - 文档版本：RAG-Handover-1.0
 - 生成日期：2026-11-05
 - 适用对象：接手 RAG 全量替换实验的后续 agent

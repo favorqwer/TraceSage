@@ -10,7 +10,7 @@
 | `tools/score_report_product.py` | 智能体 / 导航器报告 vs 标准答案评分（与上一条同一口径：召回按步骤、查准按四元组） |
 | `tools/rules_match.py` | 评分公共模块：可能集合规则与端点条件判定，动作名 ↔ syscall 词表 |
 | `tools/run_all_engine_v2.py` | 批量在 `-v2` 库上跑调查引擎并自动评分 |
-| `tools/promote_loo_baseline.py` | 导航器留一交叉（10 场景逐折）结果校验后写成正式基线报告 |
+| `tools/promote_v2_baseline.py` | 导航器 RAG v2 的 10 场景结果校验后写成正式基线（压缩报告、summary、代码指纹） |
 | `tools/l1_index.py` | 手动建 / 重建导航器第 1 层顶点-时间索引 |
 | `tools/neo4j_desktop_start.*` / `neo4j_desktop_stop.*` | 本机 Neo4j 桌面版启停 |
 
@@ -26,15 +26,16 @@ python provenance-parser/main.py \
   --neo4j-database attack-<场景名小写连字符>-v2
 ```
 
-**导航器评测（一律用留一交叉）**：测场景 k 时规则库只由其余 9 个场景生成，场景 k 的标准答案与候选边池不参与蒸馏。
+**导航器评测（RAG v2 单一模式）**：规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）分开检索、分开引用校验；默认取该场景的留一折库。
 ```bash
-# 全量留一（rules / hybrid 各一轮）
-python provenance-navigator/run_loo_folds.py --mode rules  --out output/navigator-runs/loo        --keep-reports tmp/loo_rules_reports
-python provenance-navigator/run_loo_folds.py --mode hybrid --out output/navigator-runs/loo-hybrid --keep-reports tmp/loo_hybrid_reports
-# 单场景：自动取该场景的留一折库（没有折库的新场景才退回全量库）
-python provenance-navigator/main.py --scenario <场景全名>
+# 单场景正式运行
+python provenance-navigator/main.py --scenario <场景全名> \
+  --output output/navigator-runs/<场景全名>_rag.json
+
+# 离线规则库维护（仅重建折库、核对覆盖表时使用，不参与日常评测）
+python provenance-navigator/run_loo_folds.py --mode rules --out output/navigator-runs/loo --keep-reports tmp/loo_rules_reports
 ```
-单场景报告默认写 `output/navigator-runs/<场景全名>.json`。
+单场景报告默认写 `output/navigator-runs/<场景全名>_rag.json`。rules / hybrid / llm-only 运行模式已退出导航器入口。
 
 **引擎测试（当次运行，不写基线）：**
 ```bash
