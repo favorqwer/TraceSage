@@ -3,7 +3,8 @@
 > **2026-11-05 更新**：本文件描述的是 v2 扶正前的实验实现，其中的旧入口和命令已删除。
 > 当前正式入口为 `provenance-navigator/main.py --scenario <场景>`；运行时模块位于
 > `provenance-navigator/navigator/`（`pipeline.py`、`decoder.py`、`render.py`、`guard.py`）；
-> 正式基线为 `output/navigator-baseline/OVERVIEW.md`（10 场景 76.93% / 60.02%，混合提示词口径）。
+> 正式基线为 `output/navigator-baseline/OVERVIEW.md`（10 场景 77.37% / 59.66%，统一提示词口径，单次运行）。
+> 混合提示词口径的旧基线保存在 `output/navigator-baseline-mixed-prompt-20261105/`。
 > 旧 `experiments/run_rag.py`、`run_b1_real_2hop.py`、`run_frozen_pair.py`、`rag_judge.py`
 > 以及边级原型已删除；离线蒸馏代码保留。
 

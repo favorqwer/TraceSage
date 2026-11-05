@@ -149,6 +149,8 @@ provenance-navigator/
 
 正式基线由 `tools/promote_v2_baseline.py` 生成，包含 10 份压缩报告、`summary_v2.json`、`OVERVIEW.md` 和代码指纹。
 
+当前统一提示词口径基线：**77.37% 召回、59.66% 查准**（701/906 步，19540/32751 条边，221 次调用，单次运行）。
+
 基线的逐场景数字、微平均、代码版本与复现命令统一见：
 
 👉 [output/navigator-baseline/OVERVIEW.md](../output/navigator-baseline/OVERVIEW.md)
