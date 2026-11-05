@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-运行 provenance-engine 在 10 个攻击场景 -v2 图库上的全量测试，并用当前 GT 评测。
+运行 DEPIMPACT 在 10 个攻击场景 -v2 图库上的全量测试，并用当前 GT 评测。
 产出直接写入 output/engine-baseline/<场景名>/（基线位置，见 AGENTS.md）。
 遵循 AGENTS.md 四大工程法则与对比实验底线（只跑 -v2 图，不碰旧库）。
 """
@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ENGINE = ROOT / "provenance-engine"
+ENGINE = ROOT / "experiments" / "DEPIMPACT"
 BUILD_CLASSES = ENGINE / "build" / "classes"
 M2_REPO = Path(os.environ.get("USERPROFILE", "C:/Users/Favor")) / ".m2" / "repository"
 

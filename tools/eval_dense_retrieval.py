@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "provenance-navigator"))
+sys.path.insert(0, str(ROOT / "provenance"))
 
 from rag.embed import QUERY_INSTRUCTION, Qwen3Embedder  # noqa: E402
 from rag.index import CosineIndex  # noqa: E402

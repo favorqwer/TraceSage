@@ -92,16 +92,16 @@ B1 的开关组合：
 | 环节 | 文件 | 位置/函数 |
 |---|---|---|
 | 读折库 | `tmp/run_all_v4_experiment.py` | `run_single_scenario()` 开头，`load_library_file()`、`_role_cuts()` |
-| 抽闭包 | `provenance-navigator/closure/intake.py` | `extract_raw_closure()`，约 94 行 |
+| 抽闭包 | `provenance/closure/intake.py` | `extract_raw_closure()`，约 94 行 |
 | 锚点确认 | `tmp/run_all_v4_experiment.py` | `anchor_keys` / `final_confirmed`，约第 3 节 |
-| 静态初筛 | `provenance-navigator/routing/prepare.py` | `PreFilter.apply()` |
-| 基模匹配 | `provenance-navigator/rules/online.py` | `MatchIndex.match()`，约 93 行 |
+| 静态初筛 | `provenance/routing/prepare.py` | `PreFilter.apply()` |
+| 基模匹配 | `provenance/rules/online.py` | `MatchIndex.match()`，约 93 行 |
 | 证据映射 | `tmp/run_all_v4_experiment.py` | `rule_evidence_map`，约 5 节 |
 | 父进程表 | `tmp/run_all_v4_experiment.py` | `parent_map`，约 6 节 |
 | 提示词注入 | `tmp/run_all_v4_experiment.py` | `custom_render_v4()`，约 172 行；证据块约 196 行；父进程/请判 all 约 220 行 |
-| 束级判定 | `provenance-navigator/llm/judge.py` | `LevelKey` 约 86 行，`render()` 约 610 行，`run_batches()` 约 667 行，`LlmJudge.judge()` 约 909 行 |
+| 束级判定 | `provenance/llm/judge.py` | `LevelKey` 约 86 行，`render()` 约 610 行，`run_batches()` 约 667 行，`LlmJudge.judge()` 约 909 行 |
 | 图公理 | `tmp/run_all_v4_experiment.py` | 第 8 节（`<NA>` 过滤、A/B、RAW、管道、纯化） |
-| 后置剪枝 | `provenance-navigator/routing/filters.py` | `DebrisPrune.apply()` |
+| 后置剪枝 | `provenance/routing/filters.py` | `DebrisPrune.apply()` |
 | 报告 | `tmp/run_all_v4_experiment.py` | `build_report_from_outcome()`，约 484 行 |
 | 官方评分 | `tmp/run_all_v4_experiment.py` | `scorer.evaluate()`，约 513 行 |
 
@@ -113,7 +113,7 @@ B1 的开关组合：
 
 1. **场景库**：Neo4j `-v2` 数据库。
 2. **留一折库**：测场景 k 时，只用其余 9 个场景的 GT 攻击边挖出的基模。
-3. **POI 锚点**：`provenance-navigator/config/scenarios.json` 人工指定，外部输入。
+3. **POI 锚点**：`provenance/config/scenarios.json` 人工指定，外部输入。
 4. **GT**：只在最后评分时读，不参与判断。
 
 折库字段：

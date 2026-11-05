@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "provenance-navigator"))
+sys.path.insert(0, str(ROOT / "provenance"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 from closure import extract_raw_closure  # noqa: E402

@@ -4,10 +4,10 @@
 
 ## 基线产物落盘位置
 
-- 调查引擎（provenance-engine）的基线一律写 `output/engine-baseline/<场景名>/`：`baseline.json` 是引擎交付的最终图，`groundtruth-eval.txt` 是 `tools/score_graph_product.py` 对同一份产物的完整评分输出；汇总与口径写在 `output/engine-baseline/OVERVIEW.md`。
-- 导航器（provenance-navigator）的基线写 `output/navigator-baseline/`：RAG v2 的 10 份压缩报告、`summary_v2.json`、代码指纹与 `OVERVIEW.md`，由 `tools/promote_v2_baseline.py` 生成。基线的提示词口径、单次/重复运行限制与已知边界以 `OVERVIEW.md` 为准。
+- 调查引擎（DEPIMPACT，位于 `experiments/DEPIMPACT`）的基线一律写 `output/engine-baseline/<场景名>/`：`baseline.json` 是引擎交付的最终图，`groundtruth-eval.txt` 是 `tools/score_graph_product.py` 对同一份产物的完整评分输出；汇总与口径写在 `output/engine-baseline/OVERVIEW.md`。
+- 导航器（provenance）的基线写 `output/navigator-baseline/`：RAG v2 的 10 份压缩报告、`summary_v2.json`、代码指纹与 `OVERVIEW.md`，由 `tools/promote_v2_baseline.py` 生成。基线的提示词口径、单次/重复运行限制与已知边界以 `OVERVIEW.md` 为准。
 - 当次用的运行产物写 `output/engine-runs/`、`output/navigator-runs/`；这两处不得当作基线，也不得被引用为成绩来源。
-- `tools/run_all_engine_v2.py` 与 `provenance-engine/baseline/run-baseline.sh` 不带输出目录参数时都会写 `output/engine-baseline/`：前者用于批量重跑基线，后者只用于基线复跑；当次测试必须显式传 `output/engine-runs/<场景名>`，否则会覆盖正式基线。
+- `tools/run_all_engine_v2.py` 与 `experiments/DEPIMPACT/baseline/run-baseline.sh` 不带输出目录参数时都会写 `output/engine-baseline/`：前者用于批量重跑基线，后者只用于基线复跑；当次测试必须显式传 `output/engine-runs/<场景名>`，否则会覆盖正式基线。
 
 ## 多场景汇总口径（合并平均）
 

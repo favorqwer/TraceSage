@@ -11,15 +11,16 @@ attack/
 
 # Java 编译产物与字节码
 *.class
-provenance-engine/build/
-provenance-engine/.baseline-classes/
-provenance-engine/.baseline-build/
+experiments/DEPIMPACT/build/
+experiments/DEPIMPACT/.baseline-classes/
+experiments/DEPIMPACT/.baseline-build/
 
 # 工具运行期临时缓存
 gt-annotator/tmp/
+.claude/
 
 Transparent_Computing_Engagement_3_Dataset/
 
 # 规则库二进制产物（可由 tools/rebuild_library.py --from-scratch 重建）
-provenance-navigator/config/rules-library/*.bitmaps.bin
-provenance-navigator/config/rules-library/*.coverage.json.gz
+provenance/config/rules-library/*.bitmaps.bin
+provenance/config/rules-library/*.coverage.json.gz

@@ -20,7 +20,7 @@
 
 **图数据流式导入：**
 ```bash
-python provenance-parser/main.py \
+python parser/main.py \
   --scap attack/data/<序号>/capture.scap \
   --scenario <场景全名> \
   --neo4j-database attack-<场景名小写连字符>-v2
@@ -29,23 +29,23 @@ python provenance-parser/main.py \
 **导航器评测（RAG v2 单一模式）**：规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）分开检索、分开引用校验；默认取该场景的留一折库。
 ```bash
 # 单场景正式运行
-python provenance-navigator/main.py --scenario <场景全名> \
+python provenance/main.py --scenario <场景全名> \
   --output output/navigator-runs/<场景全名>_rag.json
 
 # 离线规则库维护（仅重建折库、核对覆盖表时使用，不参与日常评测）
-python provenance-navigator/run_loo_folds.py --mode rules --out output/navigator-runs/loo --keep-reports tmp/loo_rules_reports
+python provenance/run_loo_folds.py --mode rules --out output/navigator-runs/loo --keep-reports tmp/loo_rules_reports
 ```
 单场景报告默认写 `output/navigator-runs/<场景全名>_rag.json`。rules / hybrid / llm-only 运行模式已退出导航器入口。
 
 **引擎测试（当次运行，不写基线）：**
 ```bash
 NEO4J_DATABASE=attack-<场景名小写连字符>-v2 \
-bash provenance-engine/baseline/run-baseline.sh \
+bash experiments/DEPIMPACT/baseline/run-baseline.sh \
   <场景全名> \
   output/engine-runs/<场景全名> \
   <POI 参数...>
 ```
-POI 参数没有默认值，从 `provenance-navigator/config/scenarios.json` 的 `poi` 字段展开。场景 1 用 `--poi-file /srv/data/README_RESTORE.txt --poi-optype write`；场景 2 用 `--poi-endpoints 100.116.135.31:45794->100.86.108.4:22 --poi-optype write`。
+POI 参数没有默认值，从 `provenance/config/scenarios.json` 的 `poi` 字段展开。场景 1 用 `--poi-file /srv/data/README_RESTORE.txt --poi-optype write`；场景 2 用 `--poi-endpoints 100.116.135.31:45794->100.86.108.4:22 --poi-optype write`。
 
 **评测（按产物类型选脚本，两者口径相同但输入 schema 不同）：**
 

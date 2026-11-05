@@ -2,12 +2,12 @@
 
 **适用范围**：需要写 Cypher、修改建图逻辑、判定某条系统调用落到哪条边，或阅读 groundtruth 标注时读本文件。日常汇报、规划与文档整理不必读。
 
-图模型以 `provenance-parser` 代码为准，完整字段口径见 `provenance-parser/README.md`，建模公理见 `docs/PROVENANCE_GRAPH_MODELING_AXIOMS.md`。本文件是 agent 判定用的契约口径；实现细节（读取后端、模板字段、已知边界）以 `provenance-parser/README.md` 为准。
+图模型以 `parser` 代码为准，完整字段口径见 `parser/README.md`，建模公理见 `docs/PROVENANCE_GRAPH_MODELING_AXIOMS.md`。本文件是 agent 判定用的契约口径；实现细节（读取后端、模板字段、已知边界）以 `parser/README.md` 为准。
 
 ## 核心边界
 
 - 系统默认面向企业级多主机环境建模；节点以 `host_id` 作为命名空间属性与复合主键最高前缀，支持单机独立溯源。跨主机场景下 Network 顶点同样按 `host_id` 隔离，两端因果连接需要网络端点（IP、端口、时间）对齐；当前解析器只负责单次 capture 的图，不做跨主机对端自动合并。
-- 跨主机关联不属于 `provenance-parser` 的职责；当前仓库没有对端流量对齐模块，跨主机关联只能作为外部前置步骤，不得在能力汇报中算作系统自主能力。
+- 跨主机关联不属于 `parser` 的职责；当前仓库没有对端流量对齐模块，跨主机关联只能作为外部前置步骤，不得在能力汇报中算作系统自主能力。
 
 ## 顶点
 

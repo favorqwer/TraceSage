@@ -47,48 +47,48 @@ MODE_TITLE = {
     "hybrid": "智能导航模式（规则 + 大模型仲裁）",
 }
 ALL_MODES = ("rules", "hybrid")
-LIBDIR = REPO / "provenance-navigator" / "config" / "rules-library"
+LIBDIR = REPO / "provenance" / "config" / "rules-library"
 EVAL = REPO / "tools" / "score_report_product.py"
 WORK = REPO / "tmp" / "loo_promote"
 FINGERPRINT_FILES = [
-    "provenance-navigator/pipeline.py",
-    "provenance-navigator/run_loo_folds.py",
-    "provenance-navigator/closure/policy.py",
-    "provenance-navigator/closure/storage.py",
-    "provenance-navigator/closure/traversal.py",
-    "provenance-navigator/closure/snapshot.py",
-    "provenance-navigator/closure/fold.py",
-    "provenance-navigator/closure/intake.py",
-    "provenance-navigator/closure/neo4j.py",
-    "provenance-navigator/closure/trace.py",
-    "provenance-navigator/rules/offline.py",
-    "provenance-navigator/rules/online.py",
-    "provenance-navigator/rules/admission.py",
-    "provenance-navigator/rules/coverage.py",
-    "provenance-navigator/rules/library.py",
-    "provenance-navigator/rules/roles.py",
-    "provenance-navigator/rules/legacy_roles.py",
-    "provenance-navigator/domain/edge.py",
-    "provenance-navigator/domain/keys.py",
-    "provenance-navigator/domain/taxonomy.py",
-    "provenance-navigator/domain/network.py",
-    "provenance-navigator/domain/pool.py",
-    "provenance-navigator/domain/state.py",
-    "provenance-navigator/routing/route.py",
-    "provenance-navigator/routing/prepare.py",
-    "provenance-navigator/routing/channels.py",
-    "provenance-navigator/routing/filters.py",
-    "provenance-navigator/routing/report.py",
-    "provenance-navigator/llm/judge.py",
-    "provenance-navigator/llm/client.py",
-    "provenance-navigator/llm/text.py",
-    "provenance-navigator/llm/verdict.py",
-    "provenance-navigator/settings.py",
+    "provenance/pipeline.py",
+    "provenance/run_loo_folds.py",
+    "provenance/closure/policy.py",
+    "provenance/closure/storage.py",
+    "provenance/closure/traversal.py",
+    "provenance/closure/snapshot.py",
+    "provenance/closure/fold.py",
+    "provenance/closure/intake.py",
+    "provenance/closure/neo4j.py",
+    "provenance/closure/trace.py",
+    "provenance/rules/offline.py",
+    "provenance/rules/online.py",
+    "provenance/rules/admission.py",
+    "provenance/rules/coverage.py",
+    "provenance/rules/library.py",
+    "provenance/rules/roles.py",
+    "provenance/rules/legacy_roles.py",
+    "provenance/domain/edge.py",
+    "provenance/domain/keys.py",
+    "provenance/domain/taxonomy.py",
+    "provenance/domain/network.py",
+    "provenance/domain/pool.py",
+    "provenance/domain/state.py",
+    "provenance/routing/route.py",
+    "provenance/routing/prepare.py",
+    "provenance/routing/channels.py",
+    "provenance/routing/filters.py",
+    "provenance/routing/report.py",
+    "provenance/llm/judge.py",
+    "provenance/llm/client.py",
+    "provenance/llm/text.py",
+    "provenance/llm/verdict.py",
+    "provenance/settings.py",
     "tools/rules_match.py",
     "tools/score_report_product.py",
-    "provenance-navigator/config/closure_rules.json",
-    "provenance-navigator/config/navigator.toml",
-    "provenance-navigator/config/scenarios.json",
+    "provenance/config/closure_rules.json",
+    "provenance/config/navigator.toml",
+    "provenance/config/scenarios.json",
 ]
 
 
@@ -112,7 +112,7 @@ def min_med_max(values):
 # ---------- 1. 校验 ----------
 
 def check(modes) -> dict:
-    expected = sorted(load_json(REPO / "provenance-navigator/config/scenarios.json")["scenarios"])
+    expected = sorted(load_json(REPO / "provenance/config/scenarios.json")["scenarios"])
     data = {"summary": {}, "reports": {}, "fold_libs": {}}
 
     lib_name = (LIBDIR / "latest.txt").read_text(encoding="utf-8").strip()
@@ -444,10 +444,10 @@ def render(data, unex, chan, stamp, backup_name, modes,
                                ("hybrid", "loo-hybrid", "loo_hybrid_reports")):
         if mode not in modes:
             continue
-        add(f".venv/Scripts/python.exe provenance-navigator/run_loo_folds.py --mode {mode} \\")
+        add(f".venv/Scripts/python.exe provenance/run_loo_folds.py --mode {mode} \\")
         add(f"    --out output/navigator-runs/{outdir} --keep-reports tmp/{keep}")
     add("# 位图自检（判定重用位图是否与冻结库逐位相同）")
-    add(".venv/Scripts/python.exe provenance-navigator/run_loo_folds.py --selftest")
+    add(".venv/Scripts/python.exe provenance/run_loo_folds.py --selftest")
     add("# 写入本目录")
     add(f".venv/Scripts/python.exe tools/promote_loo_baseline.py --modes {','.join(modes)}")
     add("```")

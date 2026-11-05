@@ -54,21 +54,21 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "provenance-parser"))
-sys.path.insert(0, str(ROOT / "provenance-navigator"))
+sys.path.insert(0, str(ROOT / "parser"))
+sys.path.insert(0, str(ROOT / "provenance"))
 
 from provenance.core.syscalls import (  # noqa: E402
     CREATE_ALWAYS, OPEN_FAMILY, canonical_syscall,
 )
 from domain.keys import path_part  # noqa: E402
 
-SCENARIOS = ROOT / "provenance-navigator" / "config" / "scenarios.json"
+SCENARIOS = ROOT / "provenance" / "config" / "scenarios.json"
 
 _LABEL_TO_KIND = {"Process": "process", "File": "file", "Network": "network"}
 
 # 图上的动作名 -> 该动作可能落在哪些 syscall 上（家族基本名）。
 #
-# 事实来源是解析器自己的动词表 provenance-parser/data/verbs.toml（调用 -> 动作），
+# 事实来源是解析器自己的动词表 parser/data/verbs.toml（调用 -> 动作），
 # 加上两处解析器代码里才有的规则：
 #   1. open 家族（open/openat/openat2/creat…）由 flags 分流，O_CREAT/O_TRUNC 落 create；
 #   2. mmap 一族按 prot/flags 拆成 mmap_read / mmap_write / mmap_exec 三个动作值。
@@ -82,7 +82,7 @@ _LABEL_TO_KIND = {"Process": "process", "File": "file", "Network": "network"}
 
 def _load_action_syscalls():
     """从 verbs.toml 推出 动作名 -> syscall 家族名集合。"""
-    verbs_path = ROOT / "provenance-parser" / "data" / "verbs.toml"
+    verbs_path = ROOT / "parser" / "data" / "verbs.toml"
     if not verbs_path.exists():
         raise RuntimeError(f"缺解析器动词表，无法判定规则动作：{verbs_path}")
     verbs = tomllib.loads(verbs_path.read_text(encoding="utf-8"))["verb"]
@@ -281,7 +281,7 @@ class VertexKinds:
 
     @classmethod
     def for_gt(cls, gt, database=None):
-        """按 GT 的 scenario 找场景库（provenance-navigator/config/scenarios.json），读顶点种类。"""
+        """按 GT 的 scenario 找场景库（provenance/config/scenarios.json），读顶点种类。"""
         db = database or scenario_database(gt.get("scenario"))
         if not db:
             return cls.empty()
@@ -319,7 +319,7 @@ def scenario_database(scenario):
 
     默认按项目命名规范推导：attack-<场景名小写、下划线换连字符>-v2
     （例：9_Exposed_Container_Escape -> attack-9-exposed-container-escape-v2）；
-    provenance-navigator/config/scenarios.json 里若显式登记了 database，则用它覆盖。
+    provenance/config/scenarios.json 里若显式登记了 database，则用它覆盖。
     """
     if not scenario:
         return None

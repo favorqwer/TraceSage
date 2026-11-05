@@ -4,7 +4,7 @@
 用法：
     .venv/Scripts/python.exe tools/build_attack_kg.py \
         --stix tmp/attack-stix/enterprise-attack.json \
-        --observables provenance-navigator/config/attack-observables.seed.json \
+        --observables provenance/config/attack-observables.seed.json \
         --out output/rule-kg/v1/attack.json
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "provenance-navigator"))
+sys.path.insert(0, str(ROOT / "provenance"))
 
 from rag.attack import load_behavior_observables, load_stix, summarize  # noqa: E402
 
@@ -23,7 +23,7 @@ from rag.attack import load_behavior_observables, load_stix, summarize  # noqa: 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stix", default=str(ROOT / "tmp/attack-stix/enterprise-attack.json"))
-    ap.add_argument("--observables", default=str(ROOT / "provenance-navigator/config/attack-observables.seed.json"))
+    ap.add_argument("--observables", default=str(ROOT / "provenance/config/attack-observables.seed.json"))
     ap.add_argument("--out", default=str(ROOT / "output/rule-kg/v1/attack.json"))
     args = ap.parse_args()
 

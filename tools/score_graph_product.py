@@ -9,7 +9,7 @@
     - GT 文件：groundtruth/<场景>.groundtruth.json（gt-annotator 产出，用 --gt 指定）
     - BaselineRunner 产出的 baseline.json
 
-图模型口径（与 provenance-parser 写入的 -v2 图一致，没有旧图回退）:
+图模型口径（与 parser 写入的 -v2 图一致，没有旧图回退）:
     - Process 内容 = coalesce(exe_path, '<NA>')；File 内容 = path；Network 内容 = endpoints
     - 边属性：event_id / action / syscall / start_ns / end_ns / result / payload_b64 / to_path / mode
     - 顶点主键：Process=(host_id,container_id,pid,start_ns)、File=(host_id,container_id,path)、
@@ -44,7 +44,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-sys.path.insert(0, str(ROOT / "provenance-navigator"))
+sys.path.insert(0, str(ROOT / "provenance"))
 import rules_match as rm  # noqa: E402
 from domain.keys import path_part  # noqa: E402
 # GT 文件与场景说明同放 groundtruth/。

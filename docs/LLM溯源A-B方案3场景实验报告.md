@@ -77,7 +77,7 @@ A 对应 TRACKAGENT 的核心机制。
 
 执行流程：
 
-1. 从 POI 开始。POI 是入侵检测告警对应的那个事件，来自 `provenance-navigator/config/scenarios.json`。
+1. 从 POI 开始。POI 是入侵检测告警对应的那个事件，来自 `provenance/config/scenarios.json`。
 2. 程序沿因果边做一跳扩展。扩展顺序由程序决定，不由大模型决定。
 3. 每次取当前节点附近的一批事件，最多 20 条，交给大模型。
 4. 交给大模型的内容包括：

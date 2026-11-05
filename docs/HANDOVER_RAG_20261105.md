@@ -1,8 +1,8 @@
 # RAG 全量替换 B1 交接文档
 
 > **2026-11-05 更新**：本文件描述的是 v2 扶正前的实验实现，其中的旧入口和命令已删除。
-> 当前正式入口为 `provenance-navigator/main.py --scenario <场景>`；运行时模块位于
-> `provenance-navigator/navigator/`（`pipeline.py`、`decoder.py`、`render.py`、`guard.py`）；
+> 当前正式入口为 `provenance/main.py --scenario <场景>`；运行时模块位于
+> `provenance/navigator/`（`pipeline.py`、`decoder.py`、`render.py`、`guard.py`）；
 > 正式基线为 `output/navigator-baseline/OVERVIEW.md`（10 场景 77.37% / 59.66%，统一提示词口径，单次运行）。
 > 混合提示词口径的旧基线保存在 `output/navigator-baseline-mixed-prompt-20261105/`。
 > 旧 `experiments/run_rag.py`、`run_b1_real_2hop.py`、`run_frozen_pair.py`、`rag_judge.py`
@@ -105,9 +105,9 @@
 
 ### 1.1 B0/B1 冻结与评分修复
 
-- 冻结代码：`provenance-navigator/experiments/run_v4_frozen.py`
+- 冻结代码：`provenance/experiments/run_v4_frozen.py`
 - 源 commit：`9c11503c2c80daee95a604f561606295f1621d59`
-- 解码器：`provenance-navigator/experiments/experiment_engine.py`
+- 解码器：`provenance/experiments/experiment_engine.py`
 - 评分器：`tools/score_report_product.py`（已修 `effect/effects` 四元组口径）
 - 10 场景重跑（`tmp/frozen_runs/summary_b1.json`）：
   - B0：77.92% / 58.94%，219 次调用；
@@ -128,11 +128,11 @@
 - 规模：1,454 Motif、2,362 Hop、8,670 Technique（867×10 折）、150 Tactic、90 Case、450 BehaviorObservable；
   - 边：2,362 `HAS_HOP`、908 `NEXT_HOP`、6,266 `IMPLEMENTS`、1,799 `DERIVED_FROM`、10,990 `BELONGS_TO`、450 `OBSERVES`。
 - 每折用 `fold` 属性隔离；测场景 k 只用 `KG_k`。
-- 图检索器：`provenance-navigator/rag/graph_retrieve.py`
+- 图检索器：`provenance/rag/graph_retrieve.py`
   - Hop 入口与在线符号匹配逐场景一致；
   - 技术入口：`BehaviorObservable → Technique → IMPLEMENTS → Motif`；
   - 扩展：`HAS_HOP` / `IMPLEMENTS` / `DERIVED_FROM`。
-- 入库代码：`provenance-navigator/rag/neo4j_kg.py`；入口 `tools/build_rule_kg_neo4j.py`。
+- 入库代码：`provenance/rag/neo4j_kg.py`；入口 `tools/build_rule_kg_neo4j.py`。
 
 ### 1.4 图检索机制已验证
 
@@ -168,14 +168,14 @@
 
 | 文件 | 作用 |
 |---|---|
-| `provenance-navigator/experiments/run_rag.py` | RAG 全量替换入口；设置 `RENDER_HOOK`、RAG 系统提示词、`all` 引用守卫、`cfg.none_guard="off"` |
-| `provenance-navigator/experiments/rag_render.py` | 在 B1 层级束标题后插入规则子图证据卡；父进程/上游执行环境/`请判 all` 上下文 |
-| `provenance-navigator/experiments/run_v4_frozen.py` | 冻结 B1 主流程；暴露 `CURRENT_MATCHER`、`CURRENT_PARENT_MAP`、`RENDER_HOOK` |
-| `provenance-navigator/experiments/rag_judge.py` | 旧的 40 个小束判定器；**当前 `run_rag.py` 不使用它**，不要混淆 |
-| `provenance-navigator/rag/graph_retrieve.py` | 图优先检索器 |
-| `provenance-navigator/rag/neo4j_kg.py` | Rule KG 入库与计数 |
-| `provenance-navigator/config/prompts/judge_bundle_rag.md` | RAG 层级束系统提示词 |
-| `provenance-navigator/config/attack-observables.seed.json` | 45 项 BehaviorObservable |
+| `provenance/experiments/run_rag.py` | RAG 全量替换入口；设置 `RENDER_HOOK`、RAG 系统提示词、`all` 引用守卫、`cfg.none_guard="off"` |
+| `provenance/experiments/rag_render.py` | 在 B1 层级束标题后插入规则子图证据卡；父进程/上游执行环境/`请判 all` 上下文 |
+| `provenance/experiments/run_v4_frozen.py` | 冻结 B1 主流程；暴露 `CURRENT_MATCHER`、`CURRENT_PARENT_MAP`、`RENDER_HOOK` |
+| `provenance/experiments/rag_judge.py` | 旧的 40 个小束判定器；**当前 `run_rag.py` 不使用它**，不要混淆 |
+| `provenance/rag/graph_retrieve.py` | 图优先检索器 |
+| `provenance/rag/neo4j_kg.py` | Rule KG 入库与计数 |
+| `provenance/config/prompts/judge_bundle_rag.md` | RAG 层级束系统提示词 |
+| `provenance/config/attack-observables.seed.json` | 45 项 BehaviorObservable |
 | `groundtruth/attack-technique-map.json` | 技术级答案键，人工草稿 |
 
 当前 `run_rag.py` 的流程：
@@ -268,9 +268,9 @@ cd E:/Work/TraceSage
 ### 5.4 冻结 B1
 
 ```bash
-.venv/Scripts/python.exe provenance-navigator/experiments/run_b1_real_2hop.py <场景全名>
+.venv/Scripts/python.exe provenance/experiments/run_b1_real_2hop.py <场景全名>
 # 或全 10 场景
-.venv/Scripts/python.exe provenance-navigator/experiments/run_frozen_pair.py --group b1
+.venv/Scripts/python.exe provenance/experiments/run_frozen_pair.py --group b1
 ```
 
 输出：`tmp/frozen_runs/b1/<场景>_b1.json`；B1 汇总：`tmp/frozen_runs/summary_b1.json`。
@@ -278,7 +278,7 @@ cd E:/Work/TraceSage
 ### 5.5 RAG 单场景
 
 ```bash
-.venv/Scripts/python.exe provenance-navigator/experiments/run_rag.py <场景全名>
+.venv/Scripts/python.exe provenance/experiments/run_rag.py <场景全名>
 ```
 
 输出：`tmp/rag-pilot/<场景>_rag.json` 和 `<场景>_rag.trace.jsonl`。
@@ -308,7 +308,7 @@ cd E:/Work/TraceSage
 ### 5.9 单元测试
 
 ```bash
-.venv/Scripts/python.exe -m unittest discover -s provenance-navigator/tests -t provenance-navigator
+.venv/Scripts/python.exe -m unittest discover -s provenance/tests -t provenance
 ```
 
 当前基线：88 个测试全部通过。
@@ -376,5 +376,5 @@ cd E:/Work/TraceSage
 | RAG 运行 | `tmp/rag-pilot/`（报告、trace、logs、summary） |
 | 精度核验 | `tmp/frozen_runs/PRECISION_AUDIT_20.md` |
 | 技术答案键 | `groundtruth/attack-technique-map.json` |
-| 观测种子 | `provenance-navigator/config/attack-observables.seed.json` |
-| RAG 提示词 | `provenance-navigator/config/prompts/judge_bundle_rag.md` |
+| 观测种子 | `provenance/config/attack-observables.seed.json` |
+| RAG 提示词 | `provenance/config/prompts/judge_bundle_rag.md` |

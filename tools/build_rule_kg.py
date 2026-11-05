@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "provenance-navigator"))
+sys.path.insert(0, str(ROOT / "provenance"))
 
 from rag.build_kg import build_all_folds  # noqa: E402
 
@@ -31,7 +31,7 @@ def main() -> None:
     ap.add_argument("--version", default="kg-v1")
     ap.add_argument("--include-candidates", action="store_true",
                     help="把未入选形态以 admitted=false 一并存档（检索仍只用 selected）")
-    ap.add_argument("--observables", default=str(ROOT / "provenance-navigator/config/attack-observables.seed.json"),
+    ap.add_argument("--observables", default=str(ROOT / "provenance/config/attack-observables.seed.json"),
                     help="BehaviorObservable 映射表；传空字符串可跳过技术链接")
     args = ap.parse_args()
 

@@ -4,7 +4,7 @@
 
 ## 项目定位
 
-TraceSage 使用 Sysdig 生成的主机系统调用事件流（SCAP 二进制文件直接流式解析）构建溯源图并存入 Neo4j 图数据库。图模型以 `provenance-parser` 代码为准，完整字段口径见 `provenance-parser/README.md`，建模公理见 `docs/PROVENANCE_GRAPH_MODELING_AXIOMS.md`。
+TraceSage 使用 Sysdig 生成的主机系统调用事件流（SCAP 二进制文件直接流式解析）构建溯源图并存入 Neo4j 图数据库。图模型以 `parser` 代码为准，完整字段口径见 `parser/README.md`，建模公理见 `docs/PROVENANCE_GRAPH_MODELING_AXIOMS.md`。
 
 本文件只放全局约束、顶层结构与文档索引；图模型契约、场景测试流程、评分与汇总口径拆分在 `docs/agents/` 下，按第六部分的索引按需读取。
 
@@ -62,7 +62,7 @@ TraceSage 使用 Sysdig 生成的主机系统调用事件流（SCAP 二进制文
 - 系统默认面向企业级多主机环境建模；节点以 `host_id` 作为命名空间属性与复合主键最高前缀，支持单机独立溯源。
 - 跨主机场景下 Network 顶点同样按 `host_id` 隔离，两端因果连接需要网络端点（IP、端口、时间）对齐。
 - 当前解析器只负责单次 capture 的图，不做跨主机对端自动合并；当前仓库没有对端流量对齐模块。
-- 跨主机关联不属于 `provenance-parser` 的职责，只能作为外部前置步骤，不得在能力汇报中算作系统自主能力。
+- 跨主机关联不属于 `parser` 的职责，只能作为外部前置步骤，不得在能力汇报中算作系统自主能力。
 - 顶点与边的完整契约（主键、属性、`action` 取值、方向约定、写库约束）见 `docs/agents/graph-model.md`。
 
 ## 第四部分：主干资产全景
@@ -87,9 +87,10 @@ TraceSage/
 │   └── agent-vs-engine/      # score_report_product.py 默认结果目录（按需生成）
 ├── tmp/                      # 临时文件与诊断数据区（随时可清）
 ├── tools/                    # 评测与检查工具（如 score_report_product.py）
-├── provenance-parser/        # SCAP 流式解析与 Neo4j 溯源图构建入库
-├── provenance-navigator/     # 神经符号因果拓扑与离线蒸馏双向因果导航系统
-├── provenance-engine/        # 调查引擎（基于 Neo4j 与 GQL 的纯图路径遍历）
+├── parser/                   # SCAP 流式解析与 Neo4j 溯源图构建入库
+├── provenance/               # 神经符号因果拓扑与离线蒸馏双向因果导航系统
+├── experiments/              # 对比实验与历史基线
+│   └── DEPIMPACT/            # 调查引擎基线（基于 Neo4j 与 GQL 的纯图路径遍历）
 └── paper/                    # 参考论文
 ```
 
@@ -105,7 +106,7 @@ TraceSage/
 
 - 正式基线：调查引擎写 `output/engine-baseline/<场景名>/`，导航器写 `output/navigator-baseline/`。
 - 当次运行产物写 `output/engine-runs/`、`output/navigator-runs/`，不得当作基线，也不得被引用为成绩来源。
-- `tools/run_all_engine_v2.py` 与 `provenance-engine/baseline/run-baseline.sh` 不带输出目录参数时都会写 `output/engine-baseline/`；当次测试必须显式传 `output/engine-runs/<场景名>`，否则会覆盖正式基线。
+- `tools/run_all_engine_v2.py` 与 `experiments/DEPIMPACT/baseline/run-baseline.sh` 不带输出目录参数时都会写 `output/engine-baseline/`；当次测试必须显式传 `output/engine-runs/<场景名>`，否则会覆盖正式基线。
 - 落盘文件构成（`baseline.json`、`groundtruth-eval.txt`、`OVERVIEW.md`、留一折库）与汇总口径见 `docs/agents/evaluation-protocol.md`。
 
 ## 第六部分：文档索引
@@ -115,9 +116,9 @@ TraceSage/
 | `docs/agents/graph-model.md` | 顶点 3 类、边 5 类的主键与属性、`action` 取值、方向约定、写库约束 | 写 Cypher、改建图逻辑、判定某系统调用落哪条边、读标注 |
 | `docs/agents/test-runbook.md` | 图导入 / 导航器 / 引擎 / 评分四类命令与 7 个核心工具的用途 | 要实际跑一次场景测试或评分 |
 | `docs/agents/evaluation-protocol.md` | 基线产物落盘位置、召回与查准口径、多场景合并平均规则 | 出数字、写评测报告、固化或对比基线 |
-| `provenance-parser/README.md` | 解析器实现结构、读取后端 `--backend`、快速开始与已知边界 | 改解析逻辑、查后端选择、看字段实现细节 |
-| `provenance-navigator/README.md` | 导航器架构、RAG v2 单一运行模式、离线蒸馏与规则库重建 | 改导航器、查运行口径与规则库操作 |
-| `provenance-engine/baseline/README.md` | 引擎基线 runner 的参数、产物与确定性说明 | 跑引擎测试、核对产物格式 |
+| `parser/README.md` | 解析器实现结构、读取后端 `--backend`、快速开始与已知边界 | 改解析逻辑、查后端选择、看字段实现细节 |
+| `provenance/README.md` | 导航器架构、RAG v2 单一运行模式、离线蒸馏与规则库重建 | 改导航器、查运行口径与规则库操作 |
+| `experiments/DEPIMPACT/baseline/README.md` | 引擎基线 runner 的参数、产物与确定性说明 | 跑引擎测试、核对产物格式 |
 | `docs/PROVENANCE_GRAPH_MODELING_AXIOMS.md` | 建模公理与物理工程规矩 | 判断某条建模是否有物理依据 |
 | `docs/Sysdig-User-Guide.md` | Sysdig 完整使用手册 | 查 sysdig 命令行、字段与输出格式 |
 | `docs/Sysdig-Quick-Reference-Guide.md` | Sysdig 命令与选项速查 | 只需要查某个参数时 |

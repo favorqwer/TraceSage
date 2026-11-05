@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "provenance-navigator"))
+sys.path.insert(0, str(ROOT / "provenance"))
 
 from rag.attack import load_behavior_observables  # noqa: E402
 
@@ -68,7 +68,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--gt-dir", default=str(ROOT / "groundtruth"))
     ap.add_argument("--fold-dir", default=str(ROOT / "output/navigator-baseline/distill/fold-libraries"))
-    ap.add_argument("--observables", default=str(ROOT / "provenance-navigator/config/attack-observables.seed.json"))
+    ap.add_argument("--observables", default=str(ROOT / "provenance/config/attack-observables.seed.json"))
     ap.add_argument("--out", default=str(ROOT / "output/rule-kg/v1/attack_coverage.json"))
     ap.add_argument("--include-extra", action="store_true",
                     help="同时统计没有折库的额外 GT（如 TC_E3）；默认只统计 10 个攻击场景")

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "provenance-navigator"))
+sys.path.insert(0, str(ROOT / "provenance"))
 
 import settings as cfg  # noqa: E402
 from rag.neo4j_kg import DEFAULT_DATABASE, RuleKGStore  # noqa: E402

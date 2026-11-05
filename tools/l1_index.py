@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "provenance-navigator"))
+sys.path.insert(0, str(ROOT / "provenance"))
 
 import settings as settings  # noqa: E402
 from closure.neo4j import ReadOnlyGraph  # noqa: E402
@@ -26,7 +26,7 @@ import closure.snapshot as snap  # noqa: E402
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="构建第 1 层的顶点-时间索引快照")
-    parser.add_argument("--database", required=True, help="Neo4j 库名（见 provenance-navigator/config/scenarios.json）")
+    parser.add_argument("--database", required=True, help="Neo4j 库名（见 provenance/config/scenarios.json）")
     parser.add_argument("--force", action="store_true", help="已存在也重建")
     args = parser.parse_args()
 

@@ -20,12 +20,12 @@
 
 ## 一、方案背景与核心解决的问题
 
-在主机系统调用级网络威胁因果图分析领域，现有技术（包括 TraceSage 当前的 [provenance-navigator](file:///E:/Work/TraceSage/provenance-navigator) 基线）面临三大理论与系统瓶颈：
+在主机系统调用级网络威胁因果图分析领域，现有技术（包括 TraceSage 当前的 [provenance](file:///E:/Work/TraceSage/provenance) 基线）面临三大理论与系统瓶颈：
 
 1. **依赖爆炸与保守过近似（Over-approximation）**：
    系统调用探针仅能在内核边界捕获进程的外部 I/O 动作。由于无法观测进程内存内部变量，现有系统做出了保守假设：一旦长周期进程（如 `sshd`、`nginx`、`bash`）读取了未受信网络输入，其后续发出的全部读写系统调用都被视为存在因果依赖，导致图节点度数呈幂律激增，候选边规模急剧膨胀。
 2. **经验启发式剪枝缺乏保真性（Soundness）数学保证**：
-   为了遏制图规模，当前系统在 [routing/prepare.py](file:///E:/Work/TraceSage/provenance-navigator/routing/prepare.py) 中依赖手工维护的硬编码路径前缀白名单（如 `/proc/`、`/usr/lib/`）。这种工程妥协破坏了因果链条的完整性，一旦攻击者利用非常规路径落盘，必然引发致命漏报，在学术上极易受到审稿人质疑。
+   为了遏制图规模，当前系统在 [routing/prepare.py](file:///E:/Work/TraceSage/provenance/routing/prepare.py) 中依赖手工维护的硬编码路径前缀白名单（如 `/proc/`、`/usr/lib/`）。这种工程妥协破坏了因果链条的完整性，一旦攻击者利用非常规路径落盘，必然引发致命漏报，在学术上极易受到审稿人质疑。
 3. **多跳因果搜索的中间状态笛卡尔积膨胀与归因黑盒化**：
    在图数据库（Neo4j Cypher）中执行长攻击路径匹配时，传统两两二元连接（Binary Join）会导致中间临时状态急剧膨胀；同时，现有判定结果仅为离散的三值标签（`pos`/`ignore`/`neg`），缺乏形式化的代数可解释性，无法定量回答各系统调用边对阻断攻击链的具体贡献权重。
 
@@ -242,7 +242,7 @@ $$\tau^\sharp(\text{execve}(p_{caller}, f_{target}), (\sigma_P, \sigma_O)) = \le
    - 将 [tmp/optimize_schemes_1_3.py](file:///E:/Work/TraceSage/tmp/optimize_schemes_1_3.py) 中的 Leapfrog Triejoin 多维指针迭代推进循环用 **Rust**（通过 `PyO3`）实现，编译为 Python C-ABI 动态链接库；
    - 在数百万级系统调用的全图上，跑出对比 Neo4j 原生 Cypher 遍历的加速比折线图（目标：提速 10 到 50 倍）。
 2. **全量 10 场景留一交叉（LOO）基准评测运行**：
-   - 将 `verify_combined_pl_db.py` 的处理逻辑封装为 `provenance-navigator` 的独立判定模块；
+   - 将 `verify_combined_pl_db.py` 的处理逻辑封装为 `provenance` 的独立判定模块；
    - 运行全量 10 个攻击场景的留一交叉验证，生成覆盖全场景的召回率、查准率与耗时汇总表格，直接作为论文第 5 章的实验数据表。
 3. **前端/命令行代数证明展示工具**：
    - 为系统增加一个 `--explain-semiring` 命令行参数，输入 POI 事件后，不仅输出 JSON 报告，而且在终端打印出该攻击链的代数多项式因果证明与偏导数最高的前 5 条关键切除边，增强答辩时的演示视觉效果。

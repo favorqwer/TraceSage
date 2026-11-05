@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "provenance-navigator"))
+sys.path.insert(0, str(ROOT / "provenance"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import settings as cfg  # noqa: E402
@@ -41,16 +41,16 @@ SCENARIOS = [
 ]
 FIXED_SCENE = "7_DB_Bruteforce_Datawipe"
 FINGERPRINT_FILES = [
-    "provenance-navigator/main.py",
-    "provenance-navigator/navigator/pipeline.py",
-    "provenance-navigator/navigator/decoder.py",
-    "provenance-navigator/navigator/render.py",
-    "provenance-navigator/navigator/guard.py",
-    "provenance-navigator/rag/graph_retrieve.py",
-    "provenance-navigator/rag/neo4j_kg.py",
-    "provenance-navigator/config/prompts/judge_bundle_rag.md",
-    "provenance-navigator/config/attack-observables.seed.json",
-    "provenance-navigator/settings.py",
+    "provenance/main.py",
+    "provenance/navigator/pipeline.py",
+    "provenance/navigator/decoder.py",
+    "provenance/navigator/render.py",
+    "provenance/navigator/guard.py",
+    "provenance/rag/graph_retrieve.py",
+    "provenance/rag/neo4j_kg.py",
+    "provenance/config/prompts/judge_bundle_rag.md",
+    "provenance/config/attack-observables.seed.json",
+    "provenance/settings.py",
 ]
 
 
@@ -166,7 +166,7 @@ def main() -> None:
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "files": {str(p): sha256_file(ROOT / p) for p in FINGERPRINT_FILES},
         "prompt_sha256": sha256_file(
-            ROOT / "provenance-navigator/config/prompts/judge_bundle_rag.md"),
+            ROOT / "provenance/config/prompts/judge_bundle_rag.md"),
     }
     (baseline / "code-fingerprints.json").write_text(
         json.dumps(fingerprints, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -218,7 +218,7 @@ def main() -> None:
         "## 复现命令",
         "",
         "```bash",
-        ".venv/Scripts/python.exe provenance-navigator/main.py --scenario <场景> \\",
+        ".venv/Scripts/python.exe provenance/main.py --scenario <场景> \\",
         "  --output output/navigator-runs/<场景>_rag.json",
         ".venv/Scripts/python.exe tools/score_report_product.py \\",
         "  --report output/navigator-runs/<场景>_rag.json \\",
