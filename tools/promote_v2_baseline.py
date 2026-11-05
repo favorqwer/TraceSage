@@ -42,10 +42,10 @@ SCENARIOS = [
 FIXED_SCENE = "7_DB_Bruteforce_Datawipe"
 FINGERPRINT_FILES = [
     "provenance-navigator/main.py",
-    "provenance-navigator/experiments/run_v4_frozen.py",
-    "provenance-navigator/experiments/experiment_engine.py",
-    "provenance-navigator/experiments/rag_render.py",
-    "provenance-navigator/experiments/rag_guard.py",
+    "provenance-navigator/navigator/pipeline.py",
+    "provenance-navigator/navigator/decoder.py",
+    "provenance-navigator/navigator/render.py",
+    "provenance-navigator/navigator/guard.py",
     "provenance-navigator/rag/graph_retrieve.py",
     "provenance-navigator/rag/neo4j_kg.py",
     "provenance-navigator/config/prompts/judge_bundle_rag.md",

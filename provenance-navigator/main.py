@@ -18,10 +18,10 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 import settings as cfg  # noqa: E402
-import experiments.run_v4_frozen as m  # noqa: E402
+import navigator.pipeline as m  # noqa: E402
 import llm.judge as judge_mod  # noqa: E402
-from experiments import rag_render  # noqa: E402
-from experiments.rag_guard import enforce_citations  # noqa: E402
+from navigator import render as rag_render  # noqa: E402
+from navigator.guard import enforce_citations  # noqa: E402
 
 
 def _configure_rag() -> None:

@@ -55,7 +55,7 @@ def _get_retriever() -> RuleGraphRetriever:
 
 
 def _matcher():
-    from experiments import run_v4_frozen as frozen
+    from navigator import pipeline as frozen
     return frozen.CURRENT_MATCHER
 
 
@@ -234,7 +234,7 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
     } for r in sorted(weak_recs, key=tech_rank)]
 
     if os.environ.get("RAG_DEBUG"):
-        print(f"[rag_render] item={item.get('id')} size={item.get('size')} "
+        print(f"[navigator.render] item={item.get('id')} size={item.get('size')} "
               f"members={len(members)} rules={len(rules_by_mid)} "
               f"tech_strong={len(strong_recs)} tech_weak={len(weak_recs)} "
               f"scenario={_SCENARIO!r}", flush=True)
@@ -246,7 +246,7 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
 
 
 def _context_lines(item: Dict[str, Any]) -> List[str]:
-    from experiments import run_v4_frozen as frozen
+    from navigator import pipeline as frozen
     parent_map = getattr(frozen, "CURRENT_PARENT_MAP", {}) or {}
     parents = sorted({parent_map[p] for p in (item.get("programs") or []) if p in parent_map})
     lines: List[str] = []

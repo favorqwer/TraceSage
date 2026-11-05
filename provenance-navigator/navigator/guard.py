@@ -1,11 +1,11 @@
 """束级引用守卫：规则证据和技术证据分开校验。
 
-规则证据由 `rag_render` 写入 `_rule_evidence`：
+规则证据由 `navigator.render` 写入 `_rule_evidence`：
     {"R1": {"motif_id": "...", "entry_source": "exact|partial",
             "hops": [{"index": 1, "syscall": "read",
                       "src_role": "...", "dst_role": "..."}]}}
 
-技术证据由 `rag_render` 写入 `_tech_evidence`：
+技术证据由 `navigator.render` 写入 `_tech_evidence`：
     {"E1": {"attack_id": "T1071", "observable_ids": [...],
             "conditions": [...], "confidence": 0.7}}
 

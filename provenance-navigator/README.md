@@ -178,6 +178,11 @@
 ```
 provenance-navigator/
 ├── main.py                        # 单场景 CLI：RAG v2（规则证据 + 技术证据）
+├── navigator/                     # RAG v2 正式运行时包
+│   ├── pipeline.py                # 主流程：闭包 → 束划分 → 两段证据 → 判定
+│   ├── decoder.py                 # 基模解码
+│   ├── render.py                  # 两段证据渲染
+│   └── guard.py                   # 规则/技术引用守卫
 ├── pipeline.py                    # 离线 LOO 装配（旧 rules/hybrid 路径，仅构建折库时使用）
 ├── run_loo_folds.py               # 离线留一交叉/蒸馏运行器
 ├── settings.py                    # 参数、场景、路径、提示词与规则表读取

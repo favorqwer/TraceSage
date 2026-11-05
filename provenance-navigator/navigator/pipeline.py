@@ -33,7 +33,7 @@ from routing.filters import DebrisPrune
 from routing.report import build_report_from_outcome, save_report
 from llm.client import LlmBudget, set_trace_raw
 from llm.judge import LlmChannel, set_trace_sink
-from experiment_engine import decode_motif
+from navigator.decoder import decode_motif
 import score_report_product as scorer
 
 def _key(e: Dict[str, Any]) -> Tuple[Any, Any, Any]:
