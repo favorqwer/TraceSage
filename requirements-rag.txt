@@ -1,0 +1,16 @@
+# 检索层环境（G1 验证用）
+#
+# 说明：
+# - 本文件不并入主 requirements.txt，避免污染判定/图数据库环境。
+# - 当前验证机为 Windows + RTX 5060（sm_120），torch 使用 cu128 构建。
+# - 论文主实验前必须锁定实际版本，并把版本写入每次运行的 manifest。
+
+torch==2.12.0.dev20260408+cu128
+transformers==5.20.2
+sentence-transformers==6.2.0
+torchao==0.18.0
+accelerate==1.15.0
+safetensors==0.8.0
+huggingface-hub==1.33.0
+numpy==1.26.0
+scipy==1.16.2

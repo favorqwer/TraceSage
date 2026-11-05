@@ -1,0 +1,126 @@
+{
+  "protocol": "攻击阶段 -> ATT&CK 技术映射；只用于检索/判定评测的答案键，绝不进入检索索引或提示词。",
+  "provenance": "manual-draft-2026-11-04；依据 groundtruth attack_path 的 phase/what 文本人工标注，尚未逐条复核。",
+  "scenarios": {
+    "1_Web_Exploit_Ransomware": {
+      "A1": {"techniques": ["T1595", "T1046"], "basis": "外部对 22/80 端口服务扫描探测"},
+      "A2": {"techniques": ["T1595.002"], "basis": "针对 WordPress 插件版本的漏洞扫描"},
+      "A3": {"techniques": ["T1190", "T1505.003"], "basis": "利用公开 RCE 漏洞上传 WebShell"},
+      "A4": {"techniques": ["T1059", "T1071"], "basis": "WebShell 触发反向 Meterpreter 会话"},
+      "A5": {"techniques": ["T1082", "T1033", "T1083", "T1016"], "basis": "会话内系统信息、身份、目录与网络枚举"},
+      "A6": {"techniques": ["T1105", "T1222"], "basis": "curl 下载载荷并 chmod 赋权"},
+      "A7": {"techniques": ["T1053", "T1098.004"], "basis": "向 root 定时任务脚本追加后门并写 authorized_keys"},
+      "A8": {"techniques": ["T1053", "T1098.004"], "basis": "cron 以 root 执行注入命令并写 SSH 公钥"},
+      "A9": {"techniques": ["T1078", "T1021.004"], "basis": "使用植入密钥 SSH 登录 root"},
+      "A10": {"techniques": ["T1543.002", "T1059"], "basis": "写 systemd 服务并反弹 root shell"},
+      "A11": {"techniques": ["T1485", "T1070.004"], "basis": "删除备份目录、擦除日志与临时脚本"},
+      "A12": {"techniques": ["T1070.004", "T1485"], "basis": "find + shred 批量擦除日志"},
+      "A13": {"techniques": ["T1486", "T1485"], "basis": "openssl 加密业务数据并 shred 原文件"},
+      "A14": {"techniques": ["T1486"], "basis": "生成 AES 密钥并落盘勒索信"}
+    },
+    "2_SSH_Spray_Lateral_Exfiltration": {
+      "A1": {"techniques": ["T1595", "T1046"], "basis": "SSH 端口扫描与版本横幅识别"},
+      "A2": {"techniques": ["T1110.001"], "basis": "多轮低速 SSH 弱口令喷洒"},
+      "A3": {"techniques": ["T1078", "T1021.004"], "basis": "弱口令命中并建立 SSH 交互会话"},
+      "A4": {"techniques": ["T1082", "T1016", "T1049", "T1083"], "basis": "主机信息、网络与业务目录枚举"},
+      "A5": {"techniques": ["T1552.001", "T1078"], "basis": "读取应用配置窃取数据库凭据并登录验证"},
+      "A6": {"techniques": ["T1552.004", "T1548", "T1003.008"], "basis": "读取 SSH 私钥并通过 sudo 读取 shadow"},
+      "A7": {"techniques": ["T1021.004", "T1552.004"], "basis": "使用窃取私钥 SSH 横向移动"},
+      "A8": {"techniques": ["T1560.001", "T1048"], "basis": "业务数据 tar/gzip 打包并外传"},
+      "A9": {"techniques": ["T1005", "T1560.001"], "basis": "批量读取业务数据文件压缩打包"}
+    },
+    "3_Phishing_Beacon_Cryptomining": {
+      "A1": {"techniques": ["T1204.001", "T1105"], "basis": "诱导执行命令并用 curl 拉取脚本"},
+      "A2": {"techniques": ["T1059.004", "T1105"], "basis": "管道执行脚本并下载第二阶段植入体"},
+      "A3": {"techniques": ["T1071.001"], "basis": "植入体首次 C2 心跳"},
+      "A4": {"techniques": ["T1071.001", "T1082"], "basis": "C2 下发任务并收集主机信息"},
+      "A5": {"techniques": ["T1105", "T1496"], "basis": "下载 XMRig 挖矿程序并生成配置"},
+      "A6": {"techniques": ["T1496", "T1071"], "basis": "启动挖矿程序并连接矿池"},
+      "A7": {"techniques": ["T1496"], "basis": "Stratum 协议高频提交份额"},
+      "A8": {"techniques": ["T1005", "T1560.001"], "basis": "收集主机配置并 tar/gzip 归档"},
+      "A9": {"techniques": ["T1041", "T1071.001"], "basis": "HTTP POST 外发打包文件"},
+      "A10": {"techniques": ["T1071.001"], "basis": "C2 轮询驻留循环"}
+    },
+    "4_Repo_Poisoning_Backdoor": {
+      "A1": {"techniques": ["T1195.002", "T1105"], "basis": "从被投毒内部源下载恶意 deb 包"},
+      "A2": {"techniques": ["T1195.002", "T1059.004"], "basis": "dpkg 解包并执行恶意 postinst"},
+      "A3": {"techniques": ["T1136.001", "T1098", "T1548"], "basis": "创建后门账号、设口令并加入 sudo 组"},
+      "A4": {"techniques": ["T1098.004"], "basis": "写入攻击者 SSH 公钥到 authorized_keys"},
+      "A5": {"techniques": ["T1543.002", "T1053.006"], "basis": "写 systemd 服务与定时器并注册"},
+      "A6": {"techniques": ["T1071.001"], "basis": "回连代理首次心跳"},
+      "A7": {"techniques": ["T1078", "T1021.004"], "basis": "攻击者使用后门私钥 SSH 登录"},
+      "A8": {"techniques": ["T1548", "T1003.008"], "basis": "sudo 提权并读取 shadow"},
+      "A9": {"techniques": ["T1053.006", "T1071.001"], "basis": "systemd 定时器周期心跳"},
+      "A10": {"techniques": ["T1078", "T1021.004"], "basis": "第二次 SSH 登录验证持久化"}
+    },
+    "5_Exposed_Service_Pivot": {
+      "A1": {"techniques": ["T1595", "T1046"], "basis": "对 6379 Redis 暴露服务探测"},
+      "A2": {"techniques": ["T1190", "T1098.004"], "basis": "滥用 Redis 未授权配置写入 SSH 公钥"},
+      "A3": {"techniques": ["T1078", "T1021.004"], "basis": "使用植入公钥 SSH 登录 root"},
+      "A4": {"techniques": ["T1021.004", "T1105"], "basis": "第二次 SSH 会话并下载 stage2"},
+      "A5": {"techniques": ["T1082", "T1016"], "basis": "本机身份与网络环境自检"},
+      "A6": {"techniques": ["T1105", "T1046"], "basis": "apt 安装 nmap 扫描工具"},
+      "A7": {"techniques": ["T1046"], "basis": "nmap 扫描内网目标端口"},
+      "A8": {"techniques": ["T1090"], "basis": "socat 建立内网端口转发"},
+      "A9": {"techniques": ["T1090", "T1046"], "basis": "经跳板探测内网 Redis"},
+      "A10": {"techniques": ["T1090", "T1190"], "basis": "经跳板横向注入 Redis 利用载荷"}
+    },
+    "6_Web_SQLi_Data_Exfiltration": {
+      "A1": {"techniques": ["T1595.002"], "basis": "Web 站点资产与版本指纹识别"},
+      "A2": {"techniques": ["T1190"], "basis": "Joomla 字段组件 SQL 注入探测"},
+      "A3": {"techniques": ["T1078", "T1110"], "basis": "使用破解管理员凭据登录后台"},
+      "A4": {"techniques": ["T1078", "T1083"], "basis": "管理员会话逐页巡检敏感管理功能"}
+    },
+    "7_DB_Bruteforce_Datawipe": {
+      "A1": {"techniques": ["T1595", "T1046"], "basis": "PostgreSQL 端口扫描与版本识别"},
+      "A2": {"techniques": ["T1110.001"], "basis": "并发 PostgreSQL 弱口令喷洒"},
+      "A3": {"techniques": ["T1078", "T1082", "T1083"], "basis": "弱口令登录并枚举数据库与业务表"},
+      "A4": {"techniques": ["T1059.004", "T1083"], "basis": "COPY FROM PROGRAM 派生 shell 并 find 敏感文件"},
+      "A5": {"techniques": ["T1485"], "basis": "DROP TABLE 级联删除业务表"},
+      "A6": {"techniques": ["T1485", "T1070.004"], "basis": "Base64 载荷覆写删除备份、导出与日志"},
+      "A7": {"techniques": ["T1485"], "basis": "dd 大块随机数据覆写文件"}
+    },
+    "8_FTP_WeakCreds_WebShell_Exfiltration": {
+      "A1": {"techniques": ["T1595", "T1046"], "basis": "FTP 服务探测与横幅识别"},
+      "A2": {"techniques": ["T1110.001"], "basis": "慢速 FTP 弱口令喷洒"},
+      "A3": {"techniques": ["T1078"], "basis": "弱口令命中并完成 FTP 认证"},
+      "A4": {"techniques": ["T1505.003"], "basis": "FTP 上传 PHP WebShell"},
+      "A5": {"techniques": ["T1059.004", "T1505.003"], "basis": "HTTP 触发 WebShell 执行 id"},
+      "A6": {"techniques": ["T1059.004"], "basis": "WebShell 派生反弹 bash 会话"},
+      "A7": {"techniques": ["T1082", "T1083"], "basis": "反弹会话内身份与目录枚举"},
+      "A8": {"techniques": ["T1552.001", "T1078"], "basis": "读取站点配置窃取数据库凭据并验证"},
+      "A9": {"techniques": ["T1083", "T1005"], "basis": "摸排待外传业务数据目录与容量"},
+      "A10": {"techniques": ["T1041", "T1005"], "basis": "首块业务数据 HTTP 外传"},
+      "A11": {"techniques": ["T1041", "T1005"], "basis": "批量业务数据分块外传"},
+      "A12": {"techniques": ["T1041", "T1005"], "basis": "末块业务数据外传"}
+    },
+    "9_Exposed_Container_Escape": {
+      "A1": {"techniques": ["T1595", "T1609"], "basis": "对 2375 Docker API 未授权探测与资源枚举"},
+      "A2": {"techniques": ["T1610", "T1611"], "basis": "创建特权容器并挂载宿主根目录"},
+      "A3": {"techniques": ["T1105", "T1014"], "basis": "下载后门与进程隐藏源码并编译隐藏库"},
+      "A4": {"techniques": ["T1543.002", "T1053.003", "T1014", "T1003.008"], "basis": "宿主后门、cron 持久化、ld.so.preload 与 shadow 读取"},
+      "A5": {"techniques": ["T1059.004"], "basis": "轮询等待宿主持久化上线"},
+      "A6": {"techniques": ["T1053.003", "T1071"], "basis": "cron 拉起后门并首次回连 C2"},
+      "A7": {"techniques": ["T1562", "T1014"], "basis": "验证进程隐藏与防御规避效果"},
+      "A8": {"techniques": ["T1610", "T1071"], "basis": "部署常驻后门容器并建立第二信道"},
+      "A9": {"techniques": ["T1071", "T1082", "T1016"], "basis": "C2 下发命令并踩点主机与业务环境"},
+      "A10": {"techniques": ["T1560.001", "T1041"], "basis": "tar 打包业务数据并 nc 外传"},
+      "A11": {"techniques": ["T1005", "T1560.001"], "basis": "批量读取业务数据归档"},
+      "A12": {"techniques": ["T1610"], "basis": "容器 restart=always 自愈持久化"}
+    },
+    "10_Tomcat_Weakcreds_DNS_Exfiltration": {
+      "A1": {"techniques": ["T1595", "T1046"], "basis": "Tomcat 8080 服务探测与弱口令前置"},
+      "A2": {"techniques": ["T1110.001"], "basis": "管理台低速弱口令爆破"},
+      "A3": {"techniques": ["T1078", "T1505.003", "T1059.004"], "basis": "弱口令登录、WAR 部署与命令执行验证"},
+      "A4": {"techniques": ["T1105", "T1059.004"], "basis": "下载 dnscat 与看门狗脚本并启动"},
+      "A5": {"techniques": ["T1071.004", "T1082", "T1083"], "basis": "经 DNS 隧道下发系统与业务目录侦察"},
+      "A6": {"techniques": ["T1560.001", "T1048", "T1071.004"], "basis": "tar/base64/dd 打包并经 DNS 隧道外传"},
+      "A7": {"techniques": ["T1005", "T1560.001"], "basis": "tar 批量读取经营月报数据"},
+      "A8": {"techniques": ["T1059.004"], "basis": "杀掉客户端并验证看门狗自愈"},
+      "A9": {"techniques": ["T1059.004"], "basis": "静默驻留与存活复核"},
+      "A10": {"techniques": ["T1071.004", "T1572"], "basis": "DNS 隐蔽隧道承载控制与外传"},
+      "A11": {"techniques": ["T1105", "T1005"], "basis": "载荷投递与分片外传批量读写"},
+      "A12": {"techniques": ["T1059.004"], "basis": "看门狗守护循环心跳"}
+    }
+  }
+}

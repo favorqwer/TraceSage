@@ -92,11 +92,24 @@ class MatchIndex:
     # --- 匹配 ---
     def match(self, motifs: List[Dict[str, Any]], *,
               admitted: Optional[Set[str]] = None,
-              seed_edges: Optional[Dict[Tuple, Dict[str, Any]]] = None) -> Dict[Tuple, Dict[str, Any]]:
-        """执行 1 跳 / 2 跳基模、进程血缘、敏感读取闭环，返回 {边三元组: 命中来源}。"""
+              seed_edges: Optional[Dict[Tuple, Dict[str, Any]]] = None,
+              return_all: bool = False) -> Dict[Tuple, Any]:
+        """执行 1 跳 / 2 跳基模、进程血缘、敏感读取闭环，返回 {边三元组: 命中来源}。
+
+        `return_all=False`（默认）时每条边只保留最后一个命中基模，保持历史行为；
+        `return_all=True` 时返回该边命中的全部基模列表，供精确检索评测使用。
+        """
         self.filtered_by_conf = 0
-        matched: Dict[Tuple, Dict[str, Any]] = {}
+        matched: Dict[Tuple, Any] = {}
         high: Set[str] = set()
+
+        def record(key: Tuple, motif: Dict[str, Any]) -> None:
+            if return_all:
+                bucket = matched.setdefault(key, [])
+                if motif not in bucket:
+                    bucket.append(motif)
+            else:
+                matched[key] = motif
 
         if seed_edges:
             for rec in seed_edges.values():
@@ -121,7 +134,7 @@ class MatchIndex:
                         continue
                     if self.role_of(pe.s) == src_role and self.role_of(pe.d) == dst_role:
                         if admitted_flag:
-                            matched[pe.key] = motif
+                            record(pe.key, motif)
                             high |= pe.all_id_vars
                         else:
                             self.filtered_by_conf += 1
@@ -151,8 +164,8 @@ class MatchIndex:
                     if t0_1 > 0 and t1_2 > 0 and t0_1 > t1_2:
                         continue
                     if admitted_flag:
-                        matched[pe1.key] = motif
-                        matched[pe2.key] = motif
+                        record(pe1.key, motif)
+                        record(pe2.key, motif)
                         high |= pe1.all_id_vars
                         high |= pe2.all_id_vars
                     else:

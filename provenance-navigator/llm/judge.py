@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -481,6 +482,25 @@ BUNDLE_SYSTEM = cfg.load_prompt("judge_bundle.md").replace(
     "{REASON_MAX_CHARS}", str(cfg.reason_max_chars())
 )
 
+# 观测钩子：默认关闭；实验入口设置后，逐批把「束元数据 + 完整提示词 + 原始结论」交给 sink。
+# 只做旁路记录，任何 sink 异常都不得影响判定。
+_TRACE_SINK = None
+
+
+def set_trace_sink(sink) -> None:
+    """设置逐批 trace 回调（传 None 关闭）。回调签名：sink(payload: dict)。"""
+    global _TRACE_SINK
+    _TRACE_SINK = sink
+
+
+def _emit_trace(payload: dict[str, Any]) -> None:
+    if _TRACE_SINK is None:
+        return
+    try:
+        _TRACE_SINK(payload)
+    except Exception as exc:  # noqa: BLE001 - 观测是旁路，失败不能影响判定
+        print(f"[trace] sink failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+
 
 def tier_of(verdict: str) -> str:
     """四值判定结论 -> 边级三段来路（只有 all/none 改变来路，其余一律保留为 kept）。"""
@@ -659,9 +679,15 @@ def judge_bundles(model: Any, items: list[dict[str, Any]], listing: str, *, budg
     config = {"callbacks": [BudgetCallback(budget, node="bundle")]}
     result = call_json(model, BUNDLE_SYSTEM, listing, config=config, role="bundle")
     if not result.get("_raw_ok", True):
-        return {"ok": False, "error": result.get("_error") or "未知错误", "calls": 1}
+        out = {"ok": False, "error": result.get("_error") or "未知错误", "calls": 1}
+        if "_raw_text" in result:
+            out["_raw_text"] = result["_raw_text"]
+        return out
     verdicts, invalid = parse_bundle_verdicts(result, {item["id"] for item in items})
-    return {"ok": True, "verdicts": verdicts, "invalid": invalid, "calls": 1}
+    out = {"ok": True, "verdicts": verdicts, "invalid": invalid, "calls": 1}
+    if "_raw_text" in result:
+        out["_raw_text"] = result["_raw_text"]
+    return out
 
 
 def run_batches(deps: Any, items: list[dict[str, Any]], batches: list[list[dict[str, Any]]],
@@ -688,6 +714,20 @@ def run_batches(deps: Any, items: list[dict[str, Any]], batches: list[list[dict[
                 break
             deps.log(f"    [judge] 一批调用失败（第 {attempt + 1}/{cfg.batch_attempts()} 次，"
                      f"{len(batch)} 个束 / {len(listing)} 字符）：{short(result.get('error'))}")
+        _emit_trace({
+            "level_name": level_name,
+            "items": [{
+                "id": item["id"], "level": item["level"], "size": item["size"],
+                "members": [list(t) for t in item["members"]],
+                "programs": item["programs"], "rels": item["rels"],
+                "syscall": item["syscall"], "dirs": item["dirs"],
+                "rag_rule_ids": list(item.get("_rag_rule_ids") or item.get("_rule_ids") or []),
+                "rag_tech_ids": list(item.get("_tech_ids") or []),
+                "rag_tech_weak": list(item.get("_tech_weak") or []),
+            } for item in batch],
+            "listing": listing,
+            "result": result,
+        })
         ok = bool(result.get("ok"))
         return {
             "ok": ok, "verdicts": result.get("verdicts") or {}, "calls": calls,
@@ -908,7 +948,8 @@ class LlmJudge:
 
     def judge(self, ambiguous_candidates: List[Dict[str, Any]], topology_facts=None) -> Dict[str, Any]:
         if self.deps is None or not ambiguous_candidates:
-            return {"confirmed": [], "excluded": [], "kept": ambiguous_candidates, "calls": 0, "seconds": 0.0}
+            return {"confirmed": [], "excluded": [], "kept": ambiguous_candidates, "calls": 0,
+                    "seconds": 0.0, "detail": [], "stats": {}}
 
         inv = self.deps.record
         t0 = time.time()
@@ -924,7 +965,8 @@ class LlmJudge:
                 missing_edges.append(e)
 
         if not triples_to_judge:
-            return {"confirmed": [], "excluded": [], "kept": list(ambiguous_candidates), "calls": 0, "seconds": 0.0}
+            return {"confirmed": [], "excluded": [], "kept": list(ambiguous_candidates), "calls": 0,
+                    "seconds": 0.0, "detail": [], "stats": {}}
 
         # 2. 装配与 Agent 完全一致的判定上下文与状态
         program_of = program_table(inv.process_context)
@@ -973,6 +1015,8 @@ class LlmJudge:
             "kept": kept_edges + missing_edges,
             "calls": pass_res.get("calls", 0),
             "seconds": elapsed,
+            "detail": detail,
+            "stats": stats,
         }
 
 

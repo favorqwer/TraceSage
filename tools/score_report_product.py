@@ -55,6 +55,20 @@ def report_syscall(edge):
     return next(iter(candidates)) if len(candidates) == 1 else None
 
 
+def report_effects(edge):
+    """报告边的成败口径：优先单数 effect，其次复数 effects；多值展开为多个四元组。
+
+    评测协议要求四元组 (源, 系统调用, 目标, 成败)。报告边若聚合了成功与失败两类实例，
+    必须分别计入，不能统一写成 None，否则「成败从未核验」。
+    """
+    if edge.get("effect") is not None:
+        return [edge.get("effect")]
+    effects = edge.get("effects")
+    if isinstance(effects, (list, tuple)):
+        return list(effects) if effects else [None]
+    return [effects] if effects is not None else [None]
+
+
 def load_agent_report(path, scenario=None):
     """agent 报告 -> (scenario, {(src,syscall,dst): dict}, skipped)。
 
@@ -78,7 +92,8 @@ def load_agent_report(path, scenario=None):
         if not src or not dst or not syscall:
             skipped += 1
             continue
-        quads.setdefault((src, syscall, dst, edge.get("effect")), edge)
+        for effect in report_effects(edge):
+            quads.setdefault((src, syscall, dst, effect), edge)
     return scenario, quads, skipped
 
 

@@ -112,6 +112,13 @@ class LlmBudget:
 
 _RAW_LOG_PATH: Optional[Path] = None
 _RAW_LOCK = threading.Lock()
+_TRACE_RAW = False
+
+
+def set_trace_raw(enabled: bool) -> None:
+    """开启后，call_json 把本次原始输出文本放进返回字典的 `_raw_text`（仅观测用）。"""
+    global _TRACE_RAW
+    _TRACE_RAW = bool(enabled)
 
 
 def set_raw_log(path: Optional[Path]) -> None:
@@ -398,6 +405,8 @@ def call_json(
         parsed = extract_json(text)
         if parsed is not None:
             parsed.setdefault("_raw_ok", True)
+            if _TRACE_RAW:
+                parsed["_raw_text"] = text
             return parsed
         last_error = "输出不是合法 JSON"
         messages = [
