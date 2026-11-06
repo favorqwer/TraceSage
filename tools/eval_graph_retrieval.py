@@ -27,7 +27,7 @@ import settings as cfg  # noqa: E402
 from closure import extract_raw_closure  # noqa: E402
 from domain.edge import edge_key  # noqa: E402
 from domain.pool import CandidatePool  # noqa: E402
-from routing.prepare import PreFilter  # noqa: E402
+from core.prepare import PreFilter  # noqa: E402
 from rules.library import load_library_file, _role_cuts  # noqa: E402
 from rules.online import MatchIndex  # noqa: E402
 from rag.graph_retrieve import RuleGraphRetriever  # noqa: E402

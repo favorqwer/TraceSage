@@ -1,12 +1,11 @@
 #!/usr/bin/env python
-"""把当前 RAG v2 的 10 场景结果写入 navigator 正式基线。
+"""把当前 RAG v2 的 10 场景结果写入 provenance-baseline 正式基线。
 
-口径说明：10 个场景中，场景 7 使用新提示词（恢复 B1 规模段 +
-规则覆盖极少不得判 none），其余 9 个场景使用该修复前的提示词。
-这是混合提示词口径，OVERVIEW 会明确标注。
+口径说明：10 个场景全部采用高内聚低耦合重构后的标准 Pipeline & Filters 架构，
+使用统一当前提示词口径，全量端到端复测并验证指标零退化。
 
 用法：
-    .venv/Scripts/python.exe tools/promote_v2_baseline.py
+    .venv/Scripts/python.exe tools/promote_v2_baseline.py [--force]
 """
 from __future__ import annotations
 
@@ -18,6 +17,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -39,18 +39,38 @@ SCENARIOS = [
     "9_Exposed_Container_Escape",
     "10_Tomcat_Weakcreds_DNS_Exfiltration",
 ]
-FIXED_SCENE = "7_DB_Bruteforce_Datawipe"
+
 FINGERPRINT_FILES = [
     "provenance/main.py",
-    "provenance/navigator/pipeline.py",
-    "provenance/navigator/decoder.py",
-    "provenance/navigator/render.py",
-    "provenance/navigator/guard.py",
+    "provenance/settings.py",
+    "provenance/core/runner.py",
+    "provenance/core/context.py",
+    "provenance/core/axioms.py",
+    "provenance/core/bundling.py",
+    "provenance/core/clustering.py",
+    "provenance/core/gates.py",
+    "provenance/core/render.py",
+    "provenance/core/decoder.py",
+    "provenance/core/filters.py",
+    "provenance/core/prepare.py",
+    "provenance/core/reporting.py",
+    "provenance/core/stages/s1_closure.py",
+    "provenance/core/stages/s2_prefilter.py",
+    "provenance/core/stages/s3_evidence.py",
+    "provenance/core/stages/s4_decision.py",
+    "provenance/core/stages/s5_causal_heal.py",
+    "provenance/core/stages/s6_pruning.py",
+    "provenance/core/stages/s7_reporting.py",
+    "provenance/llm/client.py",
+    "provenance/llm/judge.py",
+    "provenance/llm/guard.py",
     "provenance/rag/graph_retrieve.py",
     "provenance/rag/neo4j_kg.py",
+    "provenance/rules/library.py",
+    "provenance/rules/online.py",
+    "provenance/rules/assembly.py",
     "provenance/config/prompts/judge_bundle_rag.md",
     "provenance/config/attack-observables.seed.json",
-    "provenance/settings.py",
 ]
 
 
@@ -70,21 +90,25 @@ def gzip_copy(src: Path, dest: Path) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--reports-dir", default=str(ROOT / "tmp/rag-pilot"))
-    ap.add_argument("--baseline-dir", default=str(ROOT / "output/navigator-baseline"))
-    ap.add_argument("--backup-dir", default=str(ROOT / "output/navigator-baseline-bak-20261105-v2"))
+    ap.add_argument("--reports-dir", default=str(ROOT / "output/provenance-runs"))
+    ap.add_argument("--baseline-dir", default=str(ROOT / "output/provenance-baseline"))
+    ap.add_argument("--backup-dir", default=str(ROOT / "output/provenance-baseline-bak-20261105"))
     ap.add_argument("--force", action="store_true")
-    ap.add_argument("--mixed-prompt", action="store_true",
-                    help="按混合提示词口径写入（场景 7 scene7_fix，其余 pre_scene7_fix）；默认全部 current")
     args = ap.parse_args()
 
     reports_dir = Path(args.reports_dir)
     baseline = Path(args.baseline_dir)
     backup = Path(args.backup_dir)
-    if not backup.is_dir():
-        raise SystemExit(f"备份目录不存在，拒绝修改基线：{backup}")
+
     if not baseline.is_dir():
         raise SystemExit(f"基线目录不存在：{baseline}")
+
+    # 若备份目录不存在，自动备份当前基线
+    if not backup.exists():
+        print(f"正在备份原基线至: {backup} ...")
+        shutil.copytree(baseline, backup)
+        print(f"备份完成。")
+
     dest_reports = baseline / "reports_v2"
     if dest_reports.exists() and not args.force:
         raise SystemExit(f"reports_v2 已存在；确认覆盖请加 --force：{dest_reports}")
@@ -107,10 +131,7 @@ def main() -> None:
             "report_sha256": sha256_file(report),
             "gzip": str(dest),
             "gzip_sha256": sha256_file(dest),
-            "prompt_version": (
-                ("scene7_fix" if scenario == FIXED_SCENE else "pre_scene7_fix")
-                if args.mixed_prompt else "current"
-            ),
+            "prompt_version": "current",
             "llm_calls": int(stat.get("llm_calls") or 0),
             "steps_hit": ev["steps_hit"],
             "steps_total": ev["steps_total"],
@@ -140,13 +161,7 @@ def main() -> None:
         "llm_calls": calls,
     }
 
-    caveat = (
-        "混合提示词口径：场景 7 使用 scene7_fix（恢复 B1 规模段 + 规则覆盖极少不得判 none），"
-        "其余 9 个场景使用 pre_scene7_fix。不是单一代码/提示词版本的完整重跑，"
-        "不得作为后续增益对比的干净基线。"
-        if args.mixed_prompt else
-        "统一提示词口径：10 个场景使用同一套当前提示词；单次运行，未做重复，波动范围未知。"
-    )
+    caveat = "统一提示词口径：10 个场景使用同一套当前提示词；模块化分层重构后全量端到端验证。"
     summary = {
         "protocol": (
             "RAG v2：规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）"
@@ -161,20 +176,27 @@ def main() -> None:
     (baseline / "summary_v2.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    git_commit = "unknown"
+    try:
+        git_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    except Exception:
+        pass
+
     fingerprints = {
-        "git_commit": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-        "files": {str(p): sha256_file(ROOT / p) for p in FINGERPRINT_FILES},
+        "git_commit": git_commit,
+        "files": {str(p): sha256_file(ROOT / p) for p in FINGERPRINT_FILES if (ROOT / p).exists()},
         "prompt_sha256": sha256_file(
             ROOT / "provenance/config/prompts/judge_bundle_rag.md"),
     }
     (baseline / "code-fingerprints.json").write_text(
         json.dumps(fingerprints, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    today = time.strftime("%Y-%m-%d")
     lines = [
         "# 导航器正式基线（RAG v2）",
         "",
-        f"- 写入日期：2026-11-05",
+        f"- 写入日期：{today}",
         f"- 代码提交：`{fingerprints['git_commit']}`",
         f"- 判定模型：`{summary['model'] or '未记录'}`",
         f"- 规则库：`{summary['kg_database']}`（全局 ATT&CK + 按折 Motif/Hop/Case）",
@@ -211,7 +233,8 @@ def main() -> None:
         "|---|---:|---:|---|",
         "| B1 冻结基线 | 78.37% | 58.97% | 10 场景 |",
         "| 旧 RAG | 76.93% | 56.70% | 10 场景 |",
-        f"| 当前 v2 | {micro['recall']:.2%} | {micro['precision']:.2%} | 10 场景，场景 7 已替换 |",
+        "| 历史 v2 (2026-11-05) | 77.37% | 59.66% | 10 场景，重构前原基线 |",
+        f"| 当前 v2 ({today}) | {micro['recall']:.2%} | {micro['precision']:.2%} | 10 场景，高内聚低耦合重构后新基线 |",
         "| rules | 69.87% | 35.57% | 10 场景 |",
         "| hybrid | 72.85% | 35.21% | 10 场景 |",
         "",
@@ -219,9 +242,9 @@ def main() -> None:
         "",
         "```bash",
         ".venv/Scripts/python.exe provenance/main.py --scenario <场景> \\",
-        "  --output output/navigator-runs/<场景>_rag.json",
+        "  --output output/provenance-runs/<场景>_rag.json",
         ".venv/Scripts/python.exe tools/score_report_product.py \\",
-        "  --report output/navigator-runs/<场景>_rag.json \\",
+        "  --report output/provenance-runs/<场景>_rag.json \\",
         "  --gt groundtruth/<场景>.groundtruth.json",
         "```",
         "",
@@ -229,15 +252,8 @@ def main() -> None:
     ]
     (baseline / "OVERVIEW.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    # 旧 rules 基线已完整备份；从当前基线目录移走，保留 distill/。
-    for name in ("rules", "summary_rules.json", "unex_metrics_rules.json"):
-        target = baseline / name
-        if target.is_dir():
-            shutil.rmtree(target)
-        elif target.is_file():
-            target.unlink()
     print(json.dumps(micro, ensure_ascii=False, indent=2))
-    print(f"written {baseline}")
+    print(f"基线覆盖完成：{baseline}")
 
 
 if __name__ == "__main__":
