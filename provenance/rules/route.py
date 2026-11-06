@@ -1,5 +1,6 @@
-"""路由编排：按模式表调用锚点确认、前置初筛、符号通道、LLM 通道与后置剪枝。
+"""离线模式路由：按模式表调用锚点确认、前置初筛、符号通道、LLM 通道与后置剪枝。
 
+只在离线规则库构建与留一折循环里使用，RAG 在线路径不调用本模块。
 本文件只决定“调用谁、按什么顺序、结果怎么合并”，不包含任何具体判据：
 - 前置初筛在 `routing/prepare.PreFilter`；
 - 后置剪枝在 `routing/filters.DebrisPrune`；
@@ -10,16 +11,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from domain.pool import CandidatePool, TopologyFacts
 from domain.edge import edge_key
-from routing.channels import (
+from rules.channels import (
     BoundaryStoryOperator, SessionActiveBridge, promote_lineage, promote_sensitive,
 )
-from routing.filters import DebrisPrune
-from routing.prepare import PreFilter
+from core.filters import DebrisPrune
+from core.prepare import PreFilter
+from core.reporting import RouteOutcome
 from rules.online import MatchIndex
 
 
@@ -36,14 +38,6 @@ MODES: Dict[str, ModeSpec] = {
     "hybrid": ModeSpec("hybrid", ("anchor", "motif", "bridge", "boundary", "llm"), True, True),
     "llm-only": ModeSpec("llm-only", ("anchor", "llm"), True, False),
 }
-
-
-@dataclass
-class RouteOutcome:
-    confirmed: Dict[Tuple[Any, Any, Any], Dict[str, Any]]
-    unexcluded: List[Dict[str, Any]]
-    excluded: List[Dict[str, Any]]
-    audit: Dict[str, Any] = field(default_factory=dict)
 
 
 def _key(edge: Dict[str, Any]) -> Tuple[Any, Any, Any]:

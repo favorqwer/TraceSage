@@ -26,7 +26,7 @@ for p in (str(NAV), str(REPO / "tools")):
         sys.path.insert(0, p)
 
 from closure import list_scenarios
-from pipeline import load_rule_matcher, make_pool_provider
+from rules.assembly import load_rule_matcher, make_pool_provider
 from rules.offline import OfflineDistiller, latest_path, save_library
 
 

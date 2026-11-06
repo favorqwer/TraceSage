@@ -1,7 +1,7 @@
 """规则模式（离线）：标准答案端点、频繁子图挖掘、对抗蒸馏、规则库冻结。
 
 蒸馏使用与在线相同的 `rules.online.MatchIndex` 谓词，候选池清洗使用
-`common.facts.is_static_read_background`，不再导入在线剪枝模块。
+`domain.taxonomy.is_static_read_background`，不再导入在线剪枝模块。
 
 `rules/offline.py` 不导入 `closure`：训练候选池必须由调用方通过 `pool_provider` 提供。
 """
@@ -864,7 +864,7 @@ def update_library_incremental(base_library: Union[str, Path],
                                distiller: Optional[OfflineDistiller] = None) -> Path:
     """接入单个新场景：追加覆盖表 + 立即重算名单 + 落盘新版本。"""
     if distiller is None:
-        from pipeline import load_rule_matcher
+        from rules.assembly import load_rule_matcher
         distiller = OfflineDistiller(rule_matcher=load_rule_matcher())
     patterns = distiller.ingest(base_library, new_scenario, pool_provider=pool_provider)
     report = distiller.last_report
@@ -873,8 +873,8 @@ def update_library_incremental(base_library: Union[str, Path],
 
 if __name__ == "__main__":
     import argparse
-    from pipeline import load_rule_matcher
-    from pipeline import make_pool_provider
+    from rules.assembly import load_rule_matcher
+    from rules.assembly import make_pool_provider
 
     ap = argparse.ArgumentParser(description="接入一个新场景并重算名单（全量建库用 tools/rebuild_library.py）")
     ap.add_argument("--add-scenario", required=True, help="新增接入的场景全名")

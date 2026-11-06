@@ -1,6 +1,7 @@
-"""单次调查装配：闭包 → 规则库 → 路由 → 三段报告。
+"""离线单次调查装配：闭包 → 规则库 → 模式路由 → 三段报告。
 
-`main.py` 与 `run_loo_folds.py` 只负责 CLI 与折循环，不再各自复制装配逻辑。
+服务规则库构建与留一折循环（`run_loo_folds.py`、`tools/ingest_scenario.py`、
+`tools/rebuild_library.py`）；RAG 在线主流程在 `navigator/pipeline.py`。
 """
 
 from __future__ import annotations
@@ -15,8 +16,8 @@ from closure import extract_raw_closure, list_scenarios
 import settings as cfg
 from llm.client import LlmBudget
 from llm.judge import LlmChannel
-from routing.report import build_report_from_outcome, save_report
-from routing.route import route
+from core.reporting import build_report_from_outcome, save_report
+from rules.route import route
 from rules.library import (  # noqa: E402
     fold_library_path, load_library_file, load_patterns, load_rule_matcher,
     make_pool_provider, _role_cuts,

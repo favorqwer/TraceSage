@@ -26,7 +26,7 @@ for p in (str(NAV), str(REPO / "tools")):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from pipeline import load_rule_matcher, make_pool_provider
+from rules.assembly import load_rule_matcher, make_pool_provider
 from rules.offline import OfflineDistiller, latest_path, save_library
 
 
