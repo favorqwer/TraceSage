@@ -85,7 +85,7 @@ python parser/main.py \
 # 开发用小样本（容器/主趟都只读前 N 个事件）
 python parser/main.py \
   --scap attack/data/1/capture.scap --scenario 1_Web_Exploit_Ransomware \
-  --dry-run --max-events 20000 --out-dir tmp/parser-v2/run1
+  --dry-run --max-events 20000 --out-dir tmp/parser-run
 
 # 写库（默认清掉该 host_id 的旧图；库名默认 attack-<scenario>）
 python parser/main.py \

@@ -30,12 +30,12 @@ python parser/main.py \
 ```bash
 # 单场景正式运行
 python provenance/main.py --scenario <场景全名> \
-  --output output/navigator-runs/<场景全名>_rag.json
+  --output output/provenance-runs/<场景全名>_rag.json
 
 # 离线规则库维护（仅重建折库、核对覆盖表时使用，不参与日常评测）
-python provenance/run_loo_folds.py --mode rules --out output/navigator-runs/loo --keep-reports tmp/loo_rules_reports
+python provenance/run_loo_folds.py --mode rules --out output/provenance-runs/loo --keep-reports tmp/loo_rules_reports
 ```
-单场景报告默认写 `output/navigator-runs/<场景全名>_rag.json`。rules / hybrid / llm-only 运行模式已退出导航器入口。
+单场景报告默认写 `output/provenance-runs/<场景全名>_rag.json`。rules / hybrid / llm-only 运行模式已退出导航器入口。
 
 **引擎测试（当次运行，不写基线）：**
 ```bash
@@ -58,7 +58,7 @@ python tools/score_graph_product.py output/engine-runs/<场景全名>/baseline.j
 
 导航器 / 智能体报告：
 ```bash
-python tools/score_report_product.py --report output/navigator-runs/<场景全名>.json \
+python tools/score_report_product.py --report output/provenance-runs/<场景全名>.json \
   --gt groundtruth/<场景全名>.groundtruth.json
 ```
 

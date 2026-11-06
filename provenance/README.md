@@ -22,7 +22,7 @@
 .venv/Scripts/python.exe provenance/main.py --scenario <场景全名>
 ```
 
-默认输出 `output/navigator-runs/<场景全名>_rag.json`。
+默认输出 `output/provenance-runs/<场景全名>_rag.json`。
 
 ## 2. 两段证据
 
@@ -84,7 +84,7 @@ Neo4j 场景图
 离线部分保留，不参与运行时：
 
 1. 从 9 个训练场景蒸馏 Motif、Hop、逐规则统计；
-2. 写入 `output/navigator-baseline/distill/fold-libraries/`；
+2. 写入 `output/provenance-baseline/distill/fold-libraries/`；
 3. 构建 Rule KG JSON：`tools/build_rule_kg.py`；
 4. ATT&CK 快照与行为观测：`tools/build_attack_kg.py`；
 5. 写入 Neo4j 规则库：`tools/build_rule_kg_neo4j.py`。
@@ -102,38 +102,57 @@ Neo4j 场景图
 ```text
 provenance/
 ├── main.py                 # 单场景 CLI：RAG v2
-├── navigator/              # 正式运行时包
+├── settings.py             # 配置、场景、路径、判据表加载
+├── run_loo_folds.py        # 留一折循环（离线）
+├── navigator/              # 在线运行时包
 │   ├── pipeline.py         # 主流程：闭包 → 束划分 → 证据 → 判定 → 报告
 │   ├── decoder.py          # 基模解码
 │   ├── render.py           # 规则证据 + 技术证据两段渲染
 │   └── guard.py            # 规则/技术引用守卫
+├── closure/                # 反向闭包抽取
+├── domain/                 # 边、候选池、角色分类
+├── llm/                    # 束判定、模型接入、结论解析
+├── routing/                # 在线：prepare / filters / report
+├── rules/                  # 在线：library / online / roles
+│                           # 离线：offline / admission / coverage / legacy_roles
 ├── rag/                    # 证据检索与规则知识库
 │   ├── graph_retrieve.py   # retrieve_rules / retrieve_techniques
 │   ├── neo4j_kg.py         # Rule KG 入库
 │   ├── build_kg.py         # 从折库构建 Rule KG JSON
 │   ├── stats.py            # 逐规则训练折统计
 │   ├── attack.py、link.py、schema.py
-│   └── embed.py、index.py、rerank.py、query.py  # 向量实验模块，未接入主路径
-├── closure/                # 反向闭包抽取
-├── domain/                 # 边、候选池、角色分类
-├── llm/                    # 束判定、模型接入、结论解析
-├── rules/                  # 离线蒸馏与角色编码（rules 运行模式已退出）
-├── routing/                # prepare/filters/report 供运行时使用；route/channels 仅离线 LOO
+│   └── legacy/             # 向量实验：embed / index / rerank / query，主路径不调用
+├── distill/                # 离线装配与模式路由
+│   ├── assembly.py         # 单次离线调查装配
+│   ├── route.py            # rules / hybrid / llm-only 模式表
+│   └── channels.py         # 离线路由促进通道
 ├── config/                 # 场景、提示词、行为观测种子
-├── tests/                  # 单元测试
-└── tools/                  # 规则库维护
+├── tests/
+│   ├── foundation/         # unittest 单元测试
+│   └── manual/             # 手动比对脚本，不是单元测试
+└── tools/                  # 随包分发的规则库维护脚本
 ```
+
+脚本归属规则：
+
+- `provenance/tools/`：随包分发的脚本，直接 `python provenance/tools/<脚本>` 执行；
+- 仓库根 `tools/`：评测、评分、库维护与一次性诊断，跨组件，不随包走。
+
+在线闭包只经过 `main.py`、`navigator/`、`closure/`、`domain/`、`llm/`、
+`routing/prepare|filters|report`、`rules/library|online|roles`、
+`rag/graph_retrieve|neo4j_kg`、`settings.py`。`distill/`、`rules/offline.py`、
+`rag/legacy/` 与 `run_loo_folds.py` 不在在线路径上。
 
 ## 7. 快速开始
 
 ```bash
 # 单场景正式运行
 .venv/Scripts/python.exe provenance/main.py --scenario 1_Web_Exploit_Ransomware \
-  --output output/navigator-runs/1_Web_Exploit_Ransomware_rag.json
+  --output output/provenance-runs/1_Web_Exploit_Ransomware_rag.json
 
 # 官方评分
 .venv/Scripts/python.exe tools/score_report_product.py \
-  --report output/navigator-runs/1_Web_Exploit_Ransomware_rag.json \
+  --report output/provenance-runs/1_Web_Exploit_Ransomware_rag.json \
   --gt groundtruth/1_Web_Exploit_Ransomware.groundtruth.json
 ```
 
@@ -141,7 +160,7 @@ provenance/
 
 ```bash
 .venv/Scripts/python.exe provenance/run_loo_folds.py --mode rules \
-  --out output/navigator-runs/loo --keep-reports tmp/loo_rules_reports
+  --out output/provenance-runs/loo --keep-reports tmp/loo_rules_reports
 .venv/Scripts/python.exe provenance/tools/rebuild_library.py --from-scratch
 ```
 
@@ -153,13 +172,13 @@ provenance/
 
 基线的逐场景数字、微平均、代码版本与复现命令统一见：
 
-👉 [output/navigator-baseline/OVERVIEW.md](../output/navigator-baseline/OVERVIEW.md)
+👉 [output/provenance-baseline/OVERVIEW.md](../output/provenance-baseline/OVERVIEW.md)
 
 评分口径：`tools/score_report_product.py`；召回按步骤、查准按边；同一条边多次发生只计一次。
 
 ## 9. 边界与限制
 
-1. **运行时没有向量检索和重排。** `rag/embed.py`、`index.py`、`rerank.py`、`query.py` 是早期文本向量实验模块，主路径不调用；规则和技术都通过 Neo4j 图查询获得。
+1. **运行时没有向量检索和重排。** `rag/legacy/embed.py`、`index.py`、`rerank.py`、`query.py` 是早期文本向量实验模块，主路径不调用；规则和技术都通过 Neo4j 图查询获得。
 2. **证据是束级，不是边级。** 没有逐边证据卡、逐边引用和引用忠实度测量。
 3. **没有增量知识演化。** 新场景、新 ATT&CK 版本的增量摄入、版本回滚未实现。
 4. **ATT&CK 映射不完整。** 45 条人工行为观测覆盖 45 个技术；867 个技术里绝大多数没有行为观测。
@@ -170,4 +189,4 @@ provenance/
 
 ## 10. 历史说明
 
-旧的 `rules`、`hybrid`、`llm-only` 运行模式已退出导航器入口。离线蒸馏代码（`rules/offline.py`、`admission.py`、`coverage.py`、`roles.py`、`library.py`、`run_loo_folds.py`）保留，用于构建折库和规则 KG；`pipeline.py`、`routing/route.py`、`routing/channels.py` 仅保留给离线 LOO，不在 RAG 运行时路径上。
+旧的 `rules`、`hybrid`、`llm-only` 运行模式已退出导航器入口。离线蒸馏代码（`rules/offline.py`、`admission.py`、`coverage.py`、`roles.py`、`library.py`、`run_loo_folds.py`）保留，用于构建折库和规则 KG；`distill/assembly.py`、`distill/route.py`、`distill/channels.py` 仅保留给离线 LOO，不在 RAG 运行时路径上。

@@ -79,11 +79,12 @@ TraceSage/
 │   └── agents/               # agent 操作契约：图模型、测试手册、评分口径
 ├── gt-annotator/             # groundtruth 标注与校验工具
 ├── output/                   # 产出结果（严格分类，不可混淆）
-│   ├── navigator-baseline/   # 导航器基线与 OVERVIEW.md
+│   ├── provenance-baseline/  # 导航器基线与 OVERVIEW.md
 │   ├── engine-baseline/      # 调查引擎基线与 OVERVIEW.md
 │   ├── parser-v2/            # 解析器当次报告（含历史运行）
 │   ├── engine-runs/          # 引擎当次运行产物（不得当基线）
-│   ├── navigator-runs/       # 导航器当次运行产物（不得当基线）
+│   ├── provenance-runs/      # 导航器当次运行产物（不得当基线）
+│   ├── rule-kg/              # 规则知识库快照与检索评测输出
 │   └── agent-vs-engine/      # score_report_product.py 默认结果目录（按需生成）
 ├── tmp/                      # 临时文件与诊断数据区（随时可清）
 ├── tools/                    # 评测与检查工具（如 score_report_product.py）
@@ -104,8 +105,8 @@ TraceSage/
 
 ### 基线产物归属
 
-- 正式基线：调查引擎写 `output/engine-baseline/<场景名>/`，导航器写 `output/navigator-baseline/`。
-- 当次运行产物写 `output/engine-runs/`、`output/navigator-runs/`，不得当作基线，也不得被引用为成绩来源。
+- 正式基线：调查引擎写 `output/engine-baseline/<场景名>/`，导航器写 `output/provenance-baseline/`。
+- 当次运行产物写 `output/engine-runs/`、`output/provenance-runs/`，不得当作基线，也不得被引用为成绩来源。
 - `tools/run_all_engine_v2.py` 与 `experiments/DEPIMPACT/baseline/run-baseline.sh` 不带输出目录参数时都会写 `output/engine-baseline/`；当次测试必须显式传 `output/engine-runs/<场景名>`，否则会覆盖正式基线。
 - 落盘文件构成（`baseline.json`、`groundtruth-eval.txt`、`OVERVIEW.md`、留一折库）与汇总口径见 `docs/agents/evaluation-protocol.md`。
 
