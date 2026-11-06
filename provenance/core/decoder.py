@@ -1,6 +1,4 @@
-"""
-tmp/ 隔离测试模块：规则解码器与带规则上下文的判定驱动
-"""
+"""基模解码：把命中基模的跳序列解码成角色标签与跳链。"""
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple

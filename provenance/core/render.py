@@ -24,6 +24,8 @@ _SCENARIO = ""
 _RULE_CACHE: Dict[Tuple, Dict[str, Any]] = {}
 _TECH_CACHE: Dict[Tuple, Dict[str, Any]] = {}
 _LOCK = threading.Lock()
+_EXPLICIT_MATCHER = None
+_EXPLICIT_PARENT_MAP: Dict[str, str] = {}
 
 
 def set_base_render(fn) -> None:
@@ -31,9 +33,23 @@ def set_base_render(fn) -> None:
     _BASE_RENDER = fn
 
 
-def set_scenario(scenario: str) -> None:
-    global _SCENARIO, _RETRIEVER, _RULE_CACHE, _TECH_CACHE
+def set_matcher(matcher: Any) -> None:
+    global _EXPLICIT_MATCHER
+    _EXPLICIT_MATCHER = matcher
+
+
+def set_parent_map(parent_map: Dict[str, str]) -> None:
+    global _EXPLICIT_PARENT_MAP
+    _EXPLICIT_PARENT_MAP = dict(parent_map or {})
+
+
+def set_scenario(scenario: str, matcher: Any = None, parent_map: Optional[Dict[str, str]] = None) -> None:
+    global _SCENARIO, _RETRIEVER, _RULE_CACHE, _TECH_CACHE, _EXPLICIT_MATCHER, _EXPLICIT_PARENT_MAP
     _SCENARIO = scenario
+    if matcher is not None:
+        _EXPLICIT_MATCHER = matcher
+    if parent_map is not None:
+        _EXPLICIT_PARENT_MAP = dict(parent_map)
     _RETRIEVER = None
     _RULE_CACHE = {}
     _TECH_CACHE = {}
@@ -55,8 +71,7 @@ def _get_retriever() -> RuleGraphRetriever:
 
 
 def _matcher():
-    from navigator import pipeline as frozen
-    return frozen.CURRENT_MATCHER
+    return _EXPLICIT_MATCHER
 
 
 def _fmt_precision(value: Any) -> str:
@@ -246,8 +261,7 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
 
 
 def _context_lines(item: Dict[str, Any]) -> List[str]:
-    from navigator import pipeline as frozen
-    parent_map = getattr(frozen, "CURRENT_PARENT_MAP", {}) or {}
+    parent_map = _EXPLICIT_PARENT_MAP or {}
     parents = sorted({parent_map[p] for p in (item.get("programs") or []) if p in parent_map})
     lines: List[str] = []
     if parents:

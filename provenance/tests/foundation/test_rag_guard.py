@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-from navigator.guard import enforce_citations  # noqa: E402
+from llm.guard import enforce_citations  # noqa: E402
 
 
 def make_item(*, rule: bool = True, tech: bool = False, syscall: str = "read") -> dict:

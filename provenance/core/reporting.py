@@ -1,19 +1,25 @@
-"""三段式调查报告：已确认 / 未排除 / 已排除 + 统计。
-
-阶段 5 保留旧 `build_report` 的参数签名，避免一次性改动入口；新增
-`build_report_from_outcome` 供 `pipeline` 使用。
-"""
-
+"""调查结果状态结构定义与调查报告导出。"""
 from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from domain.keys import process_content_or_na, split_process_key
-from routing.route import RouteOutcome
 
 
-def _report_endpoint(value, label):
+@dataclass
+class RouteOutcome:
+    """一次调查或判定的最终三段式分区结果与审计信息。"""
+    confirmed: Dict[Tuple[Any, Any, Any], Dict[str, Any]]
+    unexcluded: List[Dict[str, Any]]
+    excluded: List[Dict[str, Any]]
+    audit: Dict[str, Any] = field(default_factory=dict)
+
+
+def report_endpoint(value: Any, label: Any) -> Any:
     """报告端点内容：进程取不到可执行文件时按官方口径写 `<NA>`。"""
     if str(label or "") == "Process" or not label:
         value = process_content_or_na(value)
@@ -22,12 +28,12 @@ def _report_endpoint(value, label):
     return value
 
 
-def _report_edges(edges):
-    out = []
+def _report_edges(edges: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
     for edge in edges or []:
         rec = dict(edge)
-        rec["src"] = _report_endpoint(rec.get("src"), rec.get("src_label"))
-        rec["dst"] = _report_endpoint(rec.get("dst"), rec.get("dst_label"))
+        rec["src"] = report_endpoint(rec.get("src"), rec.get("src_label"))
+        rec["dst"] = report_endpoint(rec.get("dst"), rec.get("dst_label"))
         out.append(rec)
     return out
 
@@ -105,6 +111,8 @@ def build_report_from_outcome(outcome: RouteOutcome, scenario_name: str, *,
     )
 
 
-def save_report(report_data: dict, output_file: str) -> None:
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(report_data, f, indent=1, ensure_ascii=False)
+def save_report(report: dict, out_path: str) -> None:
+    p = Path(out_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
