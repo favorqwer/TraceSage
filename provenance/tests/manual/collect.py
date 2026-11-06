@@ -4,8 +4,8 @@
 stats（去掉时间字段）写成一份可按场景比较的 JSON。
 
 用法：
-    python tests/golden/collect.py --output-dir tmp/refactor-golden/run1
-    python tests/golden/collect.py --output-dir tmp/refactor-golden/run1 --only 1_Web_Exploit_Ransomware
+    python tests/manual/collect.py --output-dir tmp/refactor-golden/run1
+    python tests/manual/collect.py --output-dir tmp/refactor-golden/run1 --only 1_Web_Exploit_Ransomware
 """
 
 from __future__ import annotations

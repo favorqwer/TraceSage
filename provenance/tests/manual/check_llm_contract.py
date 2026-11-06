@@ -1,7 +1,7 @@
 """阶段 4 假模型契约测试：不调用真实模型，验证 LLM 模式的输入输出。
 
 用法：
-    python tests/golden/check_llm_contract.py
+    python tests/manual/check_llm_contract.py
 """
 
 from __future__ import annotations

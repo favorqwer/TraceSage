@@ -1,7 +1,7 @@
 """阶段 0：比较两份行为基线（逐场景逐边）。
 
 用法：
-    python tests/golden/compare.py --left tmp/refactor-golden/run1 --right tmp/refactor-golden/run2
+    python tests/manual/compare.py --left tmp/refactor-golden/run1 --right tmp/refactor-golden/run2
 """
 
 from __future__ import annotations
