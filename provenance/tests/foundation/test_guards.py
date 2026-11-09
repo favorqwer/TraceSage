@@ -15,8 +15,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 import llm.judge as guards  # noqa: E402
 
 
-def item(bid, size, *, dirs=("/etc",), programs=("/bin/bash",), parent=True, vacuous=False):
+def item(bid, size, *, dirs=("/etc",), programs=("/bin/bash",), parent=True, vacuous=False, level=0):
     entry = {"id": bid, "size": size, "all_dirs": list(dirs), "programs": list(programs),
+             "level": level,
              "members": [(f"m{bid}{i}", "read", "/etc/x") for i in range(size)]}
     if parent:
         entry["parent"] = {"bid": "B0001", "size": size + 3, "bytes": 1, "objects_n": 1,
@@ -76,6 +77,24 @@ class GuardTest(unittest.TestCase):
         self.assertFalse(guards.is_leaf(item("B0003", 2), "mixed", last_level=False, fanout_min=1))
         self.assertFalse(guards.is_leaf(item("B0004", 1, parent=False), "unknown",
                                         last_level=False, fanout_min=1))
+
+    def test_homogeneity_guard(self) -> None:
+        items = [
+            item("B0002", 5, dirs=("/etc", "/tmp"), level=0),
+            item("B0003", 5, dirs=("/etc",), level=0),
+            item("B0004", 5, dirs=("/etc", "/tmp"), level=2),
+        ]
+        verdicts = {
+            "B0002": {"verdict": "all"},
+            "B0003": {"verdict": "all"},
+            "B0004": {"verdict": "all"},
+        }
+        downgraded = guards.homogeneity_guard(items, verdicts)
+        self.assertEqual(downgraded, 1)
+        self.assertEqual(verdicts["B0002"]["verdict"], "mixed")
+        self.assertIn("跨2个不同目录", verdicts["B0002"]["_homogeneity"])
+        self.assertEqual(verdicts["B0003"]["verdict"], "all")
+        self.assertEqual(verdicts["B0004"]["verdict"], "all")
 
 
 if __name__ == "__main__":

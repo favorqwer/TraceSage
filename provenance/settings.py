@@ -245,6 +245,10 @@ def warrant_guard_enabled() -> bool:
     return _pick_bool("bundle", "warrant_guard", True)
 
 
+def homogeneity_guard_enabled() -> bool:
+    return _pick_bool("bundle", "homogeneity_guard", True)
+
+
 def warrant_rules() -> list[str]:
     raw = _raw("bundle", "warrant_rule")
     items = [str(item).strip() for item in str(raw or "deriv,proc").split(",")]

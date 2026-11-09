@@ -46,6 +46,7 @@ from core.bundling import (  # noqa: F401
     BundleState,
     anchor_facts,
     fanout_split,
+    homogeneity_guard,
     hot_guard,
     is_leaf,
     vacuous_ids,
@@ -415,7 +416,10 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
         stats["calls"] += batch_stats["calls"]
         stats["missing_bundles"] += batch_stats["missing"]
 
-        # 结构后置闸门：类一致性约束与误杀凭证校验
+        # 结构后置闸门：同质性约束、类一致性约束与误杀凭证校验
+        if cfg.homogeneity_guard_enabled():
+            stats["guards"].setdefault("homogeneity", 0)
+            stats["guards"]["homogeneity"] += homogeneity_guard(items, verdicts)
         if cfg.none_guard() == "hot":
             stats["guards"]["hot"] += hot_guard(items, verdicts)
         warrant_facts: dict[str, dict[str, Any]] = {}
@@ -508,6 +512,8 @@ def _resolve_item_verdict(item: dict[str, Any], row: dict[str, Any] | None,
 
     if (row or {}).get("_guard"):
         reason = f"（类一致性闸门：{row['_guard']}）" + reason
+    if (row or {}).get("_homogeneity"):
+        reason = f"（同质性闸门：{row['_homogeneity']}）" + reason
     if (row or {}).get("_warrant"):
         reason = f"（凭证闸门：{row['_warrant']}）" + reason
     if is_leaf(item, verdict, last_level, fanout_min):
@@ -579,7 +585,7 @@ class LlmJudge:
 
         stats: Dict[str, Any] = {
             "candidates": len(triples_to_judge), "calls": 0, "seconds": 0.0, "levels": [],
-            "guards": {"vacuous": 0, "fanout": {"bundles": 0, "edges": 0}, "hot": 0, "warrant": 0},
+            "guards": {"vacuous": 0, "fanout": {"bundles": 0, "edges": 0}, "hot": 0, "warrant": 0, "homogeneity": 0},
             "cap_kept_edges": 0, "missing_bundles": 0,
         }
         detail: List[Dict[str, Any]] = []

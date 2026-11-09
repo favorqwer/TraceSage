@@ -137,7 +137,7 @@ def run_once(config: dict | None = None, drop_ids: bool = False, drop_all: bool 
                 base[section] = config[section]
     stats = {
         "candidates": len(inv.edges), "calls": 0, "seconds": 0.0, "levels": [],
-        "guards": {"vacuous": 0, "fanout": {"bundles": 0, "edges": 0}, "hot": 0, "warrant": 0},
+        "guards": {"vacuous": 0, "fanout": {"bundles": 0, "edges": 0}, "hot": 0, "warrant": 0, "homogeneity": 0},
         "missing_bundles": 0,
     }
     detail: list[dict] = []
