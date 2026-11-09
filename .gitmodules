@@ -1,3 +1,0 @@
-[submodule "third_party/flexis"]
-	path = third_party/flexis
-	url = https://github.com/akshit-sharma/flexis.git
