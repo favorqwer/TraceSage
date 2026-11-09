@@ -53,7 +53,12 @@ def _hop_matches(hop: Dict[str, Any], member_roles: Iterable[Tuple[str, str, str
     roles = list(member_roles)
     if not roles:
         return True
-    require_both = str(entry_source) == "exact"
+    kind = str(entry_source)
+    if kind == "structure":
+        # 结构通道的契约是"顶点类型级走通"，角色档位来自训练场景、不能参与全等比较。
+        # 规则编号与跳号是否真实存在仍由 bad_rule / bad_hop 校验。
+        return any(str(syscall) == bundle_syscall for _, syscall, _ in roles)
+    require_both = kind == "exact"
     for src_role, syscall, dst_role in roles:
         if str(syscall) != bundle_syscall:
             continue

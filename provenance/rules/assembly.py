@@ -1,7 +1,7 @@
 """离线单次调查装配：闭包 → 规则库 → 模式路由 → 三段报告。
 
 服务规则库构建与留一折循环（`run_loo_folds.py`、`tools/ingest_scenario.py`、
-`tools/rebuild_library.py`）；RAG 在线主流程在 `navigator/pipeline.py`。
+`tools/rebuild_library.py`）；RAG 在线主流程在 `core/runner.py`。
 """
 
 from __future__ import annotations

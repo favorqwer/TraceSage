@@ -403,3 +403,20 @@ def load_rule_table(name: str) -> Any:
 
 def load_json(name: str) -> Any:
     return load_rule_table(name)
+
+
+def rule_mix() -> tuple[int, int]:
+    """规则证据名额：第一路（键匹配）+ 第二路（结构走通）。
+
+    环境变量 `PROV_RULE_MIX`，形如 `3+0`（默认，与基线一致）或 `2+1`。
+    任一侧为 0 表示该路不启用。
+    """
+    raw = os.environ.get("PROV_RULE_MIX", "3+0").strip()
+    try:
+        left, right = raw.split("+", 1)
+        a, b = int(left), int(right)
+    except Exception:  # noqa: BLE001 - 非法取值退回基线口径
+        return (3, 0)
+    if a < 0 or b < 0 or a + b < 1:
+        return (3, 0)
+    return (a, b)

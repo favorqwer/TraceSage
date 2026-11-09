@@ -14,12 +14,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import settings as cfg
 from rag.graph_retrieve import RuleGraphRetriever
 from rag.neo4j_kg import DEFAULT_DATABASE
+from rag.structure import StructureIndex, merge_rounds
 
 TOPK_RULES = 3
 TOPK_TECH = 3
 
 _BASE_RENDER = None
 _RETRIEVER: Optional[RuleGraphRetriever] = None
+_STRUCT: Optional[StructureIndex] = None
 _SCENARIO = ""
 _RULE_CACHE: Dict[Tuple, Dict[str, Any]] = {}
 _TECH_CACHE: Dict[Tuple, Dict[str, Any]] = {}
@@ -44,29 +46,32 @@ def set_parent_map(parent_map: Dict[str, str]) -> None:
 
 
 def set_scenario(scenario: str, matcher: Any = None, parent_map: Optional[Dict[str, str]] = None) -> None:
-    global _SCENARIO, _RETRIEVER, _RULE_CACHE, _TECH_CACHE, _EXPLICIT_MATCHER, _EXPLICIT_PARENT_MAP
+    global _SCENARIO, _RETRIEVER, _STRUCT, _RULE_CACHE, _TECH_CACHE, _EXPLICIT_MATCHER, _EXPLICIT_PARENT_MAP
     _SCENARIO = scenario
     if matcher is not None:
         _EXPLICIT_MATCHER = matcher
     if parent_map is not None:
         _EXPLICIT_PARENT_MAP = dict(parent_map)
     _RETRIEVER = None
+    _STRUCT = None
     _RULE_CACHE = {}
     _TECH_CACHE = {}
 
 
 def close() -> None:
-    global _RETRIEVER
+    global _RETRIEVER, _STRUCT
     if _RETRIEVER is not None:
         _RETRIEVER.close()
         _RETRIEVER = None
+    _STRUCT = None
 
 
 def _get_retriever() -> RuleGraphRetriever:
-    global _RETRIEVER
+    global _RETRIEVER, _STRUCT
     if _RETRIEVER is None:
         _RETRIEVER = RuleGraphRetriever(cfg.neo4j_uri(), cfg.neo4j_auth(),
                                         DEFAULT_DATABASE, _SCENARIO)
+        _STRUCT = StructureIndex(_RETRIEVER)
     return _RETRIEVER
 
 
@@ -90,7 +95,8 @@ def _rule_lines(item: Dict[str, Any], ranked: List[Dict[str, Any]],
         m = g.get("motif") or {}
         rid = f"R{idx}"
         mid = str(m.get("motif_id") or "")
-        entry = "exact" if rec["exact"] else "partial"
+        entry = ("exact" if rec["exact"]
+                 else ("structure" if rec.get("entry_source") == "structure" else "partial"))
         item["_rule_ids"].append(rid)
         item["_rule_evidence"][rid] = {
             "motif_id": mid,
@@ -107,6 +113,8 @@ def _rule_lines(item: Dict[str, Any], ranked: List[Dict[str, Any]],
             aligns.append(f"精确对齐 {rec['exact']} 条")
         if rec["partial"]:
             aligns.append(f"部分对齐 {rec['partial']} 条")
+        if rec.get("entry_source") == "structure":
+            aligns.append(f"结构走通 {rec.get('structure')}/{rec.get('hops_total')} 跳")
         lines.append(
             f"      {rid} | {mid} | {' | '.join(aligns)} | "
             f"训练折查准 {_fmt_precision(m.get('precision'))} | "
@@ -159,6 +167,7 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
     retriever = _get_retriever()
     programs = [str(p) for p in (item.get("programs") or [])]
     member_roles: set = set()
+    member_edges: List[tuple] = []
     rules_by_mid: Dict[str, Dict[str, Any]] = {}
     techs_by_id: Dict[str, Dict[str, Any]] = {}
 
@@ -172,6 +181,8 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
         src_label = str(edge.get("src_label") or "")
         dst_label = str(edge.get("dst_label") or "")
         member_roles.add((src_role, sc, dst_role))
+        member_edges.append((str(edge["src"]), sc, str(edge["dst"]), src_role, dst_role,
+                             str(edge.get("src_label") or ""), str(edge.get("dst_label") or "")))
         key = (src_role, sc, dst_role, src_label, dst_label, tuple(programs))
 
         if key not in _RULE_CACHE:
@@ -230,7 +241,18 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
                 -int(m.get("attack_hits") or 0),
                 str(m.get("motif_id") or ""))
 
-    ranked_rules = sorted(rules_by_mid.values(), key=rule_rank)[:TOPK_RULES]
+    keep_a, keep_b = cfg.rule_mix()
+    cap_a = keep_a
+    ranked_rules = sorted(rules_by_mid.values(), key=rule_rank)[:cap_a]
+    total_rules = len(rules_by_mid)
+    if keep_b and _STRUCT is not None:
+        secondary = _STRUCT.rank(member_edges, keep_b)
+        if secondary:
+            total_rules += len(secondary)
+            ranked_rules = merge_rounds(ranked_rules, secondary, cap_a, keep_b)
+        if os.environ.get("RAG_DEBUG"):
+            print(f"[navigator.render] 结构通道 item={item.get('id')} "
+                  f"候选={len(secondary)} 混入={max(0, len(ranked_rules) - cap_a)}", flush=True)
 
     strong_recs = [r for r in techs_by_id.values() if r["strong"]]
     for rec in strong_recs:
@@ -255,7 +277,7 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
               f"scenario={_SCENARIO!r}", flush=True)
 
     lines: List[str] = []
-    lines.extend(_rule_lines(item, ranked_rules, len(rules_by_mid)))
+    lines.extend(_rule_lines(item, ranked_rules, total_rules))
     lines.extend(_tech_lines(item, ranked_tech, len(strong_recs)))
     return lines
 

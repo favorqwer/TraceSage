@@ -120,6 +120,21 @@ class RuleGraphRetriever:
             "cases": [dict(c) for c in rec["cases"] if c.get("case_id")],
         }
 
+    def all_motifs(self) -> List[Dict[str, Any]]:
+        """本折全部 Motif 及其按 index 排好的 hop 序列（结构检索通道用，只读）。"""
+        with self._session() as s:
+            rows = s.run(
+                """
+                MATCH (m:Motif {fold:$fold})-[:HAS_HOP]->(h:Hop)
+                WITH m, h ORDER BY h.index
+                WITH m, collect(h{.*}) AS hops
+                RETURN m{.*} AS motif, hops
+                ORDER BY m.motif_id
+                """,
+                fold=self.fold).data()
+        return [{"motif": dict(r["motif"]),
+                 "hops": [dict(h) for h in (r["hops"] or [])]} for r in rows]
+
     # ---------- 规则证据：只读 Motif/Hop ----------
     def _rule_subgraph(self, motif_id: str, entry_source: str) -> Optional[Dict[str, Any]]:
         sub = self.expand_motif(motif_id, include_techniques=False)

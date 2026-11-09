@@ -1,0 +1,1225 @@
+﻿arxiv_id,title
+2401.01711,Evaluating Large Language Models in Semantic Parsing for Conversational Question Answering over Knowledge Graphs
+2401.13227,LPNL: Scalable Link Prediction with Large Language Models
+2401.13912,A Survey of Deep Learning and Foundation Models for Time Series Forecasting
+2401.14192,How Can Large Language Models Understand Spatial-Temporal Data?
+2401.15298,Together We Go Further: LLMs and IDE Static Analysis for Extract Method Refactoring
+2402.00292,Effective Bug Detection in Graph Database Engines: An LLM-based Approach
+2402.01805,Can LLMs perform structured graph reasoning?
+2402.04978,An Enhanced Prompt-Based LLM Reasoning Scheme via Knowledge Graph-Integrated Collaboration
+2402.05862,Let Your Graph Do the Talking: Encoding Structured Data for LLMs
+2402.05952,Advancing Graph Representation Learning with Large Language Models: A Comprehensive Survey of Techniques
+2402.07630,G-Retriever: Retrieval-Augmented Generation for Textual Graph Understanding and Question Answering
+2402.08147,"VerMCTS: Synthesizing Multi-Step Programs using a Verifier, a Large Language Model, and Tree Search"
+2402.10409,Understanding Survey Paper Taxonomy about Large Language Models via Graph Representation Learning
+2402.12022,Distilling Large Language Models for Text-Attributed Graph Learning
+2402.13035,Learning to Check: Unleashing Potentials for Self-Correction in Large Language Models
+2402.14293,Leveraging Large Language Models for Concept Graph Recovery and Question Answering in NLP Education
+2402.15183,GraphEdit: Large Language Models for Graph Structure Learning
+2402.16048,How Likely Do LLMs with CoT Mimic Human Reasoning?
+2402.16567,Aligning Large Language Models to a Domain-specific Graph Database for NL2GQL
+2402.17213,VCD: A Dataset for Visual Commonsense Discovery in Images
+2402.17753,Evaluating Very Long-Term Conversational Memory of LLM Agents
+2403.01121,OpenGraph: Towards Open Graph Foundation Models
+2403.02884,MathScale: Scaling Instruction Tuning for Mathematical Reasoning
+2403.04261,Advancing Chinese biomedical text mining with community challenges
+2403.04483,GraphInstruct: Empowering Large Language Models with Graph Understanding and Reasoning Capability
+2403.10081,DRAGIN: Dynamic Retrieval Augmented Generation based on the Information Needs of Large Language Models
+2403.11129,Enhancing Event Causality Identification with Rationale and Structure-Aware Causal Question Answering
+2404.01425,"A Preliminary Roadmap for LLMs as Assistants in Exploring, Analyzing, and Visualizing Knowledge Graphs"
+2404.05966,THOUGHTSCULPT: Reasoning with Intermediate Revision and Search
+2404.06413,Foundation Models to the Rescue: Deadlock Resolution in Connected Multi-Robot Systems
+2404.06910,Superposition Prompting: Improving and Accelerating Retrieval-Augmented Generation
+2404.07221,Improving Retrieval for RAG based Question Answering Models on Financial Documents
+2404.08656,Linear Cross-document Event Coreference Resolution with X-AMR
+2404.09248,Knowledgeable Agents by Offline Reinforcement Learning from Large Language Model Rollouts
+2404.10384,Reasoning on Efficient Knowledge Paths:Knowledge Graph Guides Large Language Model for Domain Question Answering
+2404.13046,MoVA: Adapting Mixture of Vision Experts to Multimodal Context
+2404.13571,Test-Time Training on Graphs with Large Language Models (LLMs)
+2404.13999,CoFInAl: Enhancing Action Quality Assessment with Coarse-to-Fine Instruction Alignment
+2404.14786,RealTCD: Temporal Causal Discovery from Interventional Data with Large Language Model
+2404.14809,"A Survey of Large Language Models on Generative Graph Analytics: Query, Learning, and Applications"
+2404.15923,KGValidator: A Framework for Automatic Validation of Knowledge Graph Construction
+2404.16130,From Local to Global: A Graph RAG Approach to Query-Focused Summarization
+2404.16461,Large Language Models Perform on Par with Experts Identifying Mental Health Factors in Adolescent Online Forums
+2404.17025,How Does Conversation Length Impact User's Satisfaction? A Case Study of Length-Controlled Conversations with LLM-Powered Chatbots
+2404.17140,Small Language Models Need Strong Verifiers to Self-Correct Reasoning
+2405.00790,SCAR: Scheduling Multi-Model AI Workloads on Heterogeneous Multi-Chiplet Module Accelerators
+2405.01744,ALCM: Autonomous LLM-Augmented Causal Discovery Framework
+2405.01976,Conformal Prediction for Natural Language Processing: A Survey
+2405.04818,ACORN: Aspect-wise Commonsense Reasoning Explanation Evaluation
+2405.08011,A Survey of Large Language Models for Graphs
+2405.13551,Large Language Models are Effective Priors for Causal Graph Discovery
+2405.15684,Prompt-Aware Adapter: Towards Learning Adaptive Visual Tokens for Multimodal Large Language Models
+2405.16802,AutoPSV: Automated Process-Supervised Verifier
+2405.18027,TimeChara: Evaluating Point-in-Time Character Hallucination of Role-Playing Large Language Models
+2405.18581,Unleashing the Potential of Text-attributed Graphs: Automatic Relation Decomposition via Large Language Models
+2406.03730,FastGAS: Fast Graph-based Annotation Selection for In-Context Learning
+2406.07394,Accessing GPT-4 level Mathematical Olympiad Solutions via Monte Carlo Tree Self-refine with LLaMa-3 8B
+2406.12072,DTGB: A Comprehensive Benchmark for Dynamic Text-Attributed Graphs
+2406.12197,Debate as Optimization: Adaptive Conformal Prediction and Diverse Retrieval for Event Extraction
+2406.12385,Fast Graph Vector Search via Hardware Acceleration and Delayed-Synchronization Traversal
+2406.12692,MAGIC: Generating Self-Correction Guideline for In-Context Text-to-SQL
+2406.13964,Hierarchical Micro-Segmentations for Zero-Trust Services via Large Language Model (LLM)-enhanced Graph Diffusion
+2406.14021,HIGHT: Hierarchical Graph Tokenization for Molecule-Language Alignment
+2406.14326,medIKAL: Integrating Knowledge Graphs as Assistants of LLMs for Enhanced Clinical Diagnosis on EMRs
+2406.15992,Can LLM Graph Reasoning Generalize beyond Pattern Memorization?
+2406.16176,GraphEval36K: Benchmarking Coding and Reasoning Capabilities of Large Language Models on Graph Datasets
+2406.17169,Multi-LogiEval: Towards Evaluating Multi-Step Logical Reasoning Ability of Large Language Models
+2406.18134,"Assessing ""Implicit"" Retrieval Robustness of Large Language Models"
+2406.18449,Cascading Large Language Models for Salient Event Graph Generation
+2406.18814,Length Optimization in Conformal Prediction
+2406.19121,Towards Learning Abductive Reasoning using VSA Distributed Representations
+2406.19354,Fundamental Problems With Model Editing: How Should Rational Belief Revision Work in LLMs?
+2407.00466,BioKGBench: A Knowledge Graph Checking Benchmark of AI Agent for Biomedical Science
+2407.03637,QET: Enhancing Quantized LLM Parameters and KV cache Compression through Element Substitution and Residual Clustering
+2407.03884,ChatSOP: An SOP-Guided MCTS Planning Framework for Controllable LLM Dialogue Agents
+2407.07612,Teaching Transformers Causal Reasoning through Axiomatic Training
+2407.09394,PersonaRAG: Enhancing Retrieval-Augmented Generation Systems with User-Centric Agents
+2407.10805,Think-on-Graph 2.0: Deep and Faithful Large Language Model Reasoning with Knowledge-guided Retrieval Augmented Generation
+2407.12749,ChipXplore: Natural Language Exploration of Hardware Designs and Libraries
+2407.12860,STAGE: Simplified Text-Attributed Graph Embeddings Using Pre-trained LLMs
+2407.13989,Enhancing Graph Neural Networks with Limited Labeled Data by Actively Distilling Knowledge from Large Language Models
+2407.18752,Knowledge Graph Structure as Prompt: Improving Small Language Models Capabilities for Knowledge-based Causal Discovery
+2407.19794,Introducing a new hyper-parameter for RAG: Context Window Utilization
+2407.21057,Multi-group Uncertainty Quantification for Long-form Text Generation
+2408.03910,CodexGraph: Bridging Large Language Models and Code Repositories via Code Graph Databases
+2408.04174,wav2graph: A Framework for Supervised Learning Knowledge Graph from Speech
+2408.04220,Diffusion Guided Language Modeling
+2408.05456,Path-LLM: A Shortest-Path-based LLM Learning for Unified Graph Representation
+2408.06520,Retrieval-Augmented Hierarchical in-Context Reinforcement Learning and Hindsight Modular Reflections for Task Planning with LLMs
+2408.07531,Development of a Large Language Model-based Multi-Agent Clinical Decision Support System for Korean Triage and Acuity Scale (KTAS)-Based Triage and Treatment Planning in Emergency Departments
+2408.08921,Graph Retrieval-Augmented Generation: A Survey
+2408.10703,Large Language Models for Multimodal Deformable Image Registration
+2408.13006,Systematic Evaluation of LLM-as-a-Judge in LLM Alignment Tasks: Explainable Metrics and Diverse Prompt Templates
+2408.14134,Exploring the Potential of Large Language Models for Heterophilic Graphs
+2408.14512,LLMs as Zero-shot Graph Learners: Alignment of GNN Representations with LLM Token Embeddings
+2409.05559,IFAR: Multi-Perspective and Multi-Level Causal Discovery with LLMs
+2409.09010,Contri(e)ve: Context + Retrieve for Scholarly Question Answering
+2409.09485,Enumerating Minimal Unsatisfiable Cores of LTLf formulas
+2409.10411,Assessing Privacy Compliance of Android Third-Party SDKs
+2409.12369,Program Slicing in the Era of Large Language Models
+2409.14586,Backtracking Improves Generation Safety
+2409.15515,"Learning When to Retrieve, What to Rewrite, and How to Respond in Conversational QA"
+2409.17587,Multimodal Banking Dataset: Understanding Client Needs through Event Sequences
+2409.19006,Towards Automated Patent Workflows: AI-Orchestrated Multi-Agent Framework for Intellectual Property Management and Analysis
+2409.19256,HybridFlow: A Flexible and Efficient RLHF Framework
+2409.19382,Zero-Shot Multi-Hop Question Answering via Monte-Carlo Tree Search with Large Language Models
+2410.02736,Justice or Prejudice? Quantifying Biases in LLM-as-a-Judge
+2410.03761,Taxonomy Tree Generation from Citation Graph
+2410.05193,RevisEval: Improving LLM-as-a-Judge via Response-Adapted References
+2410.06392,Counterfactual Causal Inference in Natural Language with Large Language Models
+2410.06508,Towards Self-Improvement of LLMs via MCTS: Leveraging Stepwise Knowledge with Curriculum Preference Learning
+2410.06950,Faithful Interpretation for Graph Neural Networks
+2410.08437,Autonomous Evaluation of LLMs for Truth Maintenance and Reasoning Tasks
+2410.09541,"LINKED: Eliciting, Filtering and Integrating Knowledge in Large Language Model for Commonsense Reasoning"
+2410.09824,LLM-Based Multi-Agent Systems are Scalable Graph Generative Models
+2410.10293,FunnelRAG: A Coarse-to-Fine Progressive Retrieval Paradigm for RAG
+2410.11594,Black-box Uncertainty Quantification Method for LLM-as-a-Judge
+2410.12126,What Do LLMs Need to Understand Graphs: A Survey of Parametric Representation of Graphs
+2410.14211,Paths-over-Graph: Knowledge Graph Empowered Large Language Model Reasoning
+2410.16882,SaVe-TAG: LLM-based Interpolation for Long-Tailed Text-Attributed Graphs
+2410.19084,GCoder: Improving Large Language Model for Generalized Graph Problem Solving
+2410.21673,Knowledge-Guided Prompt Learning for Request Quality Assurance in Public Code Review
+2410.22597,Are Large-Language Models Graph Algorithmic Reasoners?
+2410.23875,Plan-on-Graph: Self-Correcting Adaptive Planning of Large Language Model on Knowledge Graphs
+2410.23979,Fair Division of Chores with Budget Constraints
+2411.00689,PrefRAG: Preference-Driven Multi-Source Retrieval Augmented Generation
+2411.00744,CARROT: A Learned Cost-Constrained Retrieval Optimization System for RAG
+2411.00871,LLaMo: Large Language Model-based Molecular Graph Assistant
+2411.02381,Addressing Uncertainty in LLMs to Enhance Reliability in Generative AI
+2411.03349,RuAG: Learned-rule-augmented Generation for Large Language Models
+2411.03817,From Novice to Expert: LLM Agent Policy Optimization via Step-wise Reinforcement Learning
+2411.05474,Enhancing Robustness in Language-Driven Robotics: A Modular Approach to Failure Reduction
+2411.06037,Sufficient Context: A New Lens on Retrieval Augmented Generation Systems
+2411.07098,A Multi-Agent Approach for REST API Testing with Semantic Graphs and LLM-Driven Inputs
+2411.08449,Towards Evaluating Large Language Models for Graph Query Generation
+2411.10371,"A Survey of Event Causality Identification: Taxonomy, Challenges, Assessment, and Prospects"
+2411.12759,A Novel Approach to Eliminating Hallucinations in Large Language Model-Assisted Causal Discovery
+2411.14592,G-RAG: Knowledge Expansion in Material Science
+2411.15435,What Makes a Scene ? Scene Graph-based Evaluation and Feedback for Controllable Generation
+2411.15594,A Survey on LLM-as-a-Judge
+2411.16495,AtomR: Atomic Operator-Empowered Large Language Models for Heterogeneous Knowledge Reasoning
+2411.17989,Regularized Multi-LLMs Collaboration for Enhanced Score-based Causal Discovery
+2412.02830,RARE: Retrieval-Augmented Reasoning Enhancement for Large Language Models
+2412.04237,VASCAR: Content-Aware Layout Generation via Visual-Aware Self-Correction
+2412.04606,Semantic Consistency-Based Uncertainty Quantification for Factuality in Radiology Report Generation
+2412.05655,"Auto-AdvER: Disentangling Condition, History, and Commercial Offers in Automotive Advertisements"
+2412.05838,A Collaborative Multi-Agent Approach to Retrieval-Augmented Generation Across Diverse Data
+2412.06117,Paraconsistent Belief Revision: A Replacement-Enriched LFI for Epistemic Entrenchment
+2412.06176,AlphaVerus: Bootstrapping Formally Verified Code Generation through Self-Improving Translation and Treefinement
+2412.06849,GL-Fusion: Rethinking the Combination of Graph Neural Network and Large Language model
+2412.08864,GRIP: A Graph-Based Reasoning Instruction Producer
+2412.09078,Forest-of-Thought: Scaling Test-Time Compute for Enhancing LLM Reasoning
+2412.09094,Filter-then-Generate: Large Language Models with Structure-Text Adapter for Knowledge Graph Completion
+2412.10054,Unsupervised Named Entity Disambiguation for Low Resource Domains
+2412.10136,Can LLMs Convert Graphs to Text-Attributed Graphs?
+2412.10281,"One world, one opinion? The superstar effect in LLM responses"
+2412.10434,NAT-NL2GQL: A Novel Multi-Agent Framework for Translating Natural Language to Graph Query Language
+2412.11006,Entropy-Regularized Process Reward Model
+2412.11983,Leveraging Large Language Models for Effective Label-free Node Classification in Text-Attributed Graphs
+2412.12447,PERC: Plan-As-Query Example Retrieval for Underrepresented Code Generation
+2412.12456,"Graph Learning in the Era of LLMs: A Survey from the Perspective of Data, Models, and Tasks"
+2412.12881,RAG-Star: Enhancing Deliberative Reasoning with Retrieval Augmented Verification and Refinement
+2412.13283,Enhancing Persona Classification in Dialogue Systems: A Graph Neural Network Approach
+2412.14880,Multimodal Hypothetical Summary for Retrieval-based Multi-image Question Answering
+2412.15101,Review-Then-Refine: A Dynamic Framework for Multi-Hop Question Answering with Temporal Adaptability
+2412.16432,DFModel: Design Space Optimization of Large-Scale Systems Exploiting Dataflow Mappings
+2412.16833,KG4Diagnosis: A Hierarchical Multi-Agent LLM Framework with Knowledge Graph Enhancement for Medical Diagnosis
+2412.17970,CARL-GT: Evaluating Causal Reasoning Capabilities of Large Language Models
+2412.18431,GeAR: Graph-enhanced Agent for Retrieval-augmented Generation
+2412.18702,CypherBench: Towards Precise Retrieval over Full-scale Modern Knowledge Graphs in the LLM Era
+2412.19021,Relation-aware Hierarchical Prompt for Open-vocabulary Scene Graph Generation
+2412.20127,M-MAD: Multidimensional Multi-Agent Debate for Advanced Machine Translation Evaluation
+2501.00018,SECodec: Structural Entropy-based Compressive Speech Representation Codec for Speech Language Models
+2501.00888,Unfolding the Headline: Iterative Self-Questioning for News Retrieval and Timeline Summarization
+2501.01203,HetGCoT: Heterogeneous Graph-Enhanced Chain-of-Thought LLM Reasoning for Academic Question Answering
+2501.01478,Enhancing Reasoning through Process Supervision with Monte Carlo Tree Search
+2501.02844,GORAG: Graph-based Online Retrieval Augmented Generation for Dynamic Few-shot Social Media Text Classification
+2501.04519,rStar-Math: Small LLMs Can Master Math Reasoning with Self-Evolved Deep Thinking
+2501.04899,SUGAR: Leveraging Contextual Confidence for Smarter Retrieval
+2501.07070,Enhancing Image Generation Fidelity via Progressive Prompts
+2501.07766,Large Language Models for Knowledge Graph Embedding: A Survey
+2501.08600,AutoRestTest: A Tool for Automated REST API Testing Using LLMs and MARL
+2501.09186,Guiding Retrieval using LLM-based Listwise Rankers
+2501.09214,Boosting Short Text Classification with Multi-Source Information Exploration and Dual-Level Contrastive Learning
+2501.09410,MoE$^2$: Optimizing Collaborative Inference for Edge Large Language Models
+2501.11478,Each Graph is a New Language: Graph Learning with LLMs
+2501.11911,Integrate Temporal Graph Learning into LLM-based Temporal Knowledge Graph Model
+2501.11968,Bridging Visualization and Optimization: Multimodal Large Language Models on Graph-Structured Combinatorial Optimization
+2501.12835,Adaptive Retrieval Without Self-Knowledge? Bringing Uncertainty Back Home
+2501.13622,Coarse-to-Fine Process Reward Modeling for Mathematical Reasoning
+2501.13746,EICopilot: Search and Explore Enterprise Information over Large-scale Knowledge Graphs with LLM-driven Agents
+2501.13958,A Survey of Graph Retrieval-Augmented Generation for Customized Large Language Models
+2501.13993,CAPRAG: A Large Language Model Solution for Customer Service and Automatic Reporting using Vector and Graph Retrieval-Augmented Generation
+2501.14224,Top Ten Challenges Towards Agentic Neural Graph Databases
+2501.14427,GraphSOS: Graph Sampling and Order Selection to Help LLMs Understand Graphs Better
+2501.14892,Causal Graphs Meet Thoughts: Enhancing Complex Reasoning in Graph-Augmented LLMs
+2501.16303,RAPID: Retrieval-Augmented Parallel Inference Drafting for Text-Based Video Event Retrieval
+2501.17549,Query-Aware Learnable Graph Pooling Tokens as Prompt for Large Language Models
+2501.18645,Layered Chain-of-Thought Prompting for Multi-Agent LLM Systems: A Comprehensive Approach to Explainable Large Language Models
+2501.18657,Enhancing Large Language Model Efficiencyvia Symbolic Compression: A Formal Approach Towards Interpretability
+2501.19300,Offline Learning for Combinatorial Multi-armed Bandits
+2502.00271,Scaling Flaws of Verifier-Guided Search in Mathematical Reasoning
+2502.00484,Satisfactory Budget Division
+2502.00829,When Do LLMs Help With Node Classification? A Comprehensive Analysis
+2502.01142,DeepRAG: Thinking to Retrieve Step by Step for Large Language Models
+2502.01694,"Metastable Dynamics of Chain-of-Thought Reasoning: Provable Benefits of Search, RL and Distillation"
+2502.03251,RiemannGFM: Learning a Graph Foundation Model from Riemannian Geometry
+2502.05664,CODESIM: Multi-Agent Code Generation and Problem Solving through Simulation-Driven Planning and Debugging
+2502.08346,Graph Foundation Models for Recommendation: A Comprehensive Survey
+2502.09073,Enhancing RAG with Active Learning on Conversation Records: Reject Incapables and Answer Capables
+2502.09891,ArchRAG: Attributed Community-based Hierarchical Retrieval-Augmented Generation
+2502.10522,GraphiT: Efficient Node Classification on Text-Attributed Graphs with Prompt Optimized LLMs
+2502.11008,CounterBench: Evaluating and Improving Counterfactual Reasoning in Large Language Models
+2502.11183,Don't Get Lost in the Trees: Streamlining LLM Reasoning by Overcoming Tree Search Exploration Pitfalls
+2502.12110,A-MEM: Agentic Memory for LLM Agents
+2502.12501,Crowd Comparative Reasoning: Unlocking Comprehensive Evaluations for LLM-as-a-Judge
+2502.12663,Demystifying Multilingual Chain-of-Thought in Process Reward Modeling
+2502.12929,Flow-of-Options: Diversified and Improved LLM Reasoning by Thinking Through Options
+2502.13383,MM-Verify: Enhancing Multimodal Reasoning with Chain-of-Thought Verification
+2502.13502,PLDR-LLMs Learn A Generalizable Tensor Operator That Can Replace Its Own Deep Neural Net At Inference
+2502.14192,NLP-AKG: Few-Shot Construction of NLP Academic Knowledge Graph Based on LLM
+2502.14361,Retrieval-Augmented Process Reward Model for Generalizable Mathematical Reasoning
+2502.18001,Unveiling the Key Factors for Distilling Chain-of-Thought Reasoning
+2502.18627,PacQ: A SIMT Microarchitecture for Efficient Dataflow in Hyper-asymmetric GEMMs
+2502.18873,Multi-LLM Collaborative Search for Complex Problem Solving
+2503.00134,Personalized Causal Graph Reasoning for LLMs: An Implementation for Dietary Recommendations
+2503.00845,Rewarding Graph Reasoning Process makes LLMs more Generalized Reasoners
+2503.01642,Graph-Augmented Reasoning: Evolving Step-by-Step Knowledge Graph Retrieval for LLM Reasoning
+2503.01659,Detecting Stylistic Fingerprints of Large Language Models
+2503.02246,From Code to Courtroom: LLMs as the New Software Judges
+2503.02390,ReSo: A Reward-driven Self-organizing LLM-based Multi-Agent System for Reasoning Tasks
+2503.02692,FinArena: A Human-Agent Collaboration Framework for Financial Market Analysis and Forecasting
+2503.03135,Bridging Molecular Graphs and Large Language Models
+2503.04530,SOLAR: Scalable Optimization of Large-scale Architecture for Reasoning
+2503.05061,No Free Labels: Limitations of LLM-as-a-Judge Without Human Grounding
+2503.07584,Talking to GDELT Through Knowledge Graphs
+2503.10049,Enhancing Multi-Agent Systems via Reinforcement Learning with LLM-based Planner and Graph-based Policy
+2503.10069,SmartWay: Enhanced Waypoint Prediction and Backtracking for Zero-Shot Vision-and-Language Navigation
+2503.10367,Large-Small Model Collaboration for Enhancing Edge-Deployed Small Models
+2503.10613,CoSTA$\ast$: Cost-Sensitive Toolpath Agent for Multi-turn Image Editing
+2503.13205,MAP: Evaluation and Multi-Agent Enhancement of Large Language Models for Inpatient Pathways
+2503.13657,Why Do Multi-Agent LLM Systems Fail?
+2503.14234,"Beyond Single Pass, Looping Through Time: KG-IRAG with Iterative Knowledge Retrieval"
+2503.15850,Uncertainty Quantification and Confidence Calibration in Large Language Models: A Survey
+2503.16385,Deconstructing Long Chain-of-Thought: A Structured Reasoning Optimization Framework for Long CoT Distillation
+2503.18502,Autoregressive Language Models for Knowledge Base Population: A case study in the space mission domain
+2503.19276,Context-Aware Semantic Segmentation: Enhancing Pixel-Level Understanding with Large Language Models for Advanced Vision Applications
+2503.21295,R-PRM: Reasoning-Driven Process Reward Modeling
+2503.22233,More Bang for the Buck: Process Reward Modeling with Entropy-Driven Uncertainty
+2503.23078,EventWeave: A Dynamic Framework for Capturing Core and Supporting Events in Dialogue Systems
+2504.00824,ScholarCopilot: Training Large Language Models for Academic Writing with Accurate Citations
+2504.01943,OpenCodeReasoning: Advancing Data Distillation for Competitive Coding
+2504.02112,PolyG: Adaptive Graph Traversal for Diverse GraphRAG Questions
+2504.05258,Learning to Reason Over Time: Timeline Self-Reflection for Improved Temporal Reasoning in Language Models
+2504.05478,GraphRAFT: Retrieval Augmented Fine-Tuning for Knowledge Graphs on Graph Databases
+2504.07052,To Backtrack or Not to Backtrack: When Sequential Search Limits Model Reasoning
+2504.07459,Beyond LLMs: A Linguistic Approach to Causal Graph Generation from Narrative Texts
+2504.07724,The Multi-Round Diagnostic RAG Framework for Emulating Clinical Reasoning
+2504.09378,Can you map it to English? The Role of Cross-Lingual Alignment in Multilingual Performance of LLMs
+2504.13032,InstructRAG: Leveraging Retrieval-Augmented Generation on Instruction Graphs for LLM-Based Task Planning
+2504.14520,Meta-Thinking in LLMs via Multi-Agent Reinforcement Learning: A Survey
+2504.14955,Efficient Document Retrieval with G-Retriever
+2504.16828,Process Reward Models That Think
+2504.17605,A Constraint Opinion Model
+2504.19396,Observational Learning with a Budget
+2504.20462,TAMO: Fine-Grained Root Cause Analysis via Tool-Assisted LLM Agent with Multi-Modality Observation Data in Cloud-Native Systems
+2504.21218,Theoretical Foundations for Semantic Cognition in Artificial Intelligence
+2505.00212,Which Agent Causes Task Failures and When? On Automated Failure Attribution of LLM Multi-Agent Systems
+2505.02020,Wide & Deep Learning for Node Classification
+2505.02130,Attention Mechanisms Perspective: Exploring LLM Processing of Graph-Structured Data
+2505.03748,APSQ: Additive Partial Sum Quantization with Algorithm-Hardware Co-Design
+2505.03799,Scalability Matters: Overcoming Challenges in InstructGLM with Similarity-Degree-Based Sampling
+2505.04253,LLM-Independent Adaptive RAG: Let the Question Speak for Itself
+2505.04651,"Scientific Hypothesis Generation and Validation: Methods, Datasets, and Future Directions"
+2505.04997,Foam-Agent: A Large Language Model-Based Multi-Agent Framework for Automating Computational Fluid Dynamics Workflows
+2505.05084,Reliably Bounding False Positives: A Zero-Shot Machine-Generated Text Detection Framework via Multiscaled Conformal Prediction
+2505.06321,Learn to Think: Bootstrapping LLM Reasoning Capability Through Graph Representation Learning
+2505.06328,A Grounded Memory System For Smart Personal Assistants
+2505.06505,On Definite Iterated Belief Revision with Belief Algebras
+2505.06663,METOR: A Unified Framework for Mutual Enhancement of Objects and Relationships in Open-vocabulary Video Visual Relationship Detection
+2505.06850,Visual Evolutionary Optimization on Graph-Structured Combinatorial Problems with MLLMs: A Case Study of Influence Maximization
+2505.07157,HAMLET: Healthcare-focused Adaptive Multilingual Learning Embedding-based Topic Modeling
+2505.07815,"Imagine, Verify, Execute: Memory-guided Agentic Exploration with Vision-Language Models"
+2505.10143,GE-Chat: A Graph Enhanced RAG Framework for Evidential Response Generation of LLMs
+2505.11730,Rethinking Optimal Verification Granularity for Compute-Efficient Test-Time Scaling
+2505.12321,BeliefNest: A Joint Action Simulator for Embodied Agents with Theory of Mind
+2505.12345,UniEdit: A Unified Knowledge Editing Benchmark for Large Language Models
+2505.12476,Enhancing Large Language Models with Reward-guided Tree Search for Knowledge Graph Question and Answering
+2505.13271,CSC-SQL: Corrective Self-Consistency in Text-to-SQL via Reinforcement Learning
+2505.13438,Optimizing Anytime Reasoning via Budget Relative Policy Optimization
+2505.13989,When LLMs meet open-world graph learning: a new perspective for unlabeled data uncertainty
+2505.13994,"Divide by Question, Conquer by Agent: SPLIT-RAG with Question-Driven Graph Partitioning"
+2505.14038,ProMind-LLM: Proactive Mental Health Care via Causal Reasoning with Sensor Data
+2505.15245,Towards Explainable Temporal Reasoning in Large Language Models: A Structure-Aware Generative Framework
+2505.15960,Efficient PRM Training Data Synthesis via Formal Verification
+2505.16502,Recursive Offloading for LLM Serving in Multi-tier Networks
+2505.18168,Emotion Knowledge Enhancement for Vision Large Language Models: A Self-Verification Approach for High-Quality Emotion Instruction Data Generation
+2505.18351,"Persona Alchemy: Designing, Evaluating, and Implementing Psychologically-Grounded LLM Agents for Diverse Stakeholder Representation"
+2505.18411,DanmakuTPPBench: A Multi-modal Benchmark for Temporal Point Process Modeling and Understanding
+2505.18475,A Survey of Large Language Models for Data Challenges in Graphs
+2505.18499,G1: Teaching LLMs to Reason on Graphs with Reinforcement Learning
+2505.18761,How Is LLM Reasoning Distracted by Irrelevant Context? An Analysis Using a Controlled Benchmark
+2505.18924,LLM-Guided Taxonomy and Hierarchical Uncertainty for 3D Point Cloud Active Learning
+2505.20574,xChemAgents: Agentic AI for Explainable Quantum Chemistry
+2505.20742,"'Hello, World!': Making GNNs Talk with LLMs"
+2505.22252,B-XAIC Dataset: Benchmarking Explainable AI for Graph Neural Networks Using Chemical Data
+2505.23034,Case-Based Reasoning Enhances the Predictive Power of LLMs in Drug-Drug Interaction
+2505.24157,Experience-based Knowledge Correction for Robust Planning in Minecraft
+2505.24230,ProofNet++: A Neuro-Symbolic System for Formal Proof Verification with Self-Correction
+2505.24258,FABLE: A Novel Data-Flow Analysis Benchmark on Procedural Text for Large Language Model Evaluation
+2505.24273,How Much Backtracking is Enough? Exploring the Interplay of SFT and RL in Enhancing LLM Reasoning
+2505.24377,LLM Inference Enhanced by External Knowledge: A Survey
+2505.24584,AutoChemSchematic AI: Agentic Physics-Aware Automation for Chemical Manufacturing Scale-Up
+2505.24688,Soft Reasoning: Navigating Solution Spaces in Large Language Models through Controlled Embedding Exploration
+2506.02490,Simplifying Root Cause Analysis in Kubernetes with StateGraph and LLM
+2506.03221,ExtracTable: Human-in-the-Loop Transformation of Scientific Corpora into Structured Knowledge
+2506.03533,Go-Browse: Training Web Agents with Structured Exploration
+2506.03939,Graph Counselor: Adaptive Graph Exploration via Multi-Agent Synergy to Enhance LLM Reasoning
+2506.04185,R-Search: Empowering LLM Reasoning with Search via Multi-Reward Reinforcement Learning
+2506.04203,Cascadia: An Efficient Cascade Serving System for Large Language Models
+2506.04253,HADA: Human-AI Agent Decision Alignment Architecture
+2506.05154,Resisting Contextual Interference in RAG via Parametric-Knowledge Reinforcement
+2506.05295,Sample Complexity and Representation Ability of Test-time Scaling Paradigms
+2506.05583,Conformal Prediction Adaptive to Unknown Subpopulation Shifts
+2506.05725,Large Language Models are Good Relational Learners
+2506.05873,Research on Personalized Financial Product Recommendation by Integrating Large Language Models and Graph Neural Networks
+2506.06683,RoboPARA: Dual-Arm Robot Planning with Parallel Allocation and Recomposition Across Tasks
+2506.06910,Causal Graph based Event Reasoning using Semantic Relation Experts
+2506.07064,Com$^2$: A Causal-Guided Benchmark for Exploring Complex Commonsense Reasoning in Large Language Models
+2506.07106,"Theorem-of-Thought: A Multi-Agent Framework for Abductive, Deductive, and Inductive Reasoning in Language Models"
+2506.07168,Efficient Text-Attributed Graph Learning through Selective Annotation and Graph Alignment
+2506.07334,Graph-KV: Breaking Sequence via Injecting Structural Biases into Large Language Models
+2506.07643,Synthetic Visual Genome
+2506.08410,"Large Language Models Have Intrinsic Meta-Cognition, but Need a Good Lens"
+2506.08507,MasHost Builds It All: Autonomous Multi-Agent System Directed by Reinforcement Learning
+2506.08771,Paths to Causality: Finding Informative Subgraphs Within Knowledge Graphs for Knowledge-Based Causal Discovery
+2506.08933,What Limits Virtual Agent Application? OmniBench: A Scalable Multi-Dimensional Benchmark for Essential Virtual Agent Capabilities
+2506.10406,PAG: Multi-Turn Reinforced LLM Self-Correction with Policy as Generative Verifier
+2506.10558,StepProof: Step-by-step verification of natural language mathematical proofs
+2506.13983,SANGAM: SystemVerilog Assertion Generation via Monte Carlo Tree Self-Refine
+2506.17417,Aha Moment Revisited: Are VLMs Truly Capable of Self Verification in Inference-time Scaling?
+2506.17761,Towards a Unified Textual Graph Framework for Spectral Reasoning via Physical and Chemical Information Fusion
+2506.17782,Expanding Relevance Judgments for Medical Case-based Retrieval Task with Multimodal LLMs
+2506.18167,Understanding Reasoning in Thinking Language Models via Steering Vectors
+2506.19191,Bayesian Evolutionary Swarm Architecture: A Formal Epistemic System Grounded in Truth-Based Competition
+2506.19300,Open-Vocabulary Camouflaged Object Segmentation with Cascaded Vision Language Models
+2506.19967,Inference Scaled GraphRAG: Improving Multi Hop Question Answering on Knowledge Graphs
+2506.20821,MultiFinRAG: An Optimized Multimodal Retrieval-Augmented Generation (RAG) Framework for Financial Question Answering
+2506.21575,STRuCT-LLM: Unifying Tabular and Graph Reasoning with Reinforcement Learning for Semantic Parsing
+2507.00797,VEDA: Efficient LLM Generation Through Voting-based KV Cache Eviction and Dataflow-flexible Accelerator
+2507.01035,Research on Low-Latency Inference and Training Efficiency Optimization for Graph Neural Network and Large Language Model-Based Recommendation Systems
+2507.01951,Test-Time Scaling with Reflective Generative Model
+2507.02593,Revisiting Active Learning under (Human) Label Variation
+2507.02754,Fast and Simplex: 2-Simplicial Attention in Triton
+2507.02773,KERAP: A Knowledge-Enhanced Reasoning Approach for Accurate Zero-shot Diagnosis Prediction Using Multi-agent LLMs
+2507.02937,FoGE: Fock Space inspired encoding for graph prompting
+2507.03158,An End-to-End Assurance Framework for AI/ML Workloads in Datacenters
+2507.03226,Towards Practical GraphRAG: Efficient Knowledge Graph Construction and Hybrid Retrieval at Scale
+2507.03279,Conformal Information Pursuit for Interactively Guiding Large Language Models
+2507.03410,Graph Repairs with Large Language Models: An Empirical Study
+2507.04127,BYOKG-RAG: Multi-Strategy Graph Retrieval for Knowledge Graph Question Answering
+2507.04189,SymbolicThought: Integrating Language Models and Symbolic Reasoning for Consistent and Interpretable Human Relationship Understanding
+2507.04333,Computed Tomography Visual Question Answering with Cross-modal Feature Graphing
+2507.05980,Lost in Localization: Building RabakBench with Human-in-the-Loop Validation to Measure Multilingual Safety Gaps
+2507.06016,Conditional Multi-Stage Failure Recovery for Embodied Agents
+2507.06171,Data-Semantics-Aware Recommendation of Diverse Pivot Tables
+2507.07006,GNN-ViTCap: GNN-Enhanced Multiple Instance Learning with Vision Transformers for Whole Slide Image Classification and Captioning
+2507.07400,KVFlow: Efficient Prefix Caching for Accelerating LLM-Based Multi-Agent Workflows
+2507.07426,"DrugMCTS: a drug repurposing framework combining multi-agent, RAG and Monte Carlo Tree Search"
+2507.09174,RAMA: Retrieval-Augmented Multi-Agent Framework for Misinformation Detection in Multimodal Fact-Checking
+2507.10535,CodeJudgeBench: Benchmarking LLM-as-a-Judge for Coding Tasks
+2507.10590,Repairing Language Model Pipelines by Meta Self-Refining Competing Constraints at Runtime
+2507.12482,Kodezi Chronos: A Debugging-First Language Model for Repository-Scale Code Understanding
+2507.13396,DyG-RAG: Dynamic Graph Retrieval-Augmented Generation with Event-Centric Reasoning
+2507.14785,Exploring the In-Context Learning Capabilities of LLMs for Money Laundering Detection in Financial Graphs
+2507.15512,Step-level Verifier-guided Hybrid Test-Time Scaling for Large Language Models
+2507.15698,CoLD: Counterfactually-Guided Length Debiasing for Process Reward Models in Mathematical Reasoning
+2507.16727,Deliberative Searcher: Improving LLM Reliability via Reinforcement Learning with constraints
+2507.16826,A Query-Aware Multi-Path Knowledge Graph Fusion Approach for Enhancing Retrieval-Augmented Generation in Large Language Models
+2507.16991,PyG 2.0: Scalable Learning on Real World Graphs
+2507.17204,Filter-And-Refine: A MLLM Based Cascade System for Industrial-Scale Video Content Moderation
+2507.18153,When Noisy Labels Meet Class Imbalance on Graphs: A Graph Augmentation Method with LLM and Pseudo Label
+2507.18343,Hybrid Annotation for Propaganda Detection: Integrating LLM Pre-Annotations with Human Intelligence
+2507.18957,SLICEMATE: Accurate and Scalable Static Program Slicing via LLM-Powered Agents
+2507.19715,Beyond Nearest Neighbors: Semantic Compression and Graph-Augmented Retrieval for Enhanced Vector Search
+2507.19942,Prometheus: Towards Long-Horizon Codebase Navigation for Repository-Level Problem Solving
+2507.19951,PDLogger: Automated Logging Framework for Practical Software Development
+2507.20059,RAG in the Wild: On the (In)effectiveness of LLMs with Mixture-of-Knowledge Retrieval Augmentation
+2507.20122,From Prompt to Pipeline: Large Language Models for Scientific Workflow Development in Bioinformatics
+2507.21892,Graph-R1: Towards Agentic GraphRAG Framework via End-to-end Reinforcement Learning
+2507.22447,Breaking Obfuscation: Cluster-Aware Graph with LLM-Aided Recovery for Malicious JavaScript Detection
+2507.23261,DynaSwarm: Dynamically Graph Structure Selection for LLM-based Multi-agent System
+2507.23348,SWE-Debate: Competitive Multi-Agent Debate for Software Issue Resolution
+2508.00370,EdgeInfinite-Instruct: Bridging SFT-Based Optimization and NPU-Level Efficiency for Edge Devices
+2508.00890,AgentTTS: Large Language Model Agent for Test-time Compute-optimal Scaling Strategy in Complex Tasks
+2508.03556,VRPRM: Process Reward Modeling via Visual Reasoning
+2508.05311,A Novel Architecture for Symbolic Reasoning with Decision Trees and LLM Agents
+2508.05498,GRAIL:Learning to Interact with Large Knowledge Graphs for Retrieval Augmented Reasoning
+2508.05836,An Effective Approach for Node Classification in Textual Graphs
+2508.07117,From Nodes to Narratives: Explaining Graph Neural Networks with LLMs and Graph Context
+2508.07401,LET-US: Long Event-Text Understanding of Scenes
+2508.10115,Less is More: Learning Graph Tasks with Just LLMs
+2508.10391,LeanRAG: Knowledge-Graph-Based Generation with Semantic Aggregation and Hierarchical Retrieval
+2508.11582,"Aware First, Think Less: Dynamic Boundary Self-Awareness Drives Extreme Reasoning Efficiency in Large Language Models"
+2508.12022,AI Models for Depressive Disorder Detection and Diagnosis: A Review
+2508.12100,Overcoming Knowledge Discrepancies: Structuring Reasoning Threads through Knowledge Balancing in Interactive Scenarios
+2508.12379,GraphCogent: Mitigating LLMs' Working Memory Constraints via Multi-Agent Collaboration in Complex Graph Understanding
+2508.12626,Exploring the Feasibility of LLMs for Automated Music Emotion Annotation
+2508.12725,GTool: Graph Enhanced Tool Planning with Large Language Model
+2508.14537,LanGuSTE: Language-Guided Coarse-to-Fine Patch Selection for Efficient Whole Slide Image Analysis
+2508.14782,TransLLM: A Unified Multi-Task Foundation Framework for Urban Transportation via Learnable Prompting
+2508.15253,Conflict-Aware Soft Prompting for Retrieval-Augmented Generation
+2508.15305,Coarse-to-Fine Grounded Memory for LLM Agent Planning
+2508.15392,CITE: A Comprehensive Benchmark for Heterogeneous Text-Attributed Graphs on Catalytic Materials
+2508.15437,Test-time Corpus Feedback: From Retrieval to RAG
+2508.15845,Coarse-to-Fine Personalized LLM Impressions for Streamlined Radiology Reports
+2508.15903,VT-LVLM-AR: A Video-Temporal Large Vision-Language Model Adapter for Fine-Grained Action Recognition in Long-Term Videos
+2508.16647,AdapSNE: Adaptive Fireworks-Optimized and Entropy-Guided Dataset Sampling for Edge DNN Training
+2508.17340,Capturing Legal Reasoning Paths from Facts to Law in Court Judgments using Knowledge Graphs
+2508.17387,Graph-R1: Incentivizing the Zero-Shot Graph Learning Capability in LLMs via Explicit Reasoning
+2508.17826,LLMulator: Generalizable Cost Modeling for Dataflow Accelerators with Input-Adaptive Control Flow
+2508.18905,Interactive Evaluation of Large Language Models for Multi-Requirement Software Engineering Tasks
+2508.19489,Interactive Graph Visualization and TeamingRecommendation in an Interdisciplinary Project'sTalent Knowledge Graph
+2508.19855,Youtu-GraphRAG: Vertically Unified Agents for Graph Retrieval-Augmented Complex Reasoning
+2508.20351,Joint Enhancement of Relational Reasoning for Long-Context LLMs
+2508.20543,Enhancing Semantic Document Retrieval- Employing Group Steiner Tree Algorithm with Domain Knowledge Enrichment
+2508.20583,"A Graph Talks, But Who's Listening? Rethinking Evaluations for Graph-Language Models"
+2508.21156,Automated Bug Triaging using Instruction-Tuned Large Language Models
+2509.00388,GraphKV: Breaking the Static Selection Paradigm with Graph-Based KV Cache Eviction
+2509.00461,TECP: Token-Entropy Conformal Prediction for LLMs
+2509.00599,COMET: A Framework for Modeling Compound Operation Dataflows with Explicit Collectives
+2509.00642,HADIS: A Hybrid Architecture for Query-Aware Diffusion Model Serving
+2509.00761,L-MARS: Legal Multi-Agent System with Agentic Search and Citation-Faithfulness Audit
+2509.01412,Vis-CoT: A Human-in-the-Loop Framework for Interactive Visualization and Intervention in LLM Chain-of-Thought Reasoning
+2509.02121,Batch Query Processing and Optimization for Agentic Workflows
+2509.02363,Towards Temporal Knowledge-Base Creation for Fine-Grained Opinion Analysis with Language Models
+2509.02495,Probabilistically stable revision and comparative probability: a representation theorem and applications
+2509.03312,AgenTracer: Who Is Inducing Failure in the LLM Agentic Systems?
+2509.04466,Just-in-time and distributed task representations in language models
+2509.05375,Characterizing Fitness Landscape Structures in Prompt Engineering
+2509.07399,The Role of Exploration Modules in Small Language Models for Knowledge Graph Question Answering
+2509.07512,ALLabel: Three-stage Active Learning for LLM-based Entity Recognition using Demonstration Retrieval
+2509.09917,Enhancing LLM-based Specification Generation via Program Slicing and Logical Deletion
+2509.12350,Knowledge Graph Tokenization for Behavior-Aware Generative Next POI Recommendation
+2509.13694,StreamTensor: Make Tensors Stream in Dataflow Accelerators for LLMs
+2509.14435,Causal-Counterfactual RAG: The Integration of Causal-Counterfactual Reasoning into RAG
+2509.15759,On Optimal Steering to Achieve Exact Fairness
+2509.15926,Beyond the Score: Uncertainty-Calibrated LLMs for Automated Essay Assessment
+2509.16502,GRIL: Knowledge Graph Retrieval-Integrated Learning with Large Language Models
+2509.16648,FESTA: Functionally Equivalent Sampling for Trust Assessment of Multimodal LLMs
+2509.16971,AudioGenie-Reasoner: A Training-Free Multi-Agent Framework for Coarse-to-Fine Audio Deep Reasoning
+2509.17072,SnipSnap: A Joint Compression Format and Dataflow Co-Optimization Framework for Efficient Sparse LLM Accelerator Design
+2509.18316,Brittleness and Promise: Knowledge Graph Based Reward Modeling for Diagnostic Reasoning
+2509.18376,GnnXemplar: Exemplars to Explanations -- Natural Language Rules for Global GNN Interpretability
+2509.18568,Explainable Graph Neural Networks: Understanding Brain Connectivity and Biomarkers in Dementia
+2509.18571,Live-E2T: Real-time Threat Monitoring in Video via Deduplicated Event Reasoning and Chain-of-Thought
+2509.18592,VLN-Zero: Rapid Exploration and Cache-Enabled Neurosymbolic Vision-Language Planning for Zero-Shot Transfer in Robot Navigation
+2509.18658,Analyzing Uncertainty of LLM-as-a-Judge: Interval Evaluations with Conformal Prediction
+2509.18847,Failure Makes the Agent Stronger: Enhancing Accuracy through Structured Reflection for Reliable Tool Interactions
+2509.19003,Unveiling Chain of Step Reasoning for Vision-Language Models with Fine-grained Rewards
+2509.19996,Choosing to Be Green: Advancing Green AI via Dynamic Model Selection
+2509.21224,What Do LLM Agents Do When Left Alone? Evidence of Spontaneous Meta-Cognitive Patterns
+2509.21875,LUMINA: Detecting Hallucinations in RAG System with Context-Knowledge Signals
+2509.22009,GraphSearch: An Agentic Deep Searching Workflow for Graph Retrieval-Augmented Generation
+2509.22224,Thinking in Many Modes: How Composite Reasoning Elevates Large Language Model Performance with Limited Data
+2509.22366,Exploratory Semantic Reliability Analysis of Wind Turbine Maintenance Logs using Large Language Models
+2509.22613,Benefits and Pitfalls of Reinforcement Learning for Language Model Planning: A Theoretical Perspective
+2509.24260,Rethinking and Benchmarking Large Language Models for Graph Reasoning
+2509.24816,KnowGuard: Knowledge-Driven Abstention for Multi-Round Clinical Reasoning
+2509.24826,AIPOM: Agent-aware Interactive Planning for Multi-Agent Systems
+2509.25591,Building the EHR Foundation Model via Next Event Prediction
+2509.26383,Efficient and Transferable Agentic Knowledge Graph RAG via Reinforcement Learning
+2509.26463,ErrorPrism: Reconstructing Error Propagation Paths in Cloud Service Systems
+2510.00887,On Listwise Reranking for Corpus Feedback
+2510.01049,KeySG: Hierarchical Keyframe-Based 3D Scene Graphs
+2510.01115,Exploring Network-Knowledge Graph Duality: A Case Study in Agentic Supply Chain Risk Analysis
+2510.01528,Towards Interpretable and Inference-Optimal COT Reasoning with Sparse Autoencoder-Guided Generation
+2510.03323,Enhancing Agentic Textual Graph Retrieval with Synthetic Stepwise Supervision
+2510.04341,Critical appraisal of artificial intelligence for rare-event recognition: principles and pharmacovigilance case studies
+2510.05069,SwiReasoning: Switch-Thinking in Latent and Explicit for Pareto-Superior Reasoning LLMs
+2510.05566,Domain-Shift-Aware Conformal Prediction for Large Language Models
+2510.06039,A Large-Scale Chinese Knowledge Graph-Text Alignment Dataset for Benchmarking Knowledge-Grounded LLMs
+2510.06250,Scalable multilingual PII annotation for responsible AI in LLMs
+2510.06534,Beneficial Reasoning Behaviors in Agentic Search and Effective Post-training to Obtain Them
+2510.06538,Auto-Prompt Ensemble for LLM Judge
+2510.07484,Reasoning by Exploration: A Unified Approach to Retrieval and Generation over Graphs
+2510.08146,Think Just Enough: Sequence-Level Entropy as a Confidence Signal for LLM Reasoning
+2510.08511,AutoMLGen: Navigating Fine-Grained Optimization for Coding Agents
+2510.08986,"CAPC-CG: A Large-Scale, Expert-Directed LLM-Annotated Corpus of Adaptive Policy Communication in China"
+2510.10116,Preference-driven Knowledge Distillation for Few-shot Node Classification
+2510.10252,Audit-of-Understanding: Posterior-Constrained Inference for Mathematical Reasoning in Language Models
+2510.10454,Traj-CoA: Patient Trajectory Modeling via Chain-of-Agents for Lung Cancer Risk Prediction
+2510.12137,Credal Transformer: A Principled Approach for Quantifying and Mitigating Hallucinations in Large Language Models
+2510.13417,Assessing LLM Reasoning Through Implicit Causal Chain Discovery in Climate Discourse
+2510.13614,MemoTime: Memory-Augmented Temporal Knowledge Graph Enhanced Large Language Model Reasoning
+2510.13744,Hard2Verify: A Step-Level Verification Benchmark for Open-Ended Frontier Math
+2510.15682,SQuAI: Scientific Question-Answering with Multi-Agent Retrieval-Augmented Generation
+2510.15772,Self-evolving expertise in complex non-verifiable subject domains: dialogue as implicit meta-RL
+2510.15906,FVDebug: An LLM-Driven Debugging Assistant for Automated Root Cause Analysis of Formal Verification Failures
+2510.16062,Can LLMs Correct Themselves? A Benchmark of Self-Correction in LLMs
+2510.16080,TriAgent: Automated Biomarker Discovery with Deep Research Grounding for Triage in Acute Care by LLM-Based Multi-Agent Collaboration
+2510.16449,TrajSelector: Harnessing Latent Representations for Efficient and Effective Best-of-N in Large Reasoning Model
+2510.16751,Visual Autoregressive Models Beat Diffusion Models on Inference Time Scaling
+2510.16885,UniGTE: Unified Graph-Text Encoding for Zero-Shot Generalization across Graph Tasks and Domains
+2510.17848,RISKTAGGER: Evidence-Guided LLM Agent for Post-Incident Forensic Analysis of Money Laundering in Web3
+2510.17853,CiteGuard: Faithful Citation Attribution for LLMs via Retrieval-Augmented Validation
+2510.18442,PlanU: Large Language Model Reasoning through Planning under Uncertainty
+2510.18560,WebDevJudge: Evaluating (M)LLMs as Critiques for Web Development Quality
+2510.18586,TokenCake: A KV-Cache-centric Serving Framework for LLM-based Multi-Agent Applications
+2510.19032,When Can We Trust LLMs in Mental Health? Large-Scale Benchmarks for Reliable LLM Evaluation
+2510.19670,CoSense-LLM: Semantics at the Edge with Cost- and Uncertainty-Aware Cloud-Edge Cooperation
+2510.19767,SmartSwitch: Advancing LLM Reasoning by Overcoming Underthinking via Promoting Deeper Thought Exploration
+2510.19861,Some Attention is All You Need for Retrieval
+2510.20345,LLM-empowered knowledge graph construction: A survey
+2510.21131,Large Language Models Meet Text-Attributed Graphs: A Survey of Integration Frameworks and Applications
+2510.21408,Large Language Models as Model Organisms for Human Associative Learning
+2510.22694,Windsock is Dancing: Adaptive Multimodal Retrieval-Augmented Generation
+2510.23010,TALM: Dynamic Tree-Structured Multi-Agent Framework with Long-Term Memory for Scalable Code Generation
+2510.24251,GRAPHIA: Harnessing Social Graph Data to Enhance LLM-Based Social Simulation
+2510.24367,"LLM-as-a-Judge for Software Engineering: Literature Review, Vision, and the Road Ahead"
+2510.25160,Model-Document Protocol for AI Search
+2510.25370,Monitoring Transformative Technological Convergence Through LLM-Extracted Semantic Entity Triple Graphs
+2510.25623,Evaluating the Role of Verifiers in Test-Time Scaling for Legal Reasoning Tasks
+2510.27280,FOCUS: Efficient Keyframe Selection for Long Video Understanding
+2511.00457,GraphChain: Large Language Models for Large-scale Graph Analysis via Tool Chaining
+2511.00628,AgentGit: A Version Control Framework for Reliable and Scalable LLM-Powered Multi-Agent Systems
+2511.00911,G2rammar: Bilingual Grammar Modeling for Enhanced Text-attributed Graph Learning
+2511.01181,Learning When to Quit in Sales Conversations
+2511.01633,Scaling Graph Chain-of-Thought Reasoning: A Multi-Agent Framework with Efficient LLM Serving
+2511.03092,SnapStream: Efficient Long Sequence Decoding on Dataflow Accelerators
+2511.04020,Abductive Inference in Retrieval-Augmented Language Models: Generating and Validating Missing Premises
+2511.05385,TeaRAG: A Token-Efficient Agentic Retrieval-Augmented Generation Framework
+2511.05696,"AI-assisted workflow enables rapid, high-fidelity breast cancer clinical trial eligibility prescreening"
+2511.05722,OckBench: Measuring the Efficiency of LLM Reasoning
+2511.05752,Multi-Scale Feature Fusion and Graph Neural Network Integration for Text Classification with Large Language Models
+2511.06065,ScRPO: From Errors to Insights
+2511.06209,ReProbe: Efficient Test-Time Scaling of Multi-Step Reasoning by Probing Internal States of Large Language Models
+2511.07296,Who Is the Story About? Protagonist Entity Recognition in News
+2511.07457,GRIP: In-Parameter Graph Reasoning through Fine-Tuning Large Language Models
+2511.07584,SemanticForge: Repository-Level Code Generation through Semantic Knowledge Graphs and Constraint Satisfaction
+2511.07663,Cortex AISQL: A Production SQL Engine for Unstructured Data
+2511.08181,MARC: Multimodal and Multi-Task Agentic Retrieval-Augmented Generation for Cold-Start Recommender System
+2511.08274,VeriCypher: Named-Entity Verification for GraphRAG via Text-to-Cypher Generation
+2511.08364,DPRM: A Dual Implicit Process Reward Model in Multi-Hop Question Answering
+2511.08392,PCRLLM: Proof-Carrying Reasoning with Large Language Models under Stepwise Logical Constraints
+2511.08649,"Bio AI Agent: A Multi-Agent Artificial Intelligence System for Autonomous CAR-T Cell Therapy Development with Integrated Target Discovery, Toxicity Prediction, and Rational Molecular Design"
+2511.09438,LLM-Guided Dynamic-UMAP for Personalized Federated Graph Learning
+2511.10234,Lost in Serialization: Invariance and Generalization of LLM Graph Reasoners
+2511.11111,SMART: A Surrogate Model for Predicting Application Runtime in Dragonfly Systems
+2511.11828,Conformal Constrained Policy Optimization for Cost-Effective LLM Agents
+2511.12439,Multi-agent Self-triage System with Medical Flowcharts
+2511.12474,Co-Layout: LLM-driven Co-optimization for Interior Layout
+2511.13526,Automated Construction of Medical Indicator Knowledge Graphs Using Retrieval Augmented Large Language Models
+2511.13998,LoCoBench-Agent: An Interactive Benchmark for LLM Agents in Long-Context Software Engineering
+2511.14002,FlakyGuard: Automatically Fixing Flaky Tests at Industry Scale
+2511.14638,A Specialized Large Language Model for Clinical Reasoning and Diagnosis in Rare Diseases
+2511.14780,Ask WhAI:Probing Belief Formation in Role-Primed LLM Agents
+2511.16005,InfCode-C++: Intent-Guided Semantic Retrieval and AST-Structured Search for C++ Issue Resolution
+2511.16275,SeSE: Black-Box Uncertainty Quantification for Large Language Models Based on Structural Information Theory
+2511.17467,PersonaAgent with GraphRAG: Community-Aware Knowledge Graphs for Personalized LLM
+2511.20468,DRAFT-RL: Multi-Agent Chain-of-Draft Reasoning for Reinforcement Learning-Enhanced LLMs
+2511.20940,Chatty-KG: A Multi-Agent AI System for On-Demand Conversational Question Answering over Knowledge Graphs
+2511.21334,Emergent Lexical Semantics in Neural Language Models: Testing Martin's Law on LLM-Generated Text
+2511.21624,TAGFN: A Text-Attributed Graph Dataset for Fake News Detection in the Age of LLMs
+2511.22854,CRAwDAD: Causal Reasoning Augmentation with Dual-Agent Debate
+2511.22955,Experts are all you need: A Composable Framework for Large Language Model Inference
+2511.23312,From IR to RecSys: Evaluating LLM-based Judges in Cranfield-style Recommendation Collections
+2512.00663,Graphing the Truth: Structured Visualizations for Automated Hallucination Detection in LLMs
+2512.00839,ARCADIA: Scalable Causal Discovery for Corporate Bankruptcy Analysis Using Agentic AI
+2512.01945,Agentic Policy Optimization via Instruction-Policy Co-Evolution
+2512.05336,PathFinder: MCTS and LLM Feedback-based Path Selection for Multi-Hop Question Answering
+2512.05686,LA-RL: Language Action-guided Reinforcement Learning with Safety Guarantees for Autonomous Highway Driving
+2512.05933,Speech World Model: Causal State-Action Planning with Explicit Reasoning for Speech
+2512.07611,"Comparative Analysis and Parametric Tuning of PPO, GRPO, and DAPO for LLM Reasoning Enhancement"
+2512.08731,LaMoSys3.5D: Enabling 3.5D-IC-Based Large Language Model Inference Serving Systems via Hardware/Software Co-Design
+2512.10061,Text2Graph: Combining Lightweight LLMs and GNNs for Efficient Text Classification in Label-Scarce Scenarios
+2512.10080,What Kind of Reasoning (if any) is an LLM actually doing? On the Stochastic Nature and Abductive Appearance of Large Language Models
+2512.11213,FutureWeaver: Planning Test-Time Compute for Multi-Agent Systems with Modularized Collaboration
+2512.12313,Taint-Based Code Slicing for LLMs-based Malicious NPM Package Detection
+2512.13074,A Simple and Effective Framework for Symmetric Consistent Indexing in Large-Scale Dense Retrieval
+2512.13725,Compressed Causal Reasoning: Quantization and GraphRAG Effects on Interventional and Counterfactual Accuracy
+2512.13930,Hierarchical Multi-agent Large Language Model Reasoning for Autonomous Functional Materials Discovery
+2512.15662,Stepwise Think-Critique: Interleaved Reasoning and Self-Critique in a Single LLM
+2512.15922,Leveraging Spreading Activation for Improved Document Retrieval in Knowledge-Graph-Based RAG Systems
+2512.16041,Are We on the Right Way to Assessing LLM-as-a-Judge?
+2512.16083,Scaling Text2SQL via LLM-efficient Schema Filtering with Functional Dependency Graph Rerankers
+2512.16262,Learning to Wait: Synchronizing Agents with the Physical World
+2512.16676,DataFlow: An LLM-Driven Framework for Unified Data Preparation and Workflow Automation in the Era of Data-Centric AI
+2512.17308,Large Language Models as Pokémon Battle Agents: Strategic Play and Content Generation
+2512.17912,Graph-O1 : Monte Carlo Tree Search with Reinforcement Learning for Text-Attributed Graph Reasoning
+2512.19134,QuCo-RAG: Quantifying Uncertainty from the Pre-training Corpus for Dynamic Retrieval-Augmented Generation
+2512.19433,dMLLM-TTS: Self-Verified and Efficient Test-Time Scaling for Diffusion Multi-Modal Large Language Models
+2512.20136,M$^3$KG-RAG: Multi-hop Multimodal Knowledge Graph-enhanced Retrieval-Augmented Generation
+2512.20760,Generalization of RLVR Using Causal Reasoning as a Testbed
+2512.22113,PRAXIS: Integrating Program Analysis with Observability for Root-Cause Analysis
+2512.22682,Conformal Prediction Sets for Next-Token Prediction in Large Language Models: Balancing Coverage Guarantees with Set Efficiency
+2512.22716,Memento 2: Learning by Stateful Reflective Memory
+2512.23880,CASCADE: Cumulative Agentic Skill Creation through Autonomous Development and Evolution
+2601.00125,Constructing a Neuro-Symbolic Mathematician from First Principles
+2601.01195,Reinforcement Learning Enhanced Multi-hop Reasoning for Temporal Knowledge Question Answering
+2601.02163,EverMemOS: A Self-Organizing Memory Operating System for Structured Long-Horizon Reasoning
+2601.02314,Project Ariadne: A Structural Causal Framework for Auditing Faithfulness in LLM Agents
+2601.02382,How to Discover Knowledge for FutureG: Contextual RAG and LLM Prompting for O-RAN
+2601.02739,Mitigating Prompt-Induced Hallucinations in Large Language Models via Structured Reasoning
+2601.03258,Enhancing Retrieval-Augmented Generation with Two-Stage Retrieval: FlashRank Reranking and Query Expansion
+2601.03262,Roles of MLLMs in Visually Rich Document Retrieval for RAG: A Survey
+2601.03444,Grading Scale Impact on LLM-as-a-Judge: Human-LLM Alignment Is Highest on 0-5 Grading Scale
+2601.03731,From Laboratory to Real-World Applications: Benchmarking Agentic Code Reasoning at the Repository Level
+2601.04086,KDCM: Reducing Hallucination in LLMs through Explicit Reasoning Structures
+2601.04525,GRACE: Reinforcement Learning for Grounded Response and Abstention under Contextual Evidence
+2601.04726,Memory Matters More: Event-Centric Memory as a Logic Map for Agent Searching and Reasoning
+2601.05192,LELA: an LLM-based Entity Linking Approach with Zero-Shot Domain Adaptation
+2601.05459,Do LLMs Need Inherent Reasoning Before Reinforcement Learning? A Study in Korean Self-Correction
+2601.05600,SceneAlign: Aligning Multimodal Reasoning to Scene Graphs in Complex Visual Scenes
+2601.06042,CrossTrafficLLM: A Human-Centric Framework for Interpretable Traffic Intelligence via Large Language Model
+2601.07468,Beyond Dialogue Time: Temporal Semantic Memory for Personalized LLM Agents
+2601.07965,"When Models Know When They Do Not Know: Calibration, Cascading, and Cleaning"
+2601.08742,Inferring Latent Intentions: Attributional Natural Language Inference in LLM Agents
+2601.09269,RISER: Orchestrating Latent Reasoning Skills for Adaptive Activation Steering
+2601.11021,Combating Spurious Correlations in Graph Interpretability via Self-Reflection
+2601.11632,KG-ViP: Bridging Knowledge Grounding and Visual Perception in Multi-modal LLMs for Visual Question Answering
+2601.11816,POLARIS: Typed Planning and Governed Execution for Agentic AI in Back-Office Automation
+2601.12346,MMDeepResearch-Bench: A Benchmark for Multimodal Deep Research Agents
+2601.12522,Improved Bug Localization with AI Agents Leveraging Hypothesis and Dynamic Cognition
+2601.12700,Improving Audio Question Answering with Variational Inference
+2601.12748,Towards Robust Process Reward Modeling via Noise-aware Learning
+2601.12807,Semi-supervised Instruction Tuning for Large Language Models on Text-Attributed Graphs
+2601.13628,PRIMAL: Processing-In-Memory Based Low-Rank Adaptation for LLM Inference Accelerator
+2601.13742,Hearing Between the Lines: Unlocking the Reasoning Power of LLMs for Speech Evaluation
+2601.14681,FARE: Fast-Slow Agentic Robotic Exploration
+2601.14912,AlertGuardian: Intelligent Alert Life-Cycle Management for Large-scale Cloud Systems
+2601.15074,SmartOracle -- An Agentic Approach to Mitigate Noise in Differential Oracles
+2601.15724,VideoThinker: Building Agentic VideoLLMs with LLM-Guided Tool Reasoning
+2601.16038,Grounding Large Language Models in Reaction Knowledge Graphs for Synthesis Retrieval
+2601.17532,Less is More for RAG: Information Gain Pruning for Generator-Aligned Reranking and Evidence Selection
+2601.17755,HyperGraphPro: Progress-Aware Reinforcement Learning for Structure-Guided Hypergraph RAG
+2601.18204,MemWeaver: Weaving Hybrid Memories for Traceable Long-Horizon Agentic Reasoning
+2601.18381,AI Agent for Reverse-Engineering Legacy Finite-Difference Code and Translating to Devito
+2601.18734,Self-Distilled Reasoner: On-Policy Self-Distillation for Large Language Models
+2601.19904,DABench-LLM: Standardized and In-Depth Benchmarking of Post-Moore Dataflow AI Accelerators for LLMs
+2601.20728,Dynamic Mechanism Design without Monetary Transfers: A Queueing Theory Approach
+2601.21162,A2RAG: Adaptive Agentic Graph Retrieval for Cost-Aware and Reliable Reasoning
+2601.21699,Can David Beat Goliath? On Multi-Hop Reasoning with Resource-Constrained Agents
+2601.22373,Stability-Aware Prompt Optimization for Clinical Data Abstraction
+2601.22595,Learn More with Less: Uncertainty Consistency Guided Query Selection for RLVR
+2602.00521,Diagnosing the Reliability of LLM-as-a-Judge via Item Response Theory
+2602.00564,Unmasking Reasoning Processes: A Process-aware Benchmark for Evaluating Structural Mathematical Reasoning in LLMs
+2602.00708,USS-Nav: Unified Spatio-Semantic Scene Graph for Lightweight UAV Zero-Shot Object Navigation
+2602.00953,SAGE: Agentic Framework for Interpretable and Clinically Translatable Computational Pathology Biomarker Discovery
+2602.01637,Chance-Constrained Inference for Hallucination Risk Control in Large Language Models
+2602.02518,GraphDancer: Training LLMs to Explore and Reason over Graphs via Curriculum Reinforcement Learning
+2602.02601,CaST: Causal Discovery via Spatio-Temporal Graphs in Disaster Tweets
+2602.02712,Towards Understanding Steering Strength
+2602.03975,Adaptive Test-Time Compute Allocation via Learned Heuristics over Categorical Structure
+2602.04254,Scaling Agentic Verifier for Competitive Coding
+2602.04607,Focus-LIME: Surgical Interpretation of Long-Context Large Language Models via Proxy-Based Neighborhood Selection
+2602.05512,"A Human-in-the-Loop, LLM-Centered Architecture for Knowledge-Graph Question Answering"
+2602.05897,Stop Rewarding Hallucinated Steps: Faithfulness-Aware Step-Level Reinforcement Learning for Small Reasoning Models
+2602.06085,LAAFD: LLM-based Agents for Accelerated FPGA Design
+2602.07213,Adaptive Retrieval helps Reasoning in LLMs -- but mostly if it's not used
+2602.07361,ViHERMES: A Graph-Grounded Multihop Question Answering Benchmark and System for Vietnamese Healthcare Regulations
+2602.07491,GraphAgents: Knowledge Graph-Guided Agentic AI for Cross-Domain Materials Design
+2602.08100,Emergent Search and Backtracking in Latent Reasoning Models
+2602.08320,Making Databases Searchable with Deep Context
+2602.08377,Reinforcement Learning with Backtracking Feedback
+2602.08400,SCOUT-RAG: Scalable and Cost-Efficient Unifying Traversal for Agentic Graph-RAG over Distributed Domains
+2602.08498,"Characterizing, Evaluating, and Optimizing Complex Reasoning"
+2602.09138,PABU: Progress-Aware Belief Update for Efficient LLM Agents
+2602.09591,On the Optimal Reasoning Length for RL-Trained Language Models
+2602.10975,FeatureBench: Benchmarking Agentic Coding for Complex Feature Development
+2602.11170,PRIME: Policy-Reinforced Iterative Multi-agent Execution for Algorithmic Reasoning in Large Language Models
+2602.11391,A Patient Simulation Framework for Risk Assessment of Conversational Healthcare AI: Evaluation of an Antidepressant Decision Aid
+2602.11931,AdaptEvolve: Improving Efficiency of Evolutionary AI Agents through Adaptive Model Selection
+2602.14089,TabTracer: Monte Carlo Tree Search for Complex Table Reasoning with Large Language Models
+2602.14406,TruthStance: An Annotated Dataset of Conversations on Truth Social
+2602.15353,NeuroSymActive: Differentiable Neural-Symbolic Reasoning with Active Exploration for Knowledge Graph Question Answering
+2602.16481,"Leveraging Large Language Models for Causal Discovery: a Constraint-based, Argumentation-driven Approach"
+2602.16964,SAGE: Structure Aware Graph Expansion for Retrieval of Heterogeneous Data
+2602.17809,Calibrated Adaptation: Bayesian Stiefel Manifold Priors for Reliable Parameter-Efficient Fine-Tuning
+2602.18916,Adaptive Collaboration of Arena-Based Argumentative LLMs for Explainable and Contestable Legal Reasoning
+2602.19049,IAPO: Information-Aware Policy Optimization for Token-Efficient Reasoning
+2602.19183,"SIDEKICK: A Semantically Integrated Resource for Drug Effects, Indications, and Contraindications"
+2602.19855,SHIELD: Semantic Heterogeneity Integrated Embedding for Latent Discovery in Clinical Trial Safety Signals
+2602.20333,DMCD: Semantic-Statistical Framework for Causal Discovery
+2602.22766,"Imagination Helps Visual Reasoning, But Not Yet in Latent Space"
+2603.00612,From Literature to Hypotheses: An AI Co-Scientist System for Biomarker-Guided Drug Combination Hypothesis Generation
+2603.00669,SSKG Hub: An Expert-Guided Platform for LLM-Empowered Sustainability Standards Knowledge Graphs
+2603.01252,Linking Knowledge to Care: Knowledge Graph-Augmented Medical Follow-Up Question Generation
+2603.01385,Toward Graph-Tokenizing Large Language Models with Reconstructive Graph Instruction Tuning
+2603.01407,The Observer-Situation Lattice: A Unified Formal Basis for Perspective-Aware Cognition
+2603.01410,GraphScout: Empowering Large Language Models with Intrinsic Exploration Ability for Agentic Graph Reasoning
+2603.01651,LexChronos: An Agentic Framework for Structured Event Timeline Extraction in Indian Jurisprudence
+2603.01853,Let the Agent Search: Autonomous Exploration Beats Rigid Workflows in Temporal Question Answering
+2603.02032,MetaRCA: A Generalizable Root Cause Analysis Framework for Cloud-Native Systems Powered by Meta Causal Knowledge
+2603.02366,PlayWrite: A Multimodal System for AI Supported Narrative Co-Authoring Through Play in XR
+2603.02938,Beyond One-Size-Fits-All: Adaptive Subgraph Denoising for Zero-Shot Graph Learning with Large Language Models
+2603.03031,Step-Level Sparse Autoencoder for Reasoning Process Interpretation
+2603.03147,Agentic AI-based Coverage Closure for Formal Verification
+2603.04257,Memex(RL): Scaling Long-Horizon LLM Agents via Indexed Experience Memory
+2603.05294,STRUCTUREDAGENT: Planning with AND/OR Trees for Long-Horizon Web Tasks
+2603.05529,NGDBench: Towards Neural Graph Data Management
+2603.05818,RouteGoT: Node-Adaptive Routing for Cost-Efficient Graph of Thoughts Reasoning
+2603.05923,Learning Next Action Predictors from Human-Computer Interaction
+2603.06007,MASFactory: A Graph-centric Framework for Orchestrating LLM-Based Multi-Agent Systems with Vibe Graphing
+2603.06428,Abductive Reasoning with Syllogistic Forms in Large Language Models
+2603.07557,AgentRaft: Automated Detection of Data Over-Exposure in LLM Agents
+2603.07962,GOMA: Geometrically Optimal Mapping via Analytical Modeling for Spatial Accelerators
+2603.08814,Scale-Plan: Scalable Language-Enabled Task Planning for Heterogeneous Multi-Robot Teams
+2603.09152,DataFactory: Collaborative Multi-Agent Framework for Advanced Table Question Answering
+2603.09993,CEI: A Benchmark for Evaluating Pragmatic Reasoning in Language Models
+2603.10298,GaLoRA: Parameter-Efficient Graph-Aware LLMs for Node Classification
+2603.10891,A Hybrid Knowledge-Grounded Framework for Safety and Traceability in Prescription Verification
+2603.11099,Graph Tokenization for Bridging Graphs and Transformers
+2603.11957,CHiL(L)Grader: Calibrated Human-in-the-Loop Short-Answer Grading
+2603.12500,TRACE: Temporal Rule-Anchored Chain-of-Evidence on Knowledge Graphs for Interpretable Stock Movement Prediction
+2603.13327,DOVA: Deliberation-First Multi-Agent Orchestration for Autonomous Research Automation
+2603.14041,GRPO and Reflection Reward for Mathematical Reasoning in Large Language Models
+2603.14465,AgentProcessBench: Diagnosing Step-Level Process Quality in Tool-Using Agents
+2603.15080,"Open Biomedical Knowledge Graphs at Scale: Construction, Federation, and AI Agent Access with Samyama Graph Database"
+2603.16204,"A Scoping Review of AI-Driven Digital Interventions in Mental Health Care: Mapping Applications Across Screening, Support, Monitoring, Prevention, and Clinical Education"
+2603.16313,"Learning to Predict, Discover, and Reason in High-Cardinality Event Sequences"
+2603.16544,How often do Answers Change? Estimating Recency Requirements in Question Answering
+2603.18859,RewardFlow: Topology-Aware Reward Propagation on State Graphs for Agentic RL with Large Language Models
+2603.18940,Entropy trajectory shape predicts LLM reasoning reliability: A diagnostic study of uncertainty dynamics in chain-of-thought
+2603.20170,Learning Dynamic Belief Graphs for Theory-of-mind Reasoning
+2603.20293,LLM-Enhanced Energy Contrastive Learning for Out-of-Distribution Detection in Text-Attributed Graphs
+2603.20309,BubbleRAG: Evidence-Driven Retrieval-Augmented Generation for Black-Box Knowledge Graphs
+2603.20625,ACRFence: Preventing Semantic Rollback Attacks in Agent Checkpoint-Restore
+2603.21094,ReasonScaffold: A Scaffolded Reasoning-based Annotation Protocol for Human-AI Co-Annotation
+2603.21601,Riemannian Geometry Speaks Louder Than Words: From Graph Foundation Model to Next-Generation Graph Intelligence
+2603.22340,Graphs RAG at Scale: Beyond Retrieval-Augmented Generation With Labeled Property Graphs and Resource Description Framework for Complex and Unknown Search Spaces
+2603.22784,Caterpillar of Thoughts: The Optimal Test-Time Algorithm for Large Language Models
+2603.22823,Empirical Comparison of Agent Communication Protocols for Task Orchestration
+2603.23531,Large Language Models Unpack Complex Political Opinions through Target-Stance Extraction
+2603.23554,Mixture of Demonstrations for Textual Graph Understanding and Question Answering
+2603.23848,BeliefShift: Benchmarking Temporal Belief Consistency and Opinion Drift in LLM Agents
+2603.24676,When Is Collective Intelligence a Lottery? Multi-Agent Scaling Laws for Memetic Drift in LLMs
+2603.24704,Conformal Selective Prediction with General Risk Control
+2603.25001,Rethinking Failure Attribution in Multi-Agent Systems: A Multi-Perspective Benchmark and Evaluation
+2603.25770,ReCUBE: Evaluating Repository-Level Context Utilization in Code Generation
+2603.26005,AutoB2G: Agentic Simulation and Reinforcement Learning for Spatio-Temporal Grid-Interactive Building Control
+2603.26469,UNIFERENCE: A Discrete Event Simulation Framework for Developing Distributed AI Models
+2603.27076,When Verification Hurts: Asymmetric Effects of Multi-Agent Feedback in Logic Proof Tutoring
+2603.27277,Codebase-Memory: Tree-Sitter-Based Knowledge Graphs for LLM Code Exploration via MCP
+2603.29878,Performance Evaluation of LLMs in Automated RDF Knowledge Graph Generation
+2604.00005,How Emotion Shapes the Behavior of LLMs and Agents: A Mechanistic Study
+2604.00342,Is One Token All It Takes? Graph Pooling Tokens for LLM-based GraphQA
+2604.00356,Signals: Trajectory Sampling and Triage for Agentic Interactions
+2604.00660,Streaming Model Cascades for Semantic SQL
+2604.01002,Query-Conditioned Evidential Keyframe Sampling for MLLM-Based Long-Form Video Understanding
+2604.01086,Sequential Sampling for Binary Classification: Two LLMs are (Almost) All You Need
+2604.01599,ByteRover: Agent-Native Memory Through LLM-Curated Hierarchical Context
+2604.02207,Blinded Radiologist and LLM-Based Evaluation of LLM-Generated Japanese Translations of Chest CT Reports: Comparative Study
+2604.03056,A Network Formation Game for Katz Centrality Maximization: A Resource Allocation Perspective
+2604.03527,Explainable Model Routing for Agentic Workflows
+2604.03898,LLM-Agent-based Social Simulation for Attitude Diffusion
+2604.04108,Hypothesis Graph Refinement: Hypothesis-Driven Exploration with Cascade Error Correction for Embodied Navigation
+2604.04202,ClawArena: Benchmarking AI Agents in Evolving Information Environments
+2604.05846,AgentGL: Towards Agentic Graph Learning with LLMs via Reinforcement Learning
+2604.06845,HingeMem: Boundary Guided Long-Term Memory with Query Adaptive Retrieval for Scalable Dialogues
+2604.06902,iTAG: Inverse Design for Natural Text Generation with Accurate Causal Graph Annotations
+2604.07146,Learning to Search: A Decision-Based Agent for Knowledge-Based Visual Question Answering
+2604.07487,CLEAR: Context Augmentation from Contrastive Learning of Experience via Agentic Reflection
+2604.07494,Triage: Routing Software Engineering Tasks to Cost-Effective LLM Tiers via Code Quality Signals
+2604.07922,SAT: Balancing Reasoning Accuracy and Efficiency with Stepwise Adaptive Thinking
+2604.08016,Wiring the 'Why': A Unified Taxonomy and Survey of Abductive Reasoning in LLMs
+2604.08131,Graph Neural Networks for Misinformation Detection: Performance-Efficiency Trade-offs
+2604.08178,Aligning Agents via Planning: A Benchmark for Trajectory-Level Reward Modeling
+2604.08243,Self-Debias: Self-correcting for Debiasing Large Language Models
+2604.08362,"Towards Real-world Human Behavior Simulation: Benchmarking Large Language Models on Long-horizon, Cross-scenario, Heterogeneous Behavior Traces"
+2604.08553,GNN-as-Judge: Unleashing the Power of LLMs for Graph Learning with GNN Feedback
+2604.08885,Uncertainty-Aware Transformers: Conformal Prediction for Language Models
+2604.09618,HearthNet: Edge Multi-Agent Orchestration for Smart Homes
+2604.09666,Do We Still Need GraphRAG? Benchmarking RAG and GraphRAG for Agentic Search Systems
+2604.09963,"Rebooting Microreboot: Architectural Support for Safe, Parallel Recovery in Microservice Systems"
+2604.10420,CARE-ECG: Causal Agent-based Reasoning for Explainable and Counterfactual ECG Interpretation
+2604.11087,CausalGaze: Unveiling Hallucinations via Counterfactual Graph Intervention in Large Language Models
+2604.11334,Dynamic Summary Generation for Interpretable Multimodal Depression Detection
+2604.11364,The Missing Knowledge Layer in Cognitive Architectures for AI Agents
+2604.12262,CascadeDebate: Multi-Agent Deliberation for Cost-Aware LLM Cascades
+2604.12503,Topology-Aware Reasoning over Incomplete Knowledge Graph with Graph-Based Soft Prompting
+2604.13151,Exploration and Exploitation Errors Are Measurable for Language Model Agents
+2604.13285,L2D-Clinical: Learning to Defer for Adaptive Model Selection in Clinical Text Classification
+2604.13630,SafeHarness: Lifecycle-Integrated Security Architecture for LLM-based Agent Deployment
+2604.13888,GeoAgentBench: A Dynamic Execution Benchmark for Tool-Augmented Agents in Spatial Analysis
+2604.13979,Leveraging LLM-GNN Integration for Open-World Question Answering over Knowledge Graphs
+2604.13991,Adaptive Conformal Prediction for Improving Factuality of Generations by Large Language Models
+2604.14477,Seeing Through Circuits: Faithful Mechanistic Interpretability for Vision Transformers
+2604.14691,CAMO: An Agentic Framework for Automated Causal Discovery from Micro Behaviors to Macro Emergence in LLM Agent Simulations
+2604.14746,Disentangle-then-Refine: LLM-Guided Decoupling and Structure-Aware Refinement for Graph Contrastive Learning
+2604.14856,ClimateCause: Complex and Implicit Causal Structures in Climate Reports
+2604.15621,Rethinking the Necessity of Adaptive Retrieval-Augmented Generation through the Lens of Adaptive Listwise Ranking
+2604.15657,Understanding Inference-Time Token Allocation and Coverage Limits in Agentic Hardware Verification
+2604.16422,Injecting Structured Biomedical Knowledge into Language Models: Continual Pretraining vs. GraphRAG
+2604.16983,Graph-Guided Adaptive Channel Elimination for KV Cache Compression
+2604.17056,"RLM-on-KG: Heuristics First, LLMs When Needed: Adaptive Retrieval Control over Mention Graphs for Scattered Evidence"
+2604.17252,Seeing Isn't Believing: Mitigating Belief Inertia via Active Intervention in Embodied Agents
+2604.17271,HopRank: Self-Supervised LLM Preference-Tuning on Graphs for Few-Shot Node Classification
+2604.17274,Instinct vs. Reflection: Unifying Token and Verbalized Confidence in Multimodal Large Models
+2604.17377,AnchorMem: Anchored Facts with Associative Contexts for Building Memory in Large Language Models
+2604.17906,Bayesian Active Learning with Gaussian Processes Guided by LLM Relevance Scoring for Dense Passage Retrieval
+2604.18305,CAARL: In-Context Learning for Interpretable Co-Evolving Time Series Forecasting
+2604.18587,Compile to Compress: Boosting Formal Theorem Provers by Compiler Outputs
+2604.19028,Learning Posterior Predictive Distributions for Node Classification from Synthetic Graph Priors
+2604.19755,Explainable AML Triage with LLMs: Evidence Retrieval and Counterfactual Checks
+2604.19780,Avoiding Overthinking and Underthinking: Curriculum-Aware Budget Scheduling for LLMs
+2604.20043,TriEx: A Game-based Tri-View Framework for Explaining Internal Reasoning in Multi-Agent LLMs
+2604.21133,GRISP: Guided Recurrent IRI Selection over SPARQL Skeletons
+2604.21412,A pragmatic classification framework for AI incident monitoring
+2604.21952,Focus Session: Hardware and Software Techniques for Accelerating Multimodal Foundation Models
+2604.22708,Seeing the Whole Elephant: A Benchmark for Failure Attribution in LLM-based Multi-Agent Systems
+2604.22937,AutoPyVerifier: Learning Compact Executable Verifiers for Large Language Model Outputs
+2604.23296,$\mathcal{S}^2$IT: Stepwise Syntax Integration Tuning for Large Language Models in Aspect Sentiment Quad Prediction
+2604.23829,Domain-Filtered Knowledge Graphs from Sparse Autoencoder Features
+2604.25855,SIEVES: Selective Prediction Generalizes through Visual Evidence Scoring
+2604.25934,LLM Psychosis: A Theoretical and Diagnostic Framework for Reality-Boundary Failures in Large Language Models
+2604.26522,AGEL-Comp: A Neuro-Symbolic Framework for Compositional Generalization in Interactive Agents
+2604.26523,RepoDoc: A Knowledge Graph-Based Framework to Automatic Documentation Generation and Incremental Updates
+2604.26981,Budget-Constrained Online Retrieval-Augmented Generation: The Chunk-as-a-Service Model
+2604.27156,"Interval Orders, Biorders and Credibility-limited Belief Revision"
+2604.27269,Unifying biomedical knowledge in a modern multimodal graph
+2604.27723,Optimized Deferral for Imbalanced Settings
+2604.27859,Rethinking Agentic Reinforcement Learning In Large Language Models
+2605.00560,When More Reformulations Hurt: Avoiding Drift using Ranker Feedback
+2605.00845,Graph Query Generation with Constraint-guided Large Language Agents
+2605.01386,MemORAI: Memory Organization and Retrieval via Adaptive Graph Intelligence for LLM Conversational Agents
+2605.01484,Evaluating LLMs on Large-Scale Graph Property Estimation via Random Walks
+2605.02249,A Study of Belief Revision Postulates in Multi-Agent Systems (Extended Version)
+2605.02819,SCPRM: A Schema-aware Cumulative Process Reward Model for Knowledge Graph Question Answering
+2605.03377,GRAFT: Auditing Graph Neural Networks via Global Feature Attribution
+2605.03514,Revisiting Graph-Tokenizing Large Language Models: A Systematic Evaluation of Graph Token Understanding
+2605.04093,Decision Evidence Maturity Model for Agentic AI: A Property-Level Method Specification
+2605.04243,Temporal Reasoning Is Not the Bottleneck: A Probabilistic Inconsistency Framework for Neuro-Symbolic QA
+2605.04764,Elicitation Matters: How Prompts and Query Protocols Shape LLM Surrogates under Sparse Observations
+2605.05391,"Every(bot) Makes Mistakes: Coding Big Five Personalities, Context, and Tone into an LLM Chatbot Recovery Code Framework"
+2605.06611,"The Structural Origin of Attention Sink: Variance Discrepancy, Super Neurons, and Dimension Disparity"
+2605.07042,The Context Gathering Decision Process: A POMDP Framework for Agentic Search
+2605.07509,MASPrism: Lightweight Failure Attribution for Multi-Agent Systems Using Prefill-Stage Signals
+2605.08011,Abductive Reasoning with Probabilistic Commonsense
+2605.08686,Iterative Critique-and-Routing Controller for Multi-Agent Systems with Heterogeneous LLMs
+2605.09934,TRACER: Verifiable Generative Provenance for Multimodal Tool-Using Agents
+2605.09942,HAGE: Harnessing Agentic Memory via RL-Driven Weighted Graph Evolution
+2605.10488,DeepRefine: Agentic Knowledge Refinement via Reinforcement Learning
+2605.10791,Reward on Path: Learning Intermediate Supervision Signals for Knowledge Graph Question Answering
+2605.11336,Much of Geospatial Web Search Is Beyond Traditional GIS
+2605.11355,gym-invmgmt: An Open Benchmarking Framework for Inventory Management Methods
+2605.11436,Agent-BRACE: Decoupling Beliefs from Actions in Long-Horizon Tasks via Verbalized State Uncertainty
+2605.11706,GRAFT: Graph-Tokenized LLMs for Tool Planning
+2605.12039,SkillGraph: Skill-Augmented Reinforcement Learning for Agents via Evolving Skill Graphs
+2605.12061,SAGE: A Self-Evolving Agentic Graph-Memory Engine for Structure-Aware Associative Memory
+2605.12197,A Unified Graph Language Model for Multi-Domain Multi-Task Graph Alignment Instruction Tuning
+2605.12280,Iterative Audit Convergence in LLM-Managed Multi-Agent Systems: A Case Study in Prompt-Engineering Quality Assurance
+2605.12918,CommonWhy: A Dataset for Evaluating Entity-Based Causal Commonsense Reasoning in Large Language Models
+2605.13481,PersonalAI 2.0: Enhancing knowledge graph traversal/retrieval with planning mechanism for Personalized LLM Agents
+2605.13623,Multimodal Graph-based Classification of Esophageal Motility Disorders
+2605.13848,GraphBit: A Graph-based Agentic Framework for Non-Linear Agent Orchestration
+2605.14258,Dynamics of the Transformer Residual Stream: Coupling Spectral Geometry to Network Topology
+2605.14259,Hypergraph Enterprise Agentic Reasoner over Heterogeneous Business Systems
+2605.14866,Towards In-Depth Root Cause Localization for Microservices with Multi-Agent Recursion-of-Thought
+2605.15109,Why Neighborhoods Matter: Traversal Context and Provenance in Agentic GraphRAG
+2605.15611,TopoEvo: A Topology-Aware Self-Evolving Multi-Agent Framework for Root Cause Analysis in Microservices
+2605.15777,SaaS-Bench: Can Computer-Use Agents Leverage Real-World SaaS to Solve Professional Workflows?
+2605.16268,"Helping Customers in Distress: An LLM-powered Agent that Converses, Probes, and Routes"
+2605.16401,CADS: Conformal Adaptive Decision System for Cost-Efficient Image Classification
+2605.16598,GRASP: Graph Agentic Search over Propositions for Multi-hop Question Answering
+2605.17076,S-Bus: Automatic Read-Set Reconstruction for Multi-Agent LLM State Coordination
+2605.17467,VerifyMAS: Hypothesis Verification for Failure Attribution in LLM-based Multi-Agent Systems
+2605.17965,BLAgent: Agentic RAG for File-Level Bug Localization
+2605.18025,TeleCom-Bench: How Far Are Large Language Models from Industrial Telecommunication Applications?
+2605.18746,ESI-Bench: Towards Embodied Spatial Intelligence that Closes the Perception-Action Loop
+2605.18760,DOTRAG: Retrieval-Time Reasoning Along Paths
+2605.18763,Query-Conditioned Graph Retrieval for Contextualized LLM Reasoning in Personalized Wearable Data
+2605.19944,A Measure-Theoretic Analysis of Reasoning in Transformers: Structural Generalization and Approximation Limits
+2605.20061,"Rewarding Beliefs, Not Actions: Consistency-Guided Credit Assignment for Long-Horizon Agents"
+2605.20485,ZEBRA: Zero-shot Budgeted Resource Allocation for LLM Orchestration
+2605.20690,Declarative Data Services: Structured Agentic Discovery for Composing Data Systems
+2605.23382,From Correctness to Preference: A Framework for Personalized Agentic Reinforcement Learning
+2605.24312,Five Queries Are Enough: Query-Efficient and Surrogate-Free Membership Inference Attacks on RAG via Entailment
+2605.25273,"LLM-as-a-Judge in Healthcare: A Scoping Analysis of Applications, Methods, and Human Alignment"
+2605.25603,Detecting Unfaithful Chain-of-Thought via Circuit-Guided Internal-External Discrepancy
+2605.25652,A Two-Phase Stability Study of LLM Judges and Bar Council Examiners on Thai Bar-Exam Free-Form Essays
+2605.25831,"Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation"
+2605.26147,Neural Bayesian Sequential Routing
+2605.27700,CiteCheck: Retrieval-Grounded Detection of LLM Citation Hallucinations in Scientific Text
+2605.28524,Let Relations Speak: An End-to-End LLM-GNN Soft Prompt Framework for Fraud Detection
+2605.28814,Self-Improving Language Models with Bidirectional Evolutionary Search
+2605.29218,GTA: Generating Long-Horizon Tasks for Web Agents at Scale
+2605.29339,DMC-CF: Dynamic Multimodal CounterFactual QA benchmark for Causal Reasoning
+2605.30712,ExpHarness: Model-Agnostic Experience Learning through a Trainable Harness
+2606.00093,Agreement Metrics for LLM-as-Judge Evaluation: What to Report and Why
+2606.00405,From Talking Words to Sharing Thoughts: Scalable Multi-LLM Aggregation via Structured Message Passing
+2606.00765,FALAT: Tracing Failures in LLM Agent Trajectories via Dependency-Guided Search
+2606.00822,SkillPager: Query-Adaptive Intra-Skill Navigation via Semantic Node Retrieval
+2606.01230,HomeFlow: A Data Flywheel for Smart Home Agent Training with Verifiable Simulation
+2606.01434,DrugClaw and DrugAudit: A Primary-Source-Grounded Agent and Authority-Aware Benchmark for Drug-Information Question Answering
+2606.01789,Consistency evaluation of benchmarks used for causal discovery
+2606.02093,The Role of Ambiguity in Error Prediction via Uncertainty Quantification
+2606.02522,Moment-Video: Diagnosing Temporal Fidelity of Video MLLMs on Momentary Visual Events
+2606.03467,StepFinder: A Temporal Semantic Framework for Failure Attribution in Multi-Agent Systems
+2606.03712,When Graph Tokens Sink: A Mechanistic Analysis of Graph Language Models
+2606.04184,GroupToM-Bench: Benchmarking Group Theory of Mind and Nonlinear Social Emergence in MLLMs
+2606.04246,StepPRM-RTL: Stepwise Process-Reward Guided LLM Fine-Tuning for Enhanced RTL Synthesis
+2606.04484,AgentJet: A Distributed Swarm Training Framework for Agentic Reinforcement Learning
+2606.04990,From Agent Traces to Trust: A Survey of Evidence Tracing and Execution Provenance in LLM Agents
+2606.05003,PhysDox: Benchmarking LLMs on Physical Feasibility Auditing of Physiological Sensing Protocols
+2606.05806,When Tools Fail: Benchmarking Dynamic Replanning and Anomaly Recovery in LLM Agents
+2606.05901,Reducing Hallucinations in Complex Question Answering using Simple Graph-based Retrieval-Augmented Generation (long version)
+2606.05972,LLM Explainability with Counterfactual Chains and Causal Graphs
+2606.06865,Are Large Language Models Suitable for Graph Computation? Progress and Prospects
+2606.07525,Implicit Causal Graph Construction in Text via Chain Discovery
+2606.07801,Improving Multimodal Reasoning via Worst Dimension Optimization
+2606.07874,"Safety is Contextual, LLM-Judges Are Not: Navigating the Rigid Priors of Evaluators"
+2606.08919,"Oversight Has a Capacity: Calibrating Agent Guards to a Subjective, Fatiguing Human"
+2606.09032,Bridging the Agent-World Gap: Text World Models for LLM-based Agents
+2606.09483,Memory Beyond Recall: A Dual-Process Cognitive Memory System for Self-Evolving LLM Agents
+2606.09484,Detecting Differences Is Not Understanding Structure: Large Language Models Fail at Graph Isomorphism
+2606.09585,Optical Reasoning: Rethinking Images as an Expressive Reasoning Medium Beyond Text
+2606.09843,An LLM-Native Psychometric Instrument Reveals a Self-Report--Behavior Gap Across 25 Models
+2606.09925,AudioProcessBench: Benchmark for Identifying Process Errors in Audio-Grounded Reasoning
+2606.10607,Causal Ensemble Agent: Hierarchical Causal Discovery with LLM-guided Expert Reweighting
+2606.10813,RedAct: Redacting Agent Capability Traces for Procedural Skill Protection
+2606.11211,Calibration Drift Under Reasoning: How Chain-of-Thought Budgets Induce Overconfidence in Large Language Models
+2606.11560,"LLMs+Graphs: Toward Graph-Native, Synergistic AI Systems"
+2606.11675,Lung-R1: A Knowledge Graph-Guided LLM for Pulmonary Diagnostic Reasoning
+2606.11680,Organize then Retrieve: Hierarchical Memory Navigation for Efficient Agents
+2606.11838,Plan-and-Verify Video Reward Reasoning with Spatio-Temporal Scene Graph Grounding
+2606.13177,MemRefine: LLM-Guided Compression for Long-Term Agent Memory
+2606.14325,Achieving Precise Text-To-Cypher Via Grounded Knowledge Graph Data Generation
+2606.15328,SGFormer++: Semantic Graph Transformer for Incremental 3D Scene Graph Generation
+2606.15633,Formalizing and Mitigating Structural Distortion in LLM Attention for Graph Reasoning
+2606.15779,Faithful Action-unit Causal Reasoning for Counterfactually Faithful Emotion Explanations
+2606.16067,Stepwise Token Selection for Efficient Multimodal Large Language Models
+2606.16175,PAL-Bench: Evidence-Grounded Profile Reconstruction from Longitudinal Personal Albums
+2606.16328,AdaSTORM: Scaling LLM Reasoning on Dynamic Graphs via Adaptive Spatio-Temporal Multi-Agent Collaboration
+2606.16989,Stable Menus of Public Goods: AI-Enabled Progress
+2606.17056,The Value Axis: Language Models Encode Whether They're on the Right Track
+2606.18075,A Unified Framework for Context-Aware and Relation-Aware Graph Retrieval-Augmented Generation
+2606.18385,CaVe-VLM-CoT: An Interpretable Vision-Language Model Framework
+2606.18850,ScholarSum: Student-Teacher Abstractive Summarization via Knowledge Graph Reasoning and Reflective Refinement
+2606.20740,VeriBound: PAC-Bayesian Generalization Bounds for Process Reward Models Trained with Formal Verification Tools
+2606.20837,Study on Quantitative Dynamic Epistemic Logic for Belief Revision
+2606.20895,Neurosymbolic Clinical Trial Matching via LLM-Driven Abduction and Logical Verification
+2606.21123,A Multi-Agent Audit Framework for High-Stakes Reasoning: Evaluation and Interpretability in Clinical Mental Health Screening
+2606.21338,"""What Happens Locally, Leaks Globally"": Detecting Privacy Leakage Risks in MCP Servers"
+2606.21777,CalVerT: Augmenting Agents with Calibrated Verifier Telemetry Improves Action and Learning in Knowledge-Intensive Tasks
+2606.21959,OpenBioRQ: Unsolved Biomedical Research Questions for Agents
+2606.22678,RigorBench: Benchmarking Engineering Process Discipline in Autonomous AI Coding Agents
+2606.22692,VISTA Architect: A graph database-oriented health AI system demonstrated in multidisciplinary tumor boards
+2606.22938,Provable Benefits of RLVR over SFT for Reasoning Models: Learning to Backtrack Efficiently
+2606.22995,Group-Graph Policy Optimization for Long-Horizon Agentic Reinforcement Learning
+2606.23608,Causal Discovery in the Era of Agents
+2606.24124,VeryTrace: Verifying Reasoning Traces through Compilable Formalism and Structured Verification
+2606.25871,AutoRelAnnotator: Calibrated Model Cascades for Cost-Efficient Relevance Evaluation in Sponsored Search
+2606.26583,Preference Optimization Drives Monoculture in LLM Prediction Markets
+2606.27154,OpenRCA 2.0: From Outcome Labels to Causal Process Supervision
+2606.27742,KG2Cypher: Data-Centric Pipeline for Building Enterprise Text-to-Cypher Systems
+2606.30335,BayesEvolve: Explicit Belief States for Autonomous Scientific Discovery
+2606.31260,"Plan Right, Then Plan Tight: Symbolic RL for Efficient Embodied Reasoning"
+2606.31916,Theory of Mind and Persuasion Beyond Conversation: Assessing the Capacity of LLMs to Induce Belief States via Planning and Action
+2607.00011,SkillSelect-Serve: QoS-Aware Budgeted Skill Service Recommendation for LLM Agents
+2607.00018,The Limits of LLM Forecasting: Parametric Knowledge Gaps Across Conflict Zones
+2607.00339,TRACE: State-Aware Query Processing over Temporal Evidence Graphs for Conversational Data
+2607.00508,When RAG Meets Query Planning: Logical Query Trees for Resolving Exploratory Reasoning Problems
+2607.00924,Graph-Native Reinforcement Learning Enables Traceable Scientific Hypothesis Generation through Conceptual Recombination
+2607.01063,AutoRestTest at the SBFT 2026 Tool Competition
+2607.01605,pykci: A Compact Urban Knowledge Graph for Semantic and Spatial Queries using LLMs
+2607.01929,Beyond Textual Repository Exploration: Dual-Modal Structural Reasoning for Agentic Issue Resolution
+2607.02882,Diagnosis-Driven Automatic Repair for Agentic Workflow via Symbolic Inference
+2607.02907,ProLaViT: Learning Progressive Latent Visual Thoughts in Structured Latent Space
+2607.03528,Aligning Language Models with Selective Prediction
+2607.03709,GRASP: Graph-Reasoning Aided Survey Planning for High-Fidelity Related Work Generation
+2607.03853,CogRad: A Cognitively-Inspired Multi-Agent Framework for Radiology Report Generation
+2607.04430,Uncertainty-Aware Abstention in Large Language Models with Provable Alignment Guarantees
+2607.04617,MRMS: A Multi-Resolution Memory Substrate for Long-Lived AI Agents
+2607.05577,Narrative World Model: Narratology-Grounded Writer Memory for Long-Form Fiction
+2607.08093,CausalDS: Benchmarking Causal Reasoning in Data-Science Agents
+2607.09104,Integrating Large Language Models and Graph Convolutional Networks for Semi-Supervised Image Classification
+2607.09123,ReProAgent: Tool-Augmented Multi-Stage Agentic Generation of Bug Reproduction Tests from Issue Reports
+2607.09348,DKCD: Domain Knowledge-Enhanced Causal Discovery from Unstructured Data
+2607.09996,Who&When Pro: Can LLMs Really Attribute Failures in AI Agents?
+2607.10265,TGMS: An Agent-Native Bi-Temporal Graph Management System
+2607.12273,Code-MUE: Measuring Code LLMs' Uncertainty through Execution-based Semantic Interaction Graphs
+2607.12875,Automatic Model-Hardware Co-Adaptation for Heterogeneous AI Accelerators
+2607.14114,CoEvoT: Co-Evolving Chain-of-Thought Prompting for Graph-LLM Reasoning
+2607.14561,MARS: Multi-hop Adaptive Retrieval and SPARQL Generation for KGQA
+2607.15280,GraphDx: A Cost-Aware Knowledge-Enhanced Multi-Agent Framework for Sequential Diagnosis
+2607.15283,Adaptive Retrieval Strategies for Biomedical Question Answering
+2607.15297,Large Language Model-Enhanced Multi-hop Parallel Image Semantic Communication
+2607.15374,Reasoning-Guided Part-Level Visual Grounding via Reinforcement Learning
+2607.16617,DataFlow-Harness: A Grounded Code-Agent Platform for Constructing Editable LLM Data Pipelines
+2607.16716,RECON: Benchmarking Agent Memory for Compositional Reasoning over Long Contexts
+2607.17486,SALT: Salience-Aware Lexical Trie for Long-Context Compression
+2607.17841,From Blind Search to Memory-Aware Evolution: Efficient DBMS Tuning via Collaborative Diagnosis and Utility-Aware Retrieval
+2607.17883,"Zero Hallucination, by Construction: Hallucination-Aware Layered Oversight for Trustworthy Enterprise AI"
+2607.17935,DeLIVeR: Decomposed Learning for Information-grounded Veracity Recognition via Reinforced Knowledge Graph Exploration
+2607.17948,"Towards Agentic Agent-based Models: Feasibility, Performance, and Statistical Model Checking"
+2607.18029,Natural Language Access to Domain-Specific Metadata: A Reusable Framework for LLM Query Generation
+2607.18046,SEE: Structure-aware Exploring & Exploiting for Long-horizon GUI Agent Trajectory Synthesis
+2607.18100,Can We Break LLMs Out of Self-Loops? Fine-Grained Reasoning Control with Activation Steering
+2607.18265,State Compression in Two-Agent LLM Relays: A Closed-World Study of Constraint Preservation
+2607.18777,PertReason: A Knowledge-Grounded Benchmark and Framework for Cell-State-Conditioned Mechanistic Reasoning of Perturbation Effects
+2607.19985,Coordinating from Memory: Graph-Structured Experience Reuse for Multi-Agent Adaptation in Dynamic Manufacturing
+2607.21911,Leveraging Resolved Incident History for LLM-Assisted Software Bug Diagnosis
+2607.22761,DRC-Aid: Design-Rule Correction via Agentic Framework utilizing Inference-Time Large Language Models
+2607.22766,First-Order In-Context Shapley: Scalable Data Auditing for LLM Alignment and Evaluation
+2607.23019,Reason Popper-ly: Patching In-Context Reasoning with Inductive Logic Programming
+2607.23278,Co-Evolving Graph and Text Memory for Training-Free Multi-Hop Question Answering
+2607.24417,CORE: A Unified Cascaded Ordinal Relevance Estimation Framework for E-commerce Search
+2607.24512,"Making Mathematical Knowledge Explainable, Accessible and Interoperable Through Large Language Model Integration"
+2607.24826,Aethel: A Reproducible Graph-Retrieval Framework for Multi-Hop Financial Diligence
+2607.25018,Conformal Cascade: Distribution-Free Accuracy Guarantees for Multi-Tier LLM Inference
+2607.25243,AuthentiCity: A Multi-Source Provenance-Aware Knowledge Graph and Benchmark for 3D City Models
+2607.25640,LLM-as-a-Judge for Evaluating System Responses in Conversational Music Recommendation
+2607.25853,HiSkill: Empowering LLM Agents with Hierarchical Skill Graphs
+2607.27290,EvoCause: LLM-Guided Evolution of Causal Graphs for Root Cause Analysis
+2607.27783,Reasoning Consensus: Structural Ensembling of LLM Reasoning via Weighted DAG Aggregation
+2607.28026,Contrastive Reinforced Policy Optimization via Privileged Self-Distillation
+2607.28374,LEDGERMIND: Provenance-Constrained Multimodal Agentic Reasoning with a Structured Evidence Ledger
+2607.28638,Learning Stateful Predictive Knowledge From Experience
+2607.28942,NeSyFS: A Neuro-symbolic Fast-Slow Thinking Framework for LLM Agent under Partial Observability
+2607.28990,Scaling Scientific Discovery Environments for Turn-Level Agentic RL
+2607.29055,Autonomous Repair for Multi-Agent Systems via Monte-Carlo Tree Search
+2608.00255,"Artificial Intelligence for Spatially Reconfigurable Antennas: Movable, Fluid, and Pinching Antenna Systems"
+2608.00419,"Unleashing the Potential of Large Language Models: A Blueprint for Real-Time, Enterprise-Ready Deployments"
+2608.00542,Agentic Graph Token Reasoning
+2608.00705,A Triple-Robustness Analysis of Retrieval-Augmented Generation for Multi-Hop Requirements Traceability
+2608.01827,DeepVoyager-VL: Incentivizing Vision-in-the-Loop Search for Long-Horizon Multimodal Agents
+2608.02877,GoT-CD: Graph-of-Thoughts Causal Discovery and the Fragility of Post-hoc Path-Specific Fairness Audits
+2608.03292,DocTrace: Towards Traceable Long Document VQA via Hierarchical Evidence Graph Reasoning
+2608.03636,MuEvo: LLM-Driven Evolution of Multi-Heuristic Ensemble
+2608.04009,SocietyBench: Forecasting Counterfactual Social-World Evolution
+2608.04738,EviGraph: Evidence-Guided Autonomous Research Agents
+2608.05170,DREAM: LLM-based Dynamic Role-playing via Event-Aware Memory Graph
+2608.05204,SkillTrace: Multi-Trace Provenance Auditing for LLM-Agent Skill Reuse
+2608.06170,Prior-SG: Task and Prior Driven Region Segmentation for Scene Graphs in Arbitrarily-Structured Environments
+2608.06769,GraphVerse: A Comprehensive Visual Graph Reasoning Benchmark for Multimodal Large Language Models
+2608.08786,SymDiag: Explainable Diagnosis for LLM Reasoning via Neuro-Symbolic Verification
+2608.09155,Beyond Tier Labels: Role- and Deployment-Dependent Model Substitution in Multi-Call LLM Workflows
+2608.09168,From Relevance to Execution Utility: Reward-Aware Dynamic Execution Gating for Skill-Based LLM Agents
+2608.10509,MAP-Graph: Provenance-Aware Shared Memory for Multi-Agent Workflows
+2608.10646,ASCon: A Direction-Aware Reciprocal Agent--Step Contextualization Model for Failure Attribution in Multi-Agent Systems
+2608.10875,VibeLifeBench: Can Your Life Agent Be Proactive and Persistent in a Living World?
+2608.11277,Knowledge-Graph-Guided Retrieval-Augmented LLMs for Explainable Root Cause Analysis in Automotive HiL Validation
+2608.11573,Reinforcing Step-level Reasoning for Effective Self-Correction in LLMs
+2608.11967,LoongReflect: Boosting Long-Horizon Reflection in Search Agents via Global Perspective Distillation
+2608.12391,Unified Multi-Dimensional Benchmark for Complex Graph Reasoning in Large Language Models
+2608.12875,"The Embedder's Dilemma: LLMs Are Better, but at What Cost?"
+2608.12920,TennisVAR: A Stroke-Evidence-Grounded Multimodal Large Language Model for Tactical Reasoning in Tennis Videos
+2608.12921,Discovering Efficient and Explainable Communication Topologies for LLM-based Multi-Agent Systems via Causal Inference
+2608.13263,vToken: Token-Level Virtualization for Reclaimable KV Caches
+2608.14397,LLMs Don't Pay for the Jump
+2608.15595,AutoSQL: Extracting SQL Templates from Imperative ORM Code in Large-Scale Repositories
+2608.17711,Accuracy and Robustness of Model Cascades Under Data Perturbations
+2608.18398,LEDGER: Claim-to-Evidence Trace Graphs for Auditing LLM Agents
+2608.18575,Beyond LLM-Based Reasoning: Lightweight GNNs for Agent Failure Attribution
+2608.18821,Identifying Implicit Premises for Logical Reconstruction of Argument Graphs
+2608.20099,Reward-Guided Autoregressive Graph Generation for Efficient Multi-Agent Communication Topology Design
+2608.21377,Agentic Scaffolding Amplifies Sycophantic Behavior in Large Language Models
+2608.21668,From Mastery Profile to Simulated Response: Stochastic Student Knowledge Graphs (SSKG) for Faithful LLM Student Simulation
+2608.22127,Who Should Teach? Confidence-Aware Dual-Teacher Learning for Few-Shot Node Classification on Text-Attributed Graphs
+2608.22215,Dual-Layer Agentic Memory with Fast Write Routing and Slow Consolidation
+2608.22479,GTA-RAG: Graph-Trajectory-Augmented Reinforcement Learning for Multi-Turn Retrieval-Augmented Reasoning
+2608.22839,Hierarchy-Aware Supervised Uncertainty Estimation for Black-box LLM Taxonomic Reasoning
+2608.24361,Adaptive Influence Graphs for Failure Attribution in Multi-Agent Systems
+2608.24588,IAPO: Influence-Aware Policy Optimization for Credit Assignment in Multi-Turn Service Agents
+2608.24667,EviGraph: Towards Verifiable Evidence Construction for Information-Seeking Agents
+2608.25531,ClueWeaver: Reward-Guided Dual-Agent Evidence Reasoning for Compact LLMs on Literary Long Narratives
+2608.26329,Neuro-symbolic PRM: Enhancing Scientific Reasoning via Structured Traces and Symbolic Verification
+2608.26794,Ring Forcing: Towards Precise Long-Term Memory for Autoregressive Video Diffusion
+2608.29228,Localizing Emergent Failures in Agentic AI: Recovering Minimal Repair Families via Counterfactual Replay
+2608.29560,Which LLM for Which Work? Budgeted Model Allocation under Uncertain Evaluation
+2608.29588,Call Neighbours Yourself: Graph Walks with Destination-Conditioned On-Policy Self-Distillation
+2608.29606,Agent Zero Memory: Provenance-Aware Long-Term Memory for LLM Agents
+2608.30413,DERELAB: Probing Defeasible Reasoning and Confirmation Bias in LLMs with a Generative Benchmark
+2608.30676,MedAgent-R1: Faithfulness-Aware Reinforcement Learning for Evidence-Grounded Medical Reasoning
+2609.00296,Toward Workflow-Aware Benchmarking for Healthcare NLP Agents
+2609.00706,A Certificate-Producing Cascade for Equational Implication: The SAIR EQT2 Stage 2 Solver
+2609.00714,ChatDev 2.0: A No-Code Multi-Agent Platform for Developing Everything
+2609.00761,Agent-Enhanced Heterogeneous Graph RAG for Academic Question Answering
+2609.00865,MemoryWalker: Stop Training Agents on Contexts They Never Saw
+2609.01360,EDGE: Error Dependency Graph-Guided Multi-Error Attribution in Multi-Agent LLM Systems
+2609.01428,TRIAGE: Three-level Routing and Intelligent Agent Guidance for Efficient Execution
+2609.01526,EvoSCM: Scientific Belief Revision Through Causal Model Evolution and Experimentation
+2609.02056,HyGRAIL: Cost-Aware and Evidence-Grounded Scientific Hypothesis Discovery over Knowledge Graphs
+2609.04194,Legibility is Not Interpretability: Comparing Judged and Actual Importance in Chain-Of-Thought Reasoning
+2609.04749,DCFA: Dual-view Causal-inspired Attribution for Failure Reasoning in LLM-based Multi-agent Systems
+2609.04782,DODR: Deterministic Operator-Driven Reasoning in Latent Space
+2609.06063,Explaining AI Agents Through Execution Traces
+2609.06367,Robust Conformal Consensus: Multi-Agent LLM-as-a-Judge Interval Evaluation with Conformal Prediction
+2609.08709,Chimaera: A Mixture-of-Graph-Experts Architecture for Cross-Task and Cross-Dataset Graph Learning
+2609.10065,Cost-Aware Vision--Language Model Arbitration for Fabric Structure Recognition A Deployable Multi-Agent System
+2609.10421,Emergency Department Revisit Quality Review Screening: Exploring Human Decision-Making and Artificial Intelligence Support
+2609.11209,REVA: Reusable Evidence View Aggregation for Context-Efficient RAG Serving
+2609.11569,Enabling Knowledge Graph Understanding at Scale with the EXplore Your Graphs ENgine (EXYGEN)
+2609.12746,What Drives Recovery in Agentic Text-to-Cypher? LAST-CQ: An LLM Agent Self-Refinement Framework
+2609.13804,StepPrune: Adaptive Sequential Visual Token Selection across Multimodal Large Language Models
+2609.13824,When Consistency Does Not Mean Reliability: Evaluating Local LLM Judges Against Human Ratings
+2609.15180,Rethinking Correctness for Uncertainty Estimation in Clinical Prediction with Vision-Language Models
+2609.15606,VideoScout: Learning Agentic Active Exploration with Adaptive Reasoning Pacing for Long Video Understanding
+2609.19002,Code Consistency Preference Optimization Verification for Language Model Alignment
+2609.19150,"Sampling Reveals Style: Unsupervised, Training-Free Discovery of Prompt-Conditional Stylistic Axes in LLM Activations"
+2609.19961,Neuro-Symbolic Agentic AI for Networked Low-Altitude UAVs
+2609.21492,LogicTrack: Auditing Reasoning Trajectories of Large Language Models with Formal Logic Solvers
+2609.21675,DRT: Dense Reasoning Trace for Efficient and Grounded Multimodal Reasoning
+2609.23808,FLARE: A Full-Lifecycle Dense Supervision Paradigm for Long-Horizon Coding Agents via Generative Reward Model
+2609.24101,When More Evidence Hurts: Publication-Bias Drift and Principled Stopping for Biomedical Causal Search
+2609.24359,"Dissecting Agentic Forensics: The Role of Triage, Prompting, and Evidence Arbitration in Open-World Fake Image Detection"
+2609.27014,ContraVis: Evidence-Grounded Visual Analytics for Contradiction Review in Legal Contracts
+2609.27156,Giving Credit Where It's Due: Redundancy-Aware Learning for Efficient Reasoning
+2609.27406,Only Pay What You Must Spend: On-Demand Privacy Budget Payment for Differentially Private RAG
+2609.27922,Verifier-guided discovery of exact high-order mimetic operators with large language models
+2609.28859,Human-AI-Powered Hypothesis Testing: Cost-Aware Selective AI Scoring and Sequential Human Escalation
+2609.29282,Asymmetric Dynamic Routing: Balancing Reasoning Depth and Computational Efficiency in Hypergraph RAG
+2609.30313,HyQDB: LLM-Assisted Debugging for Hybrid Quantum Workflows
+2609.31751,EgoTSR++: Egocentric Spatiotemporal Reasoning for Task Progress Understanding
+2609.31881,TemporalGraphLLM: Temporal Graph Neural Networks with Large Language Models for Dynamic Text-Attributed Graphs
+2609.34491,M3OS: A Monte Carlo Graph Search-Orchestrated Multi-Agent LLM System for Evidence-Traced Molecular Optimization
+2609.34727,"Dynamic Flow, Static Graph: KV Cache Reuse for Efficient LLM Serving on Mobile NPUs"
+2609.35432,Self-Evolving Coding Agents: From Digital Programs to Physical-World Intelligence
+2609.35791,FD-VAD: Semantic Endpoint Detection for Streaming Full-Duplex Speech
+2609.35815,How to Run Statistics over LLM Judges and Trust the Results: Calibrated Inference for Small-Sample AI Evaluation with evalstats
+2609.36344,DeepRewind: Predicting and Repairing Premature Commitments in Deep Research Agents
+2609.36689,CHAIN: Calibrated LLM Forecasting via Causal-Temporal Hypergraph Inference
+2609.36987,CypherTurn: A Multi-Turn Benchmark for Conversational Text-to-Cypher Evaluation and the Autonomy Divergence
+2609.37345,"When to Retrieve, When to Stay: Uncertainty-Aware Temporal Evidence Allocation for Streaming Video-LLMs"
+2609.37432,Looped Actor: Depth-Recurrent Reasoning Models for Reinforcement Learning
+2609.39302,SQD-Agent: LLM-driven agentic framework for Quantum Chemistry workflows
+2609.39329,PatchKV: Weight-Space Compensation of KV Cache
+2609.40103,JuryFlow: Disagreement-Guided Human-in-the-Loop Multi-Agent Evaluation
+2610.00121,Label Cuts in Layered Automata: Short Explanations for the Regular Constraint
+2610.00912,OR for AI That Does OR: Routing LLMs up the Escalator inside the OSCAR Framework
+2610.01080,Improving Math Reasoning through Value-guided Informative Search
+2610.01256,DeFA: Dependency-Guided Failure Attribution for LLM Agents
+2610.01348,"Verify Claims, Not Scores: Evidence-Based Verification of Modular Agents"
+2610.01415,Beyond Memory: Harnessing Long-Horizon Agents with Explicit Belief States
+2610.01667,Conditioning LLMs on Social Value Orientation improves behavioural alignment in a sequential social dilemma
+2610.01767,A Matryoshka Hierarchical RAG for Efficient Multi-Hop Question Answering
+2610.02254,Overcoming Challenges of Interpretive Structural Modeling with Large Language Models
+2610.02877,Evaluating LLM-as-a-Judge Beyond Score Alignment: A Psychometric Analysis of Residual Judging Difficulty
+2610.03316,Multi-Task Evolution for Zero-Shot Cross-Problem Generalization using LLMs
+2610.04749,Agentic discovery of blood biomarker from distilled private health records
+2610.04902,Self-Evaluating Recursive Agents
+2610.05039,Causal Improvement Graph for Agentic Harness Optimization
+2610.05247,templar: agentic induction and evolution of standardized radiology reporting templates from large-scale clinical corpora
+2610.05400,CASE: Cost-Aware Stopping for Efficient Long-Video Agents
+2610.06510,MarvisNav: Making Memory Visible on Route Choices for Zero-Shot Object Navigation
+2610.06650,Wikidata Search Traces: A Dataset for Training Knowledge Graph Search Agents
+2610.06685,Aligning Multimodal Patient Evidence with Biomedical Knowledge Graphs for Clinical LLMs
+2610.07359,"Evaluate the Stack, Not the Layer: Do Deterministic and LLM Gates for Agent Actions Fail Independently?"
+2610.07895,Textual Environmental Context and Spatial Graphs for LLM-Based Regional SST Forecasting
+2610.08793,Adaptive Workflow Intelligence: A Cognitive Architecture for Context-Driven Enterprise Automation
+2610.09392,Quantifying Volumetric Risk: Class-Aware Asymmetric Weighted Conformal Prediction for 3D Medical Image Segmentation
+2610.10400,Self-correction Optimization for Interleaved Multimodal Generation
+2610.10608,From Investigation Failures to Reliable SOC Agents: Understanding and Improving LLM-Based Alert Triage
+2610.11334,ReCast: Attribution-Oriented Step Representation Learning for LLM-Based Agent Systems
+2610.11552,"Safe, Persistent, and Evolving Agent Harness for Understanding Partially Observable Worlds"
+2610.12304,Looking Inside LLMs: Small-World Connectivity as a Signature of Reasoning Performance
+2610.12360,Accurate but Not Humble: Evaluating Epistemic Humility in LLM Agents under Knowledge Conflict
+2610.13105,Can Failed Trajectories Reveal Where Agents Go Wrong? Agentic Failure Attribution Without Step-Level Labels
+2610.14112,"Does System One Transfer? Calibrated Typed-Decision Models, Label Budgets, and Translation for Indonesian Regional Languages"
+2610.14612,LLM-Augmented Bayesian Optimization with Adaptive Policies for Chiplet Design Space Exploration
+2610.14683,Triage-PiEvo: Evidence Admission for Principle-Evolving Scientific Agents
+2610.14710,DeKoR: Decomposed Knowledge Routing for Efficient GNN--LLM Fusion
+2610.15038,Training-Free Multi-Agent Cooperative Embodied Search from Uncertain Vision-Language Priors
+2610.15368,"ANTE: Anticipate, Then Execute -- Learning Internal World Models for Coding Agents from Verified Beliefs"
+2610.15427,Riemannian Graph Tokenizer for Structural Knowledge Transfer
+2610.17953,Agent-Reflex: Teaching Language Agents to Act Reflectively
+2610.18269,PAINT: A Framework for Multilingual Pain Representation from Medical Licensing Exams to Real-World Clinical Texts
+2610.18616,Knowledge Graphs as Files: An Agent Harness Where Tool Creation and Tool Use Co-Evolve
+2610.18780,BLADE: Auditing Information Use for Failure Attribution in LLM Multi-Agent Systems
+2610.19166,Fantastic Metrics and How to Find Them: Meta-Evaluating Metrics for Multi-lingual Style-Personalized Generation
+2610.19528,"Retrieve What Helps, Only When It Helps: Agentic Reinforcement Learning for Selective Retrieval-Augmented Machine Translation"
+2610.19992,"SoK: Grading Open-Text Legal Answers, from Law School Exams to Trustworthy Rubric Judges"
+2610.20668,CascadeLedger: Counterfactual Auditing of Information and Resource Integrity in LLM Cascades
+2610.21245,From One Query to Many: A Critical Survey of Privacy Accounting in RAG
+2610.21877,Aligning LLMs with Sparse Retrieval via Adaptive Sparse Supervision
+2610.22017,CARA: Causally Guided Retrieval Agent for Question Answering
+2610.22172,Efficient KV Cache Migration for Geo-Distributed LLM Inference in Collaborative Edge Computing
+2610.22818,FuseRAG: Fusing Structure and Evidence into Inference for Cost-Efficient Graph-based RAG
+2610.23559,"An Interactive GraphRAG Workspace for Reifying, Auditing, and Steering Conversational AI Memories"
+2610.24355,"Koi: Evidence-Guided, Self-Calibrating Planning for Multi-Cloud, Heterogeneous LLM Inference Fleets"
+2610.24977,CorrectRTL: Boost RTL Generation Quality Through Automated Self-Correction with Instruction Decomposition
+2610.25185,Reranking Answers of Large Language Models with Knowledge Graphs
+2610.25710,Evidence Sufficiency and Model Comparisons in MexRegQA: An Item-Level Audit of Mexican-Spanish Regulatory QA
+2610.27515,Progressive Subset Selection and Cascaded Consistency for Unsupervised Vision-Language Model Adaptation
+2610.28010,RANGER: Retrieval Agent for Navigating Graphs with Semantic Evaluation Rewards
+2610.28361,FALCA: Falsification-Aware Reinforcement Learning with Hierarchical Credit Assignment for Long-Horizon Deep Search Agents
+2610.28409,Rewards for Budget-Aware Multi-Turn Agents That Adapt to Arbitrary Test-Time Constraints
+2610.28611,Semantic Observability for Autonomous Systems Diagnostics
+2610.28811,A Mechanistic Study of Automated Failure Attribution in LLM-based Agentic Systems
+2610.30076,Circuits of LLM Classifiers
+2610.30359,FAIRGate: Agentic Runtime Policy Selection and Verified Repair for Fairer Recommendation Delivery
+2610.30933,ReflectPO: Reflection-Guided Policy Optimization for Long-Horizon LLM Agents
+2610.31428,"Predictable performance is suboptimal, and what it means for model routing"
+2610.31639,Causal Chain of Thought: Mitigating Attention Leakage via Context Isolation
+2610.33274,FlexA-Mem: Budget-Adaptive Agentic Memory for LLM Agents
+2610.33801,Are We Done with UMLS Injection into Language Models for Medical Question Answering?
+2610.34094,From Document Layout to Causal Topology: An End-to-End Architecture for Temporal Causal Reasoning
+2610.34626,Entity Matching using Decision Models
+2610.35658,A Hybrid Framework for Explainable Aviation Risk: Causal Chain Extraction from Safety Reports with Physics-Based Failure Quantification and Interventional Analysis
+2610.36083,FinLLM-KG: Knowledge Graph-Enhanced LLMs for Financial Sentiment Analysis in Algorithmic Trading
+2610.36476,FIDES-Live: Evaluating Behavioral Concordance in Sequential Trading Agents
+2610.36544,Monitor Accuracy Isn't the Answer: A Decision-Value Framework for Evaluating AI Agent Restart Monitors
+2610.36618,Dream-COP: Guiding Algorithm Discovery for Combinatorial Optimization Problems in an Experience World
+2610.37407,Constraining the Commit Boundary: A DIO/ODI-Informed Authorization Guardrail for Agentic Entity Resolution
+2610.37851,Evaluating and improving AI agents for sequencing protocol understanding
+2610.38106,TGTV: An Interpretable Framework for UAV Fault Detection and Traceability via Spatiotemporal Graph Learning and Large Language Models
+2610.41511,Specification-Guided Generation for Large Language Models
+2610.41669,Supervised and LLM-Augmented Cardinality Estimation for Similarity Queries on Knowledge Graphs
+2610.41755,CypherGuard: Database-Grounded Correction for Reliable Text-to-Cypher
+2611.00838,Can Agentic AI Undermine Its Own Assurance Loop? Closed-Loop Dependency Assurance for Cognitive Network Digital Twins
+2611.01174,TRIAGE: Reliability- and Load-Conditioned Escalation for Two-Tier LLM Serving with a Semantic Evidence Judge
+2611.01245,Learning What to Ask and What to Believe: Distilling a Variational Bayesian Agent into Language Models
+2611.01910,EAGR: Evidence-Guided Adaptive Graph Retrieval
+2611.03157,"Toward Knowledge-Centric AI: Discovering, Internalizing, and Using Explicit Knowledge Across Agents and Generations"
+2611.04508,Theory-guided relational learning for data product pricing: An interpretable meta-path-guided graph neural network approach
+2611.05753,Toward a Compositional Knowledge Architecture for a Shared Organizational Cortex
+2611.05761,BobFlow: Towards Human-Agent Collaborative Data Science Using Dataflows
+2611.05814,Learning When Human Decisions Matter: Executor-Relative Consultation Value for LLM Agents
+2611.06606,Verifier-Guided Self-Consistency: Test-Time Reasoning with Imperfect Generators and Verifiers
+2611.06806,"Measuring Risk, Not Harm: Detecting Psychological Harm Risk Factors in LLM Conversations"
+2611.07126,Adapting LLM Judges to Observed Human Annotation Policy through Soft Prompt Tuning
+2611.07570,ACSeL: Adaptive Configuration Search for Hardware-Constrained LLM Inference
+2611.07996,SEER: A Scalable Event-Driven Runtime for Parallel Execution of Multi-Agent Reinforcement Learning Environments

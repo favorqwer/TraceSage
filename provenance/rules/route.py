@@ -2,8 +2,8 @@
 
 只在离线规则库构建与留一折循环里使用，RAG 在线路径不调用本模块。
 本文件只决定“调用谁、按什么顺序、结果怎么合并”，不包含任何具体判据：
-- 前置初筛在 `routing/prepare.PreFilter`；
-- 后置剪枝在 `routing/filters.DebrisPrune`；
+- 前置初筛在 `core/prepare.PreFilter`；
+- 后置剪枝在 `core/filters.DebrisPrune`；
 - 符号通道在 `rules/online.py`；
 - 慢速通道在 `llm/judge.py`。
 
