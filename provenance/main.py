@@ -1,4 +1,4 @@
-"""Provenance-Navigator 单场景 CLI：正式 RAG v2 流程。
+"""单场景 CLI：规则证据与技术证据分离检索。
 
 基于功能分层架构（Pipeline & Filters），执行高内聚低耦合的调查流水线：
 - 规则证据：只查蒸馏规则库（Motif/Hop）；
@@ -54,7 +54,7 @@ def _guarded_judge_bundles(model, items, listing, *, budget):
 
 def run_scenario(scenario: str, *, output: str | None = None,
                  fold: str | None = None) -> dict:
-    """执行一个场景的正式 RAG v2 调查。"""
+    """执行一个场景的正式调查。"""
     global _ORIGINAL_JUDGE_BUNDLES
     cfg_obj = _configure_rag()
     fold_path = fold or str(
@@ -82,7 +82,7 @@ def run_scenario(scenario: str, *, output: str | None = None,
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Provenance-Navigator RAG v2：规则证据 + 技术证据"
+        description="provenance 单场景调查：规则证据 + 技术证据"
     )
     parser.add_argument("--scenario", required=True, help="场景全名")
     parser.add_argument("--output", default=None,

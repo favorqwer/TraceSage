@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""把当前 RAG v2 的 10 场景结果写入 provenance-baseline 正式基线。
+"""把当前 10 场景调查结果写入 provenance-baseline 正式基线。
 
 口径说明：10 个场景全部采用高内聚低耦合重构后的标准 Pipeline & Filters 架构，
 使用统一当前提示词口径，全量端到端复测并验证指标零退化。
@@ -164,7 +164,7 @@ def main() -> None:
     caveat = "统一提示词口径：10 个场景使用同一套当前提示词；模块化分层重构后全量端到端验证。"
     summary = {
         "protocol": (
-            "RAG v2：规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）"
+            "规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）"
             "分开检索、分开编号、分开引用校验；留一折库；score_report_product 官方口径"
         ),
         "caveat": caveat,
@@ -194,7 +194,7 @@ def main() -> None:
 
     today = time.strftime("%Y-%m-%d")
     lines = [
-        "# 导航器正式基线（RAG v2）",
+        "# Provenance 正式基线",
         "",
         f"- 写入日期：{today}",
         f"- 代码提交：`{fingerprints['git_commit']}`",
@@ -235,8 +235,8 @@ def main() -> None:
         "| 旧 RAG | 76.93% | 56.70% | 10 场景 |",
         "| 历史 v2 (2026-11-05) | 77.37% | 59.66% | 10 场景，重构前原基线 |",
         f"| 当前 v2 ({today}) | {micro['recall']:.2%} | {micro['precision']:.2%} | 10 场景，高内聚低耦合重构后新基线 |",
-        "| rules | 69.87% | 35.57% | 10 场景 |",
-        "| hybrid | 72.85% | 35.21% | 10 场景 |",
+        "",
+        "已退出的 `rules` / `hybrid` 两种模式实测数字见 `docs/history/provenance-historical-modes.md`。",
         "",
         "## 复现命令",
         "",

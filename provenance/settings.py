@@ -37,7 +37,7 @@ def groundtruth_dir() -> Path:
     return REPO_ROOT / "groundtruth"
 
 def fold_library_dir() -> Path:
-    return REPO_ROOT / "output" / "navigator-baseline" / "distill" / "fold-libraries"
+    return REPO_ROOT / "output" / "provenance-baseline" / "distill" / "fold-libraries"
 
 
 _ENV_PATTERN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")

@@ -1,17 +1,17 @@
 # 场景测试执行手册
 
-**适用范围**：要实际跑图数据导入、导航器评测、引擎测试或评分时读本文件。数据库命名与基线归属见根 `AGENTS.md` 第五部分；评分与汇总口径见 `docs/agents/evaluation-protocol.md`。
+**适用范围**：要实际跑图数据导入、provenance 评测、引擎测试或评分时读本文件。数据库命名与基线归属见根 `AGENTS.md` 第五部分；评分与汇总口径见 `docs/agents/evaluation-protocol.md`。
 
 ## 常用核心工具
 
 | 脚本 | 用途 |
 |---|---|
 | `tools/score_graph_product.py` | 引擎产出 vs 标准答案评分（召回按步骤、查准按四元组，同一条边多次发生只计一次）；产物未内藏 syscall 时按 `-v2` 库反查补全，反查不到即阻断 |
-| `tools/score_report_product.py` | 智能体 / 导航器报告 vs 标准答案评分（与上一条同一口径：召回按步骤、查准按四元组） |
+| `tools/score_report_product.py` | 智能体 / provenance 报告 vs 标准答案评分（与上一条同一口径：召回按步骤、查准按四元组） |
 | `tools/rules_match.py` | 评分公共模块：可能集合规则与端点条件判定，动作名 ↔ syscall 词表 |
 | `tools/run_all_engine_v2.py` | 批量在 `-v2` 库上跑调查引擎并自动评分 |
-| `tools/promote_v2_baseline.py` | 导航器 RAG v2 的 10 场景结果校验后写成正式基线（压缩报告、summary、代码指纹） |
-| `tools/l1_index.py` | 手动建 / 重建导航器第 1 层顶点-时间索引 |
+| `tools/promote_v2_baseline.py` | provenance 的 10 场景结果校验后写成正式基线（压缩报告、summary、代码指纹） |
+| `tools/l1_index.py` | 手动建 / 重建 provenance 第 1 层顶点-时间索引 |
 | `tools/neo4j_desktop_start.*` / `neo4j_desktop_stop.*` | 本机 Neo4j 桌面版启停 |
 
 ## 场景测试标准流程
@@ -26,7 +26,7 @@ python parser/main.py \
   --neo4j-database attack-<场景名小写连字符>-v2
 ```
 
-**导航器评测（RAG v2 单一模式）**：规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）分开检索、分开引用校验；默认取该场景的留一折库。
+**provenance 评测（单一检索方式）**：规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）分开检索、分开引用校验；默认取该场景的留一折库。
 ```bash
 # 单场景正式运行
 python provenance/main.py --scenario <场景全名> \
@@ -35,7 +35,7 @@ python provenance/main.py --scenario <场景全名> \
 # 离线规则库维护（仅重建折库、核对覆盖表时使用，不参与日常评测）
 python provenance/run_loo_folds.py --mode rules --out output/provenance-runs/loo --keep-reports tmp/loo_rules_reports
 ```
-单场景报告默认写 `output/provenance-runs/<场景全名>_rag.json`。rules / hybrid / llm-only 运行模式已退出导航器入口。
+单场景报告默认写 `output/provenance-runs/<场景全名>_rag.json`。
 
 **引擎测试（当次运行，不写基线）：**
 ```bash
@@ -56,7 +56,7 @@ python tools/score_graph_product.py output/engine-runs/<场景全名>/baseline.j
   --database attack-<场景名小写连字符>-v2
 ```
 
-导航器 / 智能体报告：
+provenance / 智能体报告：
 ```bash
 python tools/score_report_product.py --report output/provenance-runs/<场景全名>.json \
   --gt groundtruth/<场景全名>.groundtruth.json

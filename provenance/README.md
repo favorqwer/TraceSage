@@ -1,8 +1,8 @@
-# Provenance: 规则证据与技术证据的溯源图 RAG 导航
+# Provenance: 规则证据与技术证据的溯源图调查
 
 ## 1. 当前正式方案
 
-导航器运行时只有一个模式：**RAG v2**。
+运行时只有一种检索方式：规则证据与技术证据分开检索、分开编号、分开引用校验。
 
 对每个候选束，系统同时检索两段独立证据：
 
@@ -101,20 +101,29 @@ Neo4j 场景图
 
 ```text
 provenance/
-├── main.py                 # 单场景 CLI：RAG v2
+├── main.py                 # 单场景 CLI
 ├── settings.py             # 配置、场景、路径、判据表加载
 ├── run_loo_folds.py        # 留一折循环（离线）
-├── navigator/              # 在线运行时包
-│   ├── pipeline.py         # 主流程：闭包 → 束划分 → 证据 → 判定 → 报告
+├── core/                   # 在线运行时：七阶段流水线
+│   ├── runner.py           # 装配七个阶段并依次执行
+│   ├── stages/             # s1 闭包 → s2 初筛 → s3 证据 → s4 判定
+│   │                       #   → s5 公理补全 → s6 剪枝 → s7 报告
+│   ├── context.py          # 流水线上下文与配置
+│   ├── prepare.py          # 静态只读初筛
+│   ├── filters.py          # 后置碎屑剪枝
+│   ├── axioms.py           # 因果公理补全与纯化
+│   ├── clustering.py       # 五级束划分
+│   ├── bundling.py         # 束划分与结构闸门统一出口
+│   ├── gates.py            # 四道结构闸门与调查状态机
 │   ├── decoder.py          # 基模解码
 │   ├── render.py           # 规则证据 + 技术证据两段渲染
-│   └── guard.py            # 规则/技术引用守卫
+│   └── reporting.py        # 报告结构与导出
 ├── closure/                # 反向闭包抽取
 ├── domain/                 # 边、候选池、角色分类
 ├── llm/                    # 束判定、模型接入、结论解析
-├── routing/                # 在线：prepare / filters / report
 ├── rules/                  # 在线：library / online / roles
 │                           # 离线：offline / admission / coverage / legacy_roles
+│                           #   + assembly / route / channels（离线 LOO 装配与模式表）
 ├── rag/                    # 证据检索与规则知识库
 │   ├── graph_retrieve.py   # retrieve_rules / retrieve_techniques
 │   ├── neo4j_kg.py         # Rule KG 入库
@@ -122,10 +131,6 @@ provenance/
 │   ├── stats.py            # 逐规则训练折统计
 │   ├── attack.py、link.py、schema.py
 │   └── legacy/             # 向量实验：embed / index / rerank / query，主路径不调用
-├── distill/                # 离线装配与模式路由
-│   ├── assembly.py         # 单次离线调查装配
-│   ├── route.py            # rules / hybrid / llm-only 模式表
-│   └── channels.py         # 离线路由促进通道
 ├── config/                 # 场景、提示词、行为观测种子
 ├── tests/
 │   ├── foundation/         # unittest 单元测试
@@ -138,10 +143,10 @@ provenance/
 - `provenance/tools/`：随包分发的脚本，直接 `python provenance/tools/<脚本>` 执行；
 - 仓库根 `tools/`：评测、评分、库维护与一次性诊断，跨组件，不随包走。
 
-在线闭包只经过 `main.py`、`navigator/`、`closure/`、`domain/`、`llm/`、
-`routing/prepare|filters|report`、`rules/library|online|roles`、
-`rag/graph_retrieve|neo4j_kg`、`settings.py`。`distill/`、`rules/offline.py`、
-`rag/legacy/` 与 `run_loo_folds.py` 不在在线路径上。
+在线闭包只经过 `main.py`、`core/`、`closure/`、`domain/`、`llm/`、
+`rules/library|online|roles`、`rag/graph_retrieve|neo4j_kg`、`settings.py`。
+`rules/offline.py`、`rules/assembly|route|channels`、`rag/legacy/` 与
+`run_loo_folds.py` 不在在线路径上。
 
 ## 7. 快速开始
 
@@ -187,6 +192,6 @@ provenance/
 7. **折库来自 9 个训练场景。** 规则库覆盖范围受训练场景限制；未命中的行为不等于没有攻击。
 8. **当前基线为单次运行。** 没有重复运行，波动范围未知。
 
-## 10. 历史说明
+## 10. 离线代码归属
 
-旧的 `rules`、`hybrid`、`llm-only` 运行模式已退出导航器入口。离线蒸馏代码（`rules/offline.py`、`admission.py`、`coverage.py`、`roles.py`、`library.py`、`run_loo_folds.py`）保留，用于构建折库和规则 KG；`distill/assembly.py`、`distill/route.py`、`distill/channels.py` 仅保留给离线 LOO，不在 RAG 运行时路径上。
+离线蒸馏代码（`rules/offline.py`、`admission.py`、`coverage.py`、`roles.py`、`library.py`、`run_loo_folds.py`）保留，用于构建折库和规则 KG。`rules/assembly.py`、`rules/route.py`、`rules/channels.py` 仅服务离线留一折循环，不在在线路径上。历史模式实测数字见 [`docs/history/provenance-historical-modes.md`](../docs/history/provenance-historical-modes.md)。
