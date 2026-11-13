@@ -329,13 +329,21 @@ def main() -> None:
                     help="vertex label scheme: L_A=process basename, L_B=process type only, "
                          "L_C=process+network type only")
     ap.add_argument("--scenario", action="append", default=None)
+    ap.add_argument("--extra", action="append", default=None,
+                    help="name=parser-subdir, added on top of SCENARIOS")
     args = ap.parse_args()
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     wanted = set(args.scenario) if args.scenario else None
     summary = []
-    for scenario, dirname in SCENARIOS:
+    targets = list(SCENARIOS)
+    for item in args.extra or []:
+        name, _, sub = item.partition("=")
+        if not name or not sub:
+            raise SystemExit(f"--extra expects name=subdir, got {item!r}")
+        targets.append((name, sub))
+    for scenario, dirname in targets:
         if wanted and scenario not in wanted:
             continue
         built, _ = build_scenario(scenario, dirname, args.scheme)
