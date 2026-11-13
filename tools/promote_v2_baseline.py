@@ -69,9 +69,18 @@ FINGERPRINT_FILES = [
     "provenance/rules/library.py",
     "provenance/rules/online.py",
     "provenance/rules/assembly.py",
-    "provenance/config/prompts/judge_bundle_rag.md",
+    "provenance/config/prompts/system_judge.md",
+    "provenance/config/prompts/task_scope.md",
+    "provenance/config/prompts/listing_bundles.md",
+    "provenance/config/prompts/listing_sample_edge.md",
+    "provenance/config/prompts/listing_context.md",
+    "provenance/config/prompts/evidence_rule.md",
+    "provenance/config/prompts/evidence_tech.md",
+    "provenance/config/prompts/output_repair.md",
     "provenance/config/attack-observables.seed.json",
 ]
+
+PROMPT_FILES = [p for p in FINGERPRINT_FILES if "/config/prompts/" in p]
 
 
 def sha256_file(path: Path) -> str:
@@ -79,6 +88,15 @@ def sha256_file(path: Path) -> str:
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
+    return h.hexdigest()
+
+
+def sha256_prompts() -> str:
+    """全部提示词文件的合并指纹：任一文件的文字改动都会改变它。"""
+    h = hashlib.sha256()
+    for rel in sorted(PROMPT_FILES):
+        h.update(rel.encode("utf-8"))
+        h.update(sha256_file(ROOT / rel).encode("utf-8"))
     return h.hexdigest()
 
 
@@ -186,8 +204,7 @@ def main() -> None:
     fingerprints = {
         "git_commit": git_commit,
         "files": {str(p): sha256_file(ROOT / p) for p in FINGERPRINT_FILES if (ROOT / p).exists()},
-        "prompt_sha256": sha256_file(
-            ROOT / "provenance/config/prompts/judge_bundle_rag.md"),
+        "prompt_sha256": sha256_prompts(),
     }
     (baseline / "code-fingerprints.json").write_text(
         json.dumps(fingerprints, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

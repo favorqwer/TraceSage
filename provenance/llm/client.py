@@ -412,6 +412,8 @@ def call_json(
         messages = [
             SystemMessage(content=system),
             HumanMessage(content=user),
-            HumanMessage(content=f"上一次输出无法解析为 JSON（{last_error}）。只输出一个 JSON 对象，不要任何解释或代码块标记。"),
+            HumanMessage(content=cfg.render_prompt(
+                "output_repair.md", ERROR=last_error,
+                REASON_MAX_CHARS=str(cfg.reason_max_chars()))),
         ]
     return {"_raw_ok": False, "_error": last_error, "_transport": False}

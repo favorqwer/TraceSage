@@ -86,8 +86,9 @@ def _fmt_precision(value: Any) -> str:
 def _rule_lines(item: Dict[str, Any], ranked: List[Dict[str, Any]],
                 total: int) -> List[str]:
     if not ranked:
-        return ["    【规则证据】本束没有规则证据"]
-    lines = [f"    【规则证据】(本束成员 {item.get('size')} 条，命中 {total} 条规则)"]
+        return [cfg.render_section("evidence_rule.md", "empty")]
+    lines = [cfg.render_section("evidence_rule.md", "header",
+                                SIZE=item.get('size'), TOTAL=total)]
     item["_rule_ids"] = []
     item["_rule_evidence"] = {}
     for idx, rec in enumerate(ranked, 1):
@@ -110,30 +111,35 @@ def _rule_lines(item: Dict[str, Any], ranked: List[Dict[str, Any]],
         }
         aligns = []
         if rec["exact"]:
-            aligns.append(f"精确对齐 {rec['exact']} 条")
+            aligns.append(cfg.render_section("evidence_rule.md", "align_exact", COUNT=rec['exact']))
         if rec["partial"]:
-            aligns.append(f"部分对齐 {rec['partial']} 条")
+            aligns.append(cfg.render_section("evidence_rule.md", "align_partial", COUNT=rec['partial']))
         if rec.get("entry_source") == "structure":
-            aligns.append(f"结构走通 {rec.get('structure')}/{rec.get('hops_total')} 跳")
-        lines.append(
-            f"      {rid} | {mid} | {' | '.join(aligns)} | "
-            f"训练折查准 {_fmt_precision(m.get('precision'))} | "
-            f"攻击/背景/忽略 {int(m.get('attack_hits') or 0)}/"
-            f"{int(m.get('background_hits') or 0)}/{int(m.get('ignore_hits') or 0)} | "
-            f"支持场景 {len(m.get('support_scenarios') or [])} 个")
+            aligns.append(cfg.render_section("evidence_rule.md", "align_structure",
+                                             DONE=rec.get('structure'), TOTAL=rec.get('hops_total')))
+        lines.append(cfg.render_section(
+            "evidence_rule.md", "row", RID=rid, MOTIF=mid,
+            ALIGNS=" | ".join(aligns), PRECISION=_fmt_precision(m.get('precision')),
+            ATTACK=int(m.get('attack_hits') or 0),
+            BACKGROUND=int(m.get('background_hits') or 0),
+            IGNORE=int(m.get('ignore_hits') or 0),
+            SCENARIOS=len(m.get('support_scenarios') or [])))
         for hop in sorted(g.get("hops") or [], key=lambda h: int(h.get("index") or 0)):
             hop_syscalls = str(hop.get("syscall") or "").split("+")
-            mark = "  [与束系统调用一致]" if str(item.get("syscall") or "") in hop_syscalls else ""
-            lines.append(f"        hop{hop.get('index')}: {hop.get('src_role')} "
-                         f"--{hop.get('syscall')}--> {hop.get('dst_role')}{mark}")
+            mark = (cfg.render_section("evidence_rule.md", "hop_mark")
+                    if str(item.get("syscall") or "") in hop_syscalls else "")
+            lines.append(cfg.render_section(
+                "evidence_rule.md", "hop", INDEX=hop.get('index'), SRC_ROLE=hop.get('src_role'),
+                SYSCALL=hop.get('syscall'), DST_ROLE=hop.get('dst_role'), MARK=mark))
     return lines
 
 
 def _tech_lines(item: Dict[str, Any], ranked: List[Dict[str, Any]],
                 total: int) -> List[str]:
     if not ranked:
-        return ["    【技术证据】本束没有技术证据"]
-    lines = [f"    【技术证据】(本束成员 {item.get('size')} 条，命中 {total} 个技术)"]
+        return [cfg.render_section("evidence_tech.md", "empty")]
+    lines = [cfg.render_section("evidence_tech.md", "header",
+                                SIZE=item.get('size'), TOTAL=total)]
     item["_tech_ids"] = []
     item["_tech_evidence"] = {}
     for idx, rec in enumerate(ranked, 1):
@@ -146,14 +152,18 @@ def _tech_lines(item: Dict[str, Any], ranked: List[Dict[str, Any]],
             "confidence": float(rec["confidence"]),
         }
         tactics = "、".join(rec.get("tactics") or [])
-        title = f"      {eid} | {rec['attack_id']} | {rec.get('name') or ''}"
-        if tactics:
-            title += f" | 战术 {tactics}"
-        lines.append(title)
-        lines.append("        命中条件：" + "；".join(rec["strong_conditions"]))
-        verified = "含已核验观测" if rec["verified"] else "未人工核验"
-        lines.append(f"        观测置信度 {float(rec['confidence']):.2f}"
-                     f"（人工设定，{verified}）")
+        lines.append(cfg.render_section(
+            "evidence_tech.md", "row", EID=eid, ATTACK_ID=rec['attack_id'],
+            NAME=rec.get('name') or '',
+            TACTICS=cfg.render_section("evidence_tech.md", "tactics", TACTICS=tactics)
+            if tactics else ""))
+        lines.append(cfg.render_section("evidence_tech.md", "conditions",
+                                        CONDITIONS="；".join(rec["strong_conditions"])))
+        verified = cfg.render_section(
+            "evidence_tech.md", "verified_ok" if rec["verified"] else "verified_none")
+        lines.append(cfg.render_section("evidence_tech.md", "confidence",
+                                        CONFIDENCE=f"{float(rec['confidence']):.2f}",
+                                        VERIFIED=verified))
     return lines
 
 
@@ -287,11 +297,13 @@ def _context_lines(item: Dict[str, Any]) -> List[str]:
     parents = sorted({parent_map[p] for p in (item.get("programs") or []) if p in parent_map})
     lines: List[str] = []
     if parents:
-        lines.append("    【上游执行环境】父进程: " + ", ".join(parents[:4]))
+        lines.append(cfg.render_section("listing_context.md", "process",
+                                        PARENTS=", ".join(parents[:4])))
     parent = item.get("parent") or {}
     if parent.get("verdict"):
-        lines.append(f"    【父束】{parent.get('bid')} 判定 {parent.get('verdict')}；"
-                     f"{str(parent.get('reason') or '')[:60]}")
+        lines.append(cfg.render_section(
+            "listing_context.md", "parent", BID=parent.get('bid'),
+            VERDICT=parent.get('verdict'), REASON=str(parent.get('reason') or '')[:60]))
     return lines
 
 

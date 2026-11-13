@@ -46,7 +46,6 @@ from core.bundling import (  # noqa: F401
     BundleState,
     anchor_facts,
     fanout_split,
-    homogeneity_guard,
     hot_guard,
     is_leaf,
     vacuous_ids,
@@ -71,20 +70,9 @@ VERDICT_TEXT = {
 # 判定结论映射到三段来路的字典
 TIERS = {"all": "confirmed", "none": "excluded"}
 
-AGG_NOTE = """
-本批开头可能有两张**共享表**，束行里用 C 编号 / P 编号引用它们：
-- 「同类规模」表：本批涉及的每个对象类别下一共有多少个束、中位成员数；束行的「规模」行里给出本束
-  在该类别里按成员数的排名与百分位。体量大本身不等于攻击（批量维护、包管理器、日志轮转都会很大）；
-  但当"体量在同类里靠前 + 程序角色可疑 + 时间贴着攻击链"同时出现时，
-  不要因为程序看着例行就整批判无关。
-- 「上一级束」表：本批子束是从哪个更大的束拆出来的（程序、动作、成员数、总字节、对象个数、判定与理由）；
-  束行的「上一级：P*」就是引用它。拆分不会让成员变多：上一级有上百条成员、命中同一个对端主机、
-  字节量很大这类事实在本束仍然有效，不要因为本束只剩一两条成员就把上一级的事实丢掉。
-"""
-
 # 提示词系统模板
-BUNDLE_SYSTEM = cfg.load_prompt("judge_bundle.md").replace(
-    "{REASON_MAX_CHARS}", str(cfg.reason_max_chars())
+BUNDLE_SYSTEM = cfg.render_prompt(
+    "system_judge.md", REASON_MAX_CHARS=str(cfg.reason_max_chars())
 )
 
 # 观测钩子：默认关闭；实验入口设置后，逐批把「束元数据 + 完整提示词 + 原始结论」交给 sink。
@@ -130,11 +118,16 @@ def fmt_bytes(value: Any) -> str:
 def edge_line(mid: str, record: dict[str, Any], ref_t: int) -> str:
     """将一条样本边格式化为紧凑行。"""
     members = sorted(record.get("member_processes") or [])
-    return (f"    {mid} [进程 {members[0] if members else '?'}]"
-            f" [{record.get('src_label')}] {short(record.get('src'), 70)} --{record.get('syscall')}-->"
-            f" [{record.get('dst_label')}] {short(record.get('dst'), 70)}"
-            f"（折叠事件数 {record.get('instances')}，字节 {record.get('bytes')}，"
-            f"时间 {rel_time(record.get('t0'), ref_t)}）")
+    return cfg.render_prompt(
+        "listing_sample_edge.md",
+        MID=mid, PROCESS=members[0] if members else "?",
+        SRC_LABEL=record.get("src_label"), SRC=short(record.get("src"), 70),
+        SYSCALL=record.get("syscall"),
+        DST_LABEL=record.get("dst_label"), DST=short(record.get("dst"), 70),
+        INSTANCES=record.get("instances"), BYTES=record.get("bytes"),
+        TIME=rel_time(record.get("t0"), ref_t),
+        DIST=record.get("dist"), VIA=short(record.get("via"), 30) or "终点事件",
+    )
 
 
 def build_task_header(poi_rows: list[dict[str, Any]]) -> str:
@@ -150,23 +143,16 @@ def build_task_header(poi_rows: list[dict[str, Any]]) -> str:
     if other_label == "Network":
         protocol = str(row.get("other_protocol") or "").strip()
         if protocol:
-            other = f"{other}（{protocol}）"
+            other = other + cfg.render_section("task_scope.md", "network_suffix",
+                                                PROTOCOL=protocol)
     syscall = str(row.get("syscall") or "")
     src, _syscall, dst, _src_label = content_triple_of(rel, syscall, owner, other)
     t0 = min(int(r.get("starttime") or 0) for r in poi_rows)
-    return "\n".join([
-        "## 本次调查的任务",
-        "- 目标事件（本次调查的终点，往回追的起点）：",
-        f"  [{src_label}] {src} --{syscall}--> [{dst_label}] {dst}",
-        f"- 目标事件发生次数：{len(poi_rows)} 次；时间原点（最早一次发生的时刻）＝ {t0} 纳秒"
-        "（下面进程表与边行里的时间都是相对这个原点算出的秒数）",
-        "- 调查方向：只找**可能属于攻击路径**的上游活动（判断标准见系统说明）；目标事件本身也在清单里。",
-        "- 调查方式：从目标事件出发，一层一层往回走；这一轮给你的不是单条边，而是**束**"
-        "（同一程序、同一动作、同一类对象上的一批边）。",
-        "- 相对时间的正负号：负号表示早于目标事件，正号表示晚于它。",
-        "- 清单口径：清单 = 从目标事件往回走收集到的边，再按（源内容、操作名、目标内容）折叠；"
-        "一条边可能代表多个折叠事件；清单之外没有需要判断的边。",
-    ])
+    return cfg.render_section(
+        "task_scope.md", "body",
+        SRC_LABEL=src_label, SRC=src, SYSCALL=syscall, DST_LABEL=dst_label, DST=dst,
+        COUNT=len(poi_rows), T0=t0,
+    )
 
 
 def _parent_of(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -194,22 +180,27 @@ def _batch_tables(items: list[dict[str, Any]], scale_index: dict[str, dict[str, 
                 parents[bid] = parent
     lines: list[str] = []
     if class_ids:
-        lines.append("### 同类规模（本批涉及的类别；束行「规模」行里的 C 编号引用这里）")
+        lines.append(cfg.render_section("listing_bundles.md", "class_header"))
         for cls, cid in sorted(class_ids.items(), key=lambda kv: kv[1]):
             info = scale_index.get(cls) or {}
-            lines.append(f"{cid} {short(cls, 46)}｜共 {info.get('n', 0)} 个束"
-                         f"（中位 {info.get('median', 0)} 条）")
+            lines.append(cfg.render_section(
+                "listing_bundles.md", "class_row", CID=cid, CLASS=short(cls, 46),
+                COUNT=info.get("n", 0), MEDIAN=info.get("median", 0)))
         lines.append("")
     if parent_ids:
-        lines.append("### 上一级束（本批子束拆自这些束；束行「上一级：P*」引用这里）")
+        lines.append(cfg.render_section("listing_bundles.md", "parent_header"))
         for bid, pid in sorted(parent_ids.items(), key=lambda kv: kv[1]):
             parent = parents.get(bid) or {}
-            lines.append(
-                f"{pid} {short(' / '.join(parent.get('programs') or []) or '(无属主)', 40)}"
-                f" {parent.get('syscall', '')}｜{parent.get('size', 0)} 条／{fmt_bytes(parent.get('bytes', 0))}"
-                f"／{parent.get('objects_n', 0)} 个对象"
-                f"｜判定 {VERDICT_TEXT.get(parent.get('verdict'), parent.get('verdict'))}"
-                f"｜{short(parent.get('reason', ''), 50) or '(未给理由)'}")
+            lines.append(cfg.render_section(
+                "listing_bundles.md", "parent_row",
+                PID=pid,
+                PROGRAMS=short(" / ".join(parent.get("programs") or [])
+                               or cfg.render_section("listing_bundles.md", "no_owner"), 40),
+                SYSCALL=parent.get("syscall", ""), SIZE=parent.get("size", 0),
+                BYTES=fmt_bytes(parent.get("bytes", 0)), OBJECTS=parent.get("objects_n", 0),
+                VERDICT=VERDICT_TEXT.get(parent.get("verdict"), parent.get("verdict")),
+                REASON=short(parent.get("reason", ""), 50)
+                or cfg.render_section("listing_bundles.md", "no_reason")))
         lines.append("")
     return lines, class_ids, parent_ids, parents
 
@@ -221,14 +212,16 @@ def _extra_lines(item: dict[str, Any], class_ids: dict[str, str], parent_ids: di
     stats = scale_stats(scale_index, cls, item["size"]) if cls else None
     tail = ""
     if stats and cls in class_ids:
-        tail = f"；同类 {class_ids[cls]} 第 {stats['rank']}（前 {stats['pct']}%）"
-    lines = [f"    规模：成员 {item['size']} 条／{fmt_bytes(item['bytes'])}／"
-             f"不同对象 {item['objects_n']} 个{tail}"]
+        tail = cfg.render_section("listing_bundles.md", "scale_class_tail",
+                                  CLASS=class_ids[cls], RANK=stats['rank'], PCT=stats['pct'])
+    lines = [cfg.render_section(
+        "listing_bundles.md", "scale", SIZE=item["size"], BYTES=fmt_bytes(item["bytes"]),
+        OBJECTS=item["objects_n"], CLASS_TAIL=tail)]
     parent = _parent_of(item)
     if parent:
         pid = parent_ids.get(str(parent.get("bid") or "?"))
         if pid:
-            lines.append(f"    上一级：{pid}")
+            lines.append(cfg.render_section("listing_bundles.md", "parent", PARENT_ID=pid))
     return lines
 
 
@@ -240,7 +233,8 @@ def render(items: list[dict[str, Any]], records: dict[Any, Any], ref_t: int, *,
     parts: list[str] = []
     if header:
         parts.extend([header, ""])
-    parts.append(f"## 本批要判的束（{len(items)} 个，来自层级「{level_name}」）")
+    parts.append(cfg.render_section("listing_bundles.md", "head",
+                                    COUNT=len(items), LEVEL=level_name))
     parts.append("")
     class_ids: dict[str, str] = {}
     parent_ids: dict[str, str] = {}
@@ -249,9 +243,13 @@ def render(items: list[dict[str, Any]], records: dict[Any, Any], ref_t: int, *,
         parts.extend(tables)
     lines = parts
     for item in items:
-        lines.append(f"{item['id']}｜程序 {short(' / '.join(item['programs']) or '(无属主)')}"
-                     f"｜动作 {'+'.join(item['rels'])} {item['syscall']}"
-                     f"｜对象目录 {short(' / '.join(item['dirs']) or '(无)')}｜成员 {item['size']} 条")
+        lines.append(cfg.render_section(
+            "listing_bundles.md", "bundle", ID=item["id"],
+            PROGRAMS=short(" / ".join(item["programs"])
+                           or cfg.render_section("listing_bundles.md", "no_owner")),
+            RELS="+".join(item["rels"]), SYSCALL=item["syscall"],
+            DIRS=short(" / ".join(item["dirs"])
+                       or cfg.render_section("listing_bundles.md", "no_dir")), SIZE=item["size"]))
         if aggregate:
             lines.extend(_extra_lines(item, class_ids, parent_ids, scale_index))
         if annotate and state is not None:
@@ -260,21 +258,25 @@ def render(items: list[dict[str, Any]], records: dict[Any, Any], ref_t: int, *,
             if hot_dirs or hot_programs:
                 bits = []
                 if hot_dirs:
-                    bits.append("对象类别 " + "、".join(
-                        f"{d}（已判相关的束里出现 {state.mark_dirs[d]} 次）" for d in hot_dirs[:3]))
+                    bits.append("、".join(
+                        cfg.render_section("listing_bundles.md", "clue_dir",
+                                           DIR=d, COUNT=state.mark_dirs[d]) for d in hot_dirs[:3]))
                 if hot_programs:
-                    bits.append("本束程序 " + "、".join(
-                        f"{p}（已判相关的束里出现 {state.mark_programs[p]} 次）" for p in hot_programs[:2]))
-                lines.append("    线索：" + "；".join(bits) + "——这些痕迹与已判相关的活动重合，"
-                             "若本束样本与它们同类，倾向相关；若明显是例行对象，仍可判无关。")
+                    bits.append("、".join(
+                        cfg.render_section("listing_bundles.md", "clue_program",
+                                           PROGRAM=p, COUNT=state.mark_programs[p]) for p in hot_programs[:2]))
+                lines.append(cfg.render_section("listing_bundles.md", "clue",
+                                                BITS="；".join(bits)))
         for cmdline in item["cmdlines"]:
-            lines.append(f"    命令行：{short(cmdline, 140)}")
+            lines.append(cfg.render_section("listing_bundles.md", "cmdline",
+                                            CMDLINE=short(cmdline, 140)))
         for index, triple in enumerate(item["sample"]):
             lines.append(edge_line(f"M{index + 1}", records[triple], ref_t))
         if item["size"] > len(item["sample"]):
-            lines.append(f"    （还有 {item['size'] - len(item['sample'])} 条成员未列出，样本覆盖不同对象）")
+            lines.append(cfg.render_section("listing_bundles.md", "unlisted",
+                                            COUNT=item["size"] - len(item["sample"])))
         lines.append("")
-    lines.append("请按系统说明对每个束给出四值判定；每个 id 原样回抄。")
+    lines.append(cfg.render_section("listing_bundles.md", "tail"))
     return chr(10).join(lines)
 
 
@@ -416,10 +418,7 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
         stats["calls"] += batch_stats["calls"]
         stats["missing_bundles"] += batch_stats["missing"]
 
-        # 结构后置闸门：同质性约束、类一致性约束与误杀凭证校验
-        if cfg.homogeneity_guard_enabled():
-            stats["guards"].setdefault("homogeneity", 0)
-            stats["guards"]["homogeneity"] += homogeneity_guard(items, verdicts)
+        # 结构后置闸门：类一致性约束与误杀凭证校验
         if cfg.none_guard() == "hot":
             stats["guards"]["hot"] += hot_guard(items, verdicts)
         warrant_facts: dict[str, dict[str, Any]] = {}
@@ -512,8 +511,6 @@ def _resolve_item_verdict(item: dict[str, Any], row: dict[str, Any] | None,
 
     if (row or {}).get("_guard"):
         reason = f"（类一致性闸门：{row['_guard']}）" + reason
-    if (row or {}).get("_homogeneity"):
-        reason = f"（同质性闸门：{row['_homogeneity']}）" + reason
     if (row or {}).get("_warrant"):
         reason = f"（凭证闸门：{row['_warrant']}）" + reason
     if is_leaf(item, verdict, last_level, fanout_min):
@@ -585,7 +582,7 @@ class LlmJudge:
 
         stats: Dict[str, Any] = {
             "candidates": len(triples_to_judge), "calls": 0, "seconds": 0.0, "levels": [],
-            "guards": {"vacuous": 0, "fanout": {"bundles": 0, "edges": 0}, "hot": 0, "warrant": 0, "homogeneity": 0},
+            "guards": {"vacuous": 0, "fanout": {"bundles": 0, "edges": 0}, "hot": 0, "warrant": 0},
             "cap_kept_edges": 0, "missing_bundles": 0,
         }
         detail: List[Dict[str, Any]] = []

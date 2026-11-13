@@ -78,24 +78,5 @@ class GuardTest(unittest.TestCase):
         self.assertFalse(guards.is_leaf(item("B0004", 1, parent=False), "unknown",
                                         last_level=False, fanout_min=1))
 
-    def test_homogeneity_guard(self) -> None:
-        items = [
-            item("B0002", 5, dirs=("/etc", "/tmp"), level=0),
-            item("B0003", 5, dirs=("/etc",), level=0),
-            item("B0004", 5, dirs=("/etc", "/tmp"), level=2),
-        ]
-        verdicts = {
-            "B0002": {"verdict": "all"},
-            "B0003": {"verdict": "all"},
-            "B0004": {"verdict": "all"},
-        }
-        downgraded = guards.homogeneity_guard(items, verdicts)
-        self.assertEqual(downgraded, 1)
-        self.assertEqual(verdicts["B0002"]["verdict"], "mixed")
-        self.assertIn("跨2个不同目录", verdicts["B0002"]["_homogeneity"])
-        self.assertEqual(verdicts["B0003"]["verdict"], "all")
-        self.assertEqual(verdicts["B0004"]["verdict"], "all")
-
-
 if __name__ == "__main__":
     unittest.main()

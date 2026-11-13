@@ -25,8 +25,8 @@ from core.runner import InvestigationRunner  # noqa: E402
 
 
 def _configure_rag() -> PipelineConfig:
-    judge_mod.BUNDLE_SYSTEM = cfg.load_prompt("judge_bundle_rag.md").replace(
-        "{REASON_MAX_CHARS}", str(cfg.reason_max_chars()))
+    judge_mod.BUNDLE_SYSTEM = cfg.render_prompt(
+        "system_judge.md", REASON_MAX_CHARS=str(cfg.reason_max_chars()))
     return PipelineConfig(
         variant="v5_rag_hier",
         use_motif_evidence=False,

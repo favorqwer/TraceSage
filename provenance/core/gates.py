@@ -114,27 +114,6 @@ def warrant_guard(items: list[dict[str, Any]], verdicts: dict[str, dict[str, Any
     return downgraded, facts_by_id
 
 
-def homogeneity_guard(items: list[dict[str, Any]], verdicts: dict[str, dict[str, Any]]) -> int:
-    """对象同质性闸门：当粗粒度束（Level < 2）包含跨多个不同目录/命名空间的对象时（len(all_dirs) > 1），
-    4 条样本无法代表全体异质对象的攻击性；
-    即使模型给出 all，也降级为 mixed，强制向下拆分至对象目录/命名空间级，
-    让模型分别对各个具体的对象命名空间独立审决。
-    """
-    downgraded = 0
-    for item in items:
-        if item.get("level", 0) >= 2:
-            continue
-        all_dirs = item.get("all_dirs") or []
-        if len(all_dirs) <= 1:
-            continue
-        row = verdicts.get(item["id"])
-        if row and str(row.get("verdict", "")).lower() == "all":
-            row["verdict"] = "mixed"
-            row["_homogeneity"] = f"跨{len(all_dirs)}个不同目录"
-            downgraded += 1
-    return downgraded
-
-
 def is_leaf(item: dict[str, Any], verdict: str, last_level: bool, fanout_min: int) -> bool:
     """叶子规则：已是单条边且没有更细级别可拆时，判混杂或判不了直接按未排除保留。"""
     return bool(verdict in ("mixed", "unknown") and not last_level

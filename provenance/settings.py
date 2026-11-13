@@ -245,10 +245,6 @@ def warrant_guard_enabled() -> bool:
     return _pick_bool("bundle", "warrant_guard", True)
 
 
-def homogeneity_guard_enabled() -> bool:
-    return _pick_bool("bundle", "homogeneity_guard", True)
-
-
 def warrant_rules() -> list[str]:
     raw = _raw("bundle", "warrant_rule")
     items = [str(item).strip() for item in str(raw or "deriv,proc").split(",")]
@@ -392,6 +388,57 @@ def load_prompt(name: str) -> str:
     if not target.is_file():
         raise RuntimeError(f"提示词缺失：{target}")
     return target.read_text(encoding="utf-8")
+
+
+_SECTION_MARK = re.compile(r"^@@([a-z][a-z0-9_]*)\s*$", re.M)
+_PLACEHOLDER = re.compile(r"\{([A-Z][A-Z0-9_]*)\}")
+_SECTION_CACHE: dict[str, dict[str, str]] = {}
+
+
+def _prompt_sections(name: str) -> dict[str, str]:
+    """按 `@@名字` 行切分提示词文件；首次读取后缓存。"""
+    if name in _SECTION_CACHE:
+        return _SECTION_CACHE[name]
+    text = load_prompt(name)
+    marks = list(_SECTION_MARK.finditer(text))
+    if not marks:
+        raise RuntimeError(f"提示词缺少分节标记：{name}")
+    if text[:marks[0].start()].strip():
+        raise RuntimeError(f"提示词首个分节标记之前有正文：{name}")
+    out: dict[str, str] = {}
+    for index, mark in enumerate(marks):
+        end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
+        key = mark.group(1)
+        if key in out:
+            raise RuntimeError(f"提示词分节重复：{name} @@{key}")
+        out[key] = text[mark.end():end].strip("\n")
+    _SECTION_CACHE[name] = out
+    return out
+
+
+def _fill_prompt(text: str, values: dict[str, Any], where: str) -> str:
+    """逐个替换 {名字} 占位符；缺值与多余值都直接报错。"""
+    names = set(_PLACEHOLDER.findall(text))
+    missing = sorted(names - set(values))
+    if missing:
+        raise RuntimeError(f"提示词占位符缺值：{where} 缺 {', '.join(missing)}")
+    extra = sorted(set(values) - names)
+    if extra:
+        raise RuntimeError(f"提示词占位符多余：{where} 未使用 {', '.join(extra)}")
+    return _PLACEHOLDER.sub(lambda m: str(values[m.group(1)]), text)
+
+
+def render_prompt(name: str, **values: Any) -> str:
+    """读取整篇提示词（无分节标记）并填充占位符。整篇模板的末尾换行也属于正文。"""
+    return _fill_prompt(load_prompt(name), values, name)
+
+
+def render_section(name: str, section: str, **values: Any) -> str:
+    """按分节名取一段提示词并填充占位符。"""
+    blocks = _prompt_sections(name)
+    if section not in blocks:
+        raise RuntimeError(f"提示词缺分节：{name} @@{section}")
+    return _fill_prompt(blocks[section], values, f"{name} @@{section}")
 
 
 def load_rule_table(name: str) -> Any:

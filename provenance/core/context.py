@@ -24,7 +24,7 @@ class PipelineConfig:
     anchor_pair_confirm: bool = False
     subgraph_evidence: bool = False
     structured_output: bool = False
-    prompt_file: str = "judge_bundle_rag.md"
+    prompt_file: str = "system_judge.md"
 
 
 @dataclass
