@@ -372,6 +372,14 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
     calls_before = stats["calls"]
     level_stats: list[dict[str, Any]] = []
 
+    def remove_confirmed_from_future_levels(confirmed_set: set[Any], from_lvl: int) -> None:
+        for lvl in range(from_lvl, len(levels)):
+            for m in confirmed_set:
+                ckey = key_of[lvl].get(m)
+                if ckey and ckey in levels[lvl]:
+                    if m in levels[lvl][ckey]:
+                        levels[lvl][ckey].remove(m)
+
     def next_id() -> str:
         nonlocal seq
         seq += 1
@@ -380,6 +388,7 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
     for level in range(len(levels)):
         if not frontier:
             break
+        confirmed_before_level = sum(1 for v in inv.origin.values() if v == "confirmed")
         items = build_items(frontier, level, levels, inv.edges, inv.process_context,
                                samples=cfg.bundle_samples(), next_id=next_id,
                                parents=parent_map)
@@ -394,7 +403,8 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
         skipped: set[str] = set()
         ask_items = items
         if cfg.fanout_guard_enabled():
-            ask_items, skipped, fanout_edges = fanout_split(items, vacuous, cfg.bundle_fanout_min())
+            ask_items, skipped, fanout_edges = fanout_split(items, vacuous, cfg.bundle_fanout_min(),
+                                                            records=inv.edges)
             if skipped:
                 stats["guards"]["fanout"]["bundles"] += len(skipped)
                 stats["guards"]["fanout"]["edges"] += fanout_edges
@@ -404,7 +414,7 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
         batches = [ask_items[i:i + cfg.bundle_batch()]
                    for i in range(0, len(ask_items), cfg.bundle_batch())]
         kept_by_cap: list[dict[str, Any]] = []
-        if stats["calls"] + len(batches) > cap_calls:
+        if cap_calls > 0 and stats["calls"] + len(batches) > cap_calls:
             keep = max(0, cap_calls - stats["calls"])
             deps.log(f"    [cap] 调用上限 {cap_calls}；本层只判 {keep}/{len(batches)} 批，其余按保留处理")
             kept_by_cap = [item for batch in batches[keep:] for item in batch]
@@ -434,6 +444,10 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
         children: list[Any] = []
         cap_ids = {item["id"] for item in kept_by_cap}
 
+        # 阶段一：先解析并记录所有条目判定，标记确认边并统计各分支确认增量
+        item_verdicts: list[tuple[dict[str, Any], str, str, set[Any], Any]] = []
+        branch_confirmed_edges: dict[str, int] = {}
+
         for item in items:
             v_info = _resolve_item_verdict(item, verdicts.get(item["id"]), vacuous, skipped, cap_ids,
                                            last == level, cfg.bundle_fanout_min())
@@ -442,7 +456,8 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
 
             note = {"verdict": verdict, "verdict_reason": short(reason)}
             for member in item["members"]:
-                inv.edges[member].update(note)
+                if inv.origin.get(member) != "confirmed":
+                    inv.edges[member].update(note)
 
             detail.append({
                 "pass": pass_no, "level": level, "level_name": level_text, "id": item["id"],
@@ -455,21 +470,69 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
                 **({"warrant_facts": warrant_facts[item["id"]]} if item["id"] in warrant_facts else {}),
             })
 
+            confirmed_witnesses: set[Any] = set()
+            if cfg.witness_guard_enabled() and verdict == "mixed" and witnesses.get("witness_relevant"):
+                raw_w = str(witnesses["witness_relevant"])
+                import re
+                w_matches = re.findall(r"M(\d+)", raw_w)
+                for w_idx_str in w_matches:
+                    try:
+                        w_idx = int(w_idx_str) - 1
+                        if 0 <= w_idx < len(item["sample"]):
+                            w_member = item["sample"][w_idx]
+                            confirmed_witnesses.add(w_member)
+                    except (ValueError, IndexError):
+                        pass
+
+            item_confirmed_n = len(confirmed_witnesses)
+            if confirmed_witnesses:
+                inv.mark(confirmed_witnesses, "confirmed")
+                for w_m in confirmed_witnesses:
+                    inv.edges[w_m].update({
+                        "verdict": "witness_confirmed",
+                        "verdict_reason": f"大模型在混杂束中明确指认为攻击证据 ({short(reason)})",
+                    })
+                w_item = {
+                    "all_dirs": item.get("all_dirs") or [],
+                    "programs": item.get("programs") or [],
+                    "members": list(confirmed_witnesses),
+                    "t0": min(int(inv.edges[m].get("t0") or inv.edges[m].get("starttime") or item["t0"]) for m in confirmed_witnesses),
+                    "t1": max(int(inv.edges[m].get("t1") or inv.edges[m].get("endtime") or item["t1"]) for m in confirmed_witnesses),
+                }
+                state.note_confirmed(w_item, inv.edges)
+                remove_confirmed_from_future_levels(confirmed_witnesses, level + 1)
+
             if verdict == "all":
                 inv.mark(item["members"], "confirmed")
                 state.note_confirmed(item, inv.edges)
+                remove_confirmed_from_future_levels(set(item["members"]), level + 1)
+                item_confirmed_n += len(item["members"])
             elif verdict == "none":
                 inv.mark(item["members"], "excluded")
-            elif verdict in ("mixed", "unknown", "missing"):
+
+            p_bid = (item.get("parent") or {}).get("bid")
+            if p_bid:
+                branch_confirmed_edges[p_bid] = branch_confirmed_edges.get(p_bid, 0) + item_confirmed_n
+
+            item_verdicts.append((item, verdict, reason, confirmed_witnesses, p_bid))
+
+        # 阶段二：处理未确认成员细拆
+        for item, verdict, reason, confirmed_witnesses, p_bid in item_verdicts:
+            if verdict in ("mixed", "unknown", "missing", "vacuous_kept"):
+                unconfirmed_members = [m for m in item["members"]
+                                       if m not in confirmed_witnesses and inv.origin.get(m) != "confirmed"]
                 if last == level:
-                    inv.mark(item["members"], "kept")
+                    if unconfirmed_members:
+                        inv.mark(unconfirmed_members, "kept")
                 else:
-                    for member in item["members"]:
+                    for member in unconfirmed_members:
                         child_key = key_of[level + 1][member]
                         children.append(child_key)
                         parent_map.setdefault(child_key, (item, verdict, reason))
-            else:
-                inv.mark(item["members"], "kept")
+            elif verdict != "all" and verdict != "none":
+                unconfirmed_members = [m for m in item["members"] if inv.origin.get(m) != "confirmed"]
+                if unconfirmed_members:
+                    inv.mark(unconfirmed_members, "kept")
 
         level_stats.append({
             "level": level, "name": level_text, "bundles": len(items), "batches": len(batches),
@@ -480,9 +543,10 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
         deps.log(f"    L{level + 1} 结论：{dict(sorted(counts.items()))}；"
                  f"拆出子束 {len(set(children))} 个；单批最大输入 {batch_stats['chars_max']} 字符")
 
-        frontier = _frontier_order({key: levels[level + 1][key] for key in set(children)
-                                    if level + 1 < len(levels)}, inv.edges, ref_t,
-                                   risk=False) if children else []
+        active_children = {key: levels[level + 1][key] for key in set(children)
+                           if level + 1 < len(levels) and levels[level + 1].get(key)}
+        frontier = _frontier_order(active_children, inv.edges, ref_t,
+                                   risk=False) if active_children else []
 
     return {
         "pass": pass_no, "candidates": len(triples), "calls": stats["calls"] - calls_before,
@@ -587,7 +651,7 @@ class LlmJudge:
         }
         detail: List[Dict[str, Any]] = []
 
-        # 3. 运行束级推进判定（仅针对歧义候选边）
+        # 3. 运行束级推进判定（严格受限于配置的调用上限硬约束）
         pass_res = _judge_pass(
             self.deps, triples_to_judge, keyer=keyer, state=state, inv=inv,
             stats=stats, detail=detail, pass_no=1, cap_calls=self.max_calls

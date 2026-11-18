@@ -39,7 +39,6 @@ def groundtruth_dir() -> Path:
 def fold_library_dir() -> Path:
     return REPO_ROOT / "output" / "provenance-baseline" / "distill" / "fold-libraries"
 
-
 _ENV_PATTERN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
 
 _PROMPT_CACHE: dict[str, str] = {}
@@ -209,7 +208,7 @@ def bundle_samples() -> int:
 
 
 def bundle_cap_calls() -> int:
-    return _pick_int("bundle", "cap_calls", 60, 1)
+    return _pick_int("bundle", "cap_calls", 0, 0)
 
 
 def bundle_fanout_min() -> int:
@@ -226,6 +225,10 @@ def aggregate_enabled() -> bool:
 
 def annotate_marks_enabled() -> bool:
     return _pick_bool("bundle", "annotate_marks", True)
+
+
+def witness_guard_enabled() -> bool:
+    return _pick_bool("bundle", "witness_guard", True)
 
 
 def fanout_guard_enabled() -> bool:

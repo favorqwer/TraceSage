@@ -50,9 +50,40 @@ def vacuous_ids(items: list[dict[str, Any]]) -> set[str]:
     return {item["id"] for item in items if item.get("vacuous")}
 
 
+def _is_critical_single_edge(item: dict[str, Any], records: dict[Any, Any] | None) -> bool:
+    """检查单条边子束是否承载关键执行、网络通信或敏感持久化与凭证修改等特异性语义。"""
+    if not records:
+        return False
+    for triple in item.get("members", []):
+        rec = records.get(triple)
+        if not rec:
+            continue
+        rels = set(rec.get("rels") or ())
+        sc = str(rec.get("syscall") or "")
+        # 1. 进程派生与执行转移
+        if rels & {"spawn"} or sc in {"execve"}:
+            return True
+        # 2. 外部网络端点外联与通信
+        src_label = str(rec.get("src_label") or "")
+        dst_label = str(rec.get("dst_label") or "")
+        if src_label == "Network" or dst_label == "Network" or sc in {"connect"}:
+            return True
+        # 3. 敏感持久化与特权凭证路径的状态修改
+        src = str(rec.get("src") or "")
+        dst = str(rec.get("dst") or "")
+        for path in (src, dst):
+            if any(path.startswith(p) for p in (
+                "/etc/systemd/system", "/lib/systemd/system", "/etc/init.d",
+                "/etc/cron", "/var/spool/cron", "/etc/rc.local",
+                "/etc/shadow", "/etc/passwd", "/etc/sudoers",
+            )):
+                return True
+    return False
+
+
 def fanout_split(items: list[dict[str, Any]], vacuous: set[str], fanout_min: int,
-                 ) -> tuple[list[dict[str, Any]], set[str], int]:
-    """扇出闸门：分离出拆分产生的成员数不超过下限的单条边子束。"""
+                 records: dict[Any, Any] | None = None) -> tuple[list[dict[str, Any]], set[str], int]:
+    """扇出闸门：分离出拆分产生的成员数不超过下限的单条边子束，高危行为单边予以放行。"""
     ask: list[dict[str, Any]] = []
     skipped: set[str] = set()
     edges = 0
@@ -60,8 +91,11 @@ def fanout_split(items: list[dict[str, Any]], vacuous: set[str], fanout_min: int
         if item["id"] in vacuous:
             continue
         if item.get("parent") and item["size"] <= fanout_min:
-            skipped.add(item["id"])
-            edges += int(item["size"])
+            if records and _is_critical_single_edge(item, records):
+                ask.append(item)
+            else:
+                skipped.add(item["id"])
+                edges += int(item["size"])
         else:
             ask.append(item)
     return ask, skipped, edges

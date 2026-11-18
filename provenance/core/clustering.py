@@ -140,11 +140,32 @@ def check_partition(levels: list[dict[tuple, list[tuple]]]) -> dict[str, Any]:
     return out
 
 
-def sample_members(members: list[tuple[str, str, str]], limit: int) -> list[tuple[str, str, str]]:
-    """确定性成员采样：优先覆盖不同对象，保证样本的多样性。"""
+def sample_members(members: list[tuple[str, str, str]], limit: int,
+                   records: dict[Any, Any] | None = None) -> list[tuple[str, str, str]]:
+    """确定性成员采样：优先覆盖写操作与不同对象，保证样本代表性。"""
     picked: list[tuple[str, str, str]] = []
     seen: set[str] = set()
+
+    # 第一轮：若提供记录，优先挑选写文件 (p2f)、写网络 (p2n) 或进程派生 (execve) 的高危边
+    if records:
+        for triple in sorted(members, key=lambda x: (str(x[2]), str(x[0]), str(x[1]))):
+            rec = records.get(triple)
+            if not rec:
+                continue
+            rels = set(rec.get("rels") or ())
+            sc = str(rec.get("syscall") or "")
+            if rels & {"p2f", "p2n", "spawn"} or sc in {"execve", "write", "sendto", "sendmsg", "connect"}:
+                obj_key = str(triple[2])
+                if obj_key not in seen:
+                    seen.add(obj_key)
+                    picked.append(triple)
+                    if len(picked) >= limit:
+                        return picked
+
+    # 第二轮：补充覆盖不同对象
     for triple in sorted(members, key=lambda x: (str(x[2]), str(x[0]), str(x[1]))):
+        if triple in picked:
+            continue
         if str(triple[2]) in seen and len(picked) + (len(members) - len(seen)) > limit:
             continue
         seen.add(str(triple[2]))
@@ -164,7 +185,7 @@ def build_items(keys: list[Any], level: int, levels: list[dict[Any, list[tuple]]
     for key in keys:
         members = levels[level][key]
         rep = records[members[0]]
-        sample = sample_members(members, samples)
+        sample = sample_members(members, samples, records=records)
         dirs, objects = set(), set()
         for triple in sample:
             rec = records[triple]
@@ -176,7 +197,7 @@ def build_items(keys: list[Any], level: int, levels: list[dict[Any, list[tuple]]
         cmdlines = sorted({str((metas.get(str(m)) or {}).get("owner_args") or "")
                            for triple in sample
                            for m in (records[triple].get("member_processes") or ())
-                           if (metas.get(str(m)) or {}).get("owner_args")})[:2]
+                           if (metas.get(str(m)) or {}).get("owner_args")})[:5]
         
         all_dirs = {dir_class(*object_side(records[t]["src"], records[t]["syscall"], records[t]["dst"],
                                            str(records[t].get("src_label") or ""),

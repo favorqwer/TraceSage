@@ -57,6 +57,8 @@ class Investigation:
         if origin not in ("confirmed", "kept", "excluded"):
             raise ValueError(f"未知来路 {origin!r}")
         for key in keys:
+            if origin == "kept" and self.origin.get(key) == "confirmed":
+                continue
             self.origin[key] = origin
 
     def settle(self) -> None:
