@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 TraceSage 核心机制细粒度支撑指标自动化评测与统计工具 (measure_mechanism_metrics.py)
-对 10 个标准场景执行深度物理度量，提取并汇总 8 项支撑指标：
+对 10 个标准场景执行深度物理度量，提取并汇总 7 项支撑指标：
   - 机制 A (行为抽象与前置剪枝)：宏观去噪压缩比、内部候选过滤比、闸门剪枝量、连通主干占比
-  - 机制 B (双轨威胁知识解耦)：微观因果基模库规模、基模命中率、宏观威胁战术映射覆盖
+  - 机制 B (规则知识检索)：微观因果基模库规模、基模命中率
   - 机制 C (后验状态机与安全降级)：四值判决分布、安全降级与保守兜底量、零虚假跳链校验
 """
 
@@ -28,59 +28,6 @@ BASELINE_INPUT_EDGES = {
     "10_Tomcat_Weakcreds_DNS_Exfiltration": 235752,
 }
 
-# MITRE ATT&CK 典型战术阶段与技术映射 (与 RAG 知识检索对齐)
-SCENARIO_ATTACK_MAPPING = {
-    "1_Web_Exploit_Ransomware": [
-        "T1190 (Exploit Public-Facing Application)",
-        "T1486 (Data Encrypted for Impact)",
-        "T1059 (Command and Scripting Interpreter)"
-    ],
-    "2_SSH_Spray_Lateral_Exfiltration": [
-        "T1110.003 (Password Spraying)",
-        "T1021.004 (SSH Lateral Movement)",
-        "T1048 (Exfiltration Over Alternative Protocol)"
-    ],
-    "3_Phishing_Beacon_Cryptomining": [
-        "T1566.001 (Spearphishing Attachment)",
-        "T1071.001 (Web Protocols C2 Beacon)",
-        "T1496 (Resource Hijacking - Cryptomining)"
-    ],
-    "4_Repo_Poisoning_Backdoor": [
-        "T1195.001 (Compromise Software Dependencies)",
-        "T1053.003 (Cron Persistence)",
-        "T1543.002 (Systemd Service Backdoor)"
-    ],
-    "5_Exposed_Service_Pivot": [
-        "T1190 (Exploit Public-Facing Application)",
-        "T1090.001 (Internal Proxy / Pivot)",
-        "T1021.002 (SMB/Lateral Shares)"
-    ],
-    "6_Web_SQLi_Data_Exfiltration": [
-        "T1190 (Exploit Public-Facing Application - SQLi)",
-        "T1005 (Data from Local System)",
-        "T1041 (Exfiltration Over C2 Channel)"
-    ],
-    "7_DB_Bruteforce_Datawipe": [
-        "T1110.001 (Password Guessing - Bruteforce)",
-        "T1485 (Data Destruction)",
-        "T1070.004 (File Deletion Datawipe)"
-    ],
-    "8_FTP_WeakCreds_WebShell_Exfiltration": [
-        "T1078.001 (Default Accounts - FTP)",
-        "T1505.003 (Web Shell Deployment)",
-        "T1048.003 (Exfiltration Over Unencrypted Protocol)"
-    ],
-    "9_Exposed_Container_Escape": [
-        "T1611 (Escape to Host)",
-        "T1610 (Deploy Container)",
-        "T1068 (Exploitation for Privilege Escalation)"
-    ],
-    "10_Tomcat_Weakcreds_DNS_Exfiltration": [
-        "T1078.003 (Local Accounts - Tomcat Manager)",
-        "T1505.003 (Web Shell Payload)",
-        "T1071.004 (DNS Tunneling Exfiltration)"
-    ],
-}
 
 def analyze_scenario(report_path: str, summary_entry: Dict[str, Any]) -> Dict[str, Any]:
     with open(report_path, "r", encoding="utf-8") as f:
@@ -130,10 +77,8 @@ def analyze_scenario(report_path: str, summary_entry: Dict[str, Any]) -> Dict[st
     rules_total = summary_entry.get("rules_total", 0)
     rule_hit_coverage = (len(rules_hit) / rules_total * 100.0) if rules_total > 0 else 100.0
     
-    # 机制 B.5: 宏观威胁本体技术映射
-    techniques = SCENARIO_ATTACK_MAPPING.get(sc_name, [])
     
-    # 机制 C.6: 四值判决分布统计
+    # 机制 C.5: 四值判决分布统计
     v_counts = {"all": 0, "none": 0, "degraded_safe": 0, "other": 0}
     for item in edges + excluded + unexcluded:
         v = item.get("verdict")
@@ -152,11 +97,11 @@ def analyze_scenario(report_path: str, summary_entry: Dict[str, Any]) -> Dict[st
             else:
                 v_counts["other"] += 1
                 
-    # 机制 C.7: 状态机降级与保守兜底频次
+    # 机制 C.6: 状态机降级与保守兜底频次
     # 当判定缺乏确定性引用校验时，触发安全兜底保留
     degradation_frequency = v_counts["degraded_safe"]
     
-    # 机制 C.8: 零虚假跳链物理校验 (Zero False Hops)
+    # 机制 C.7: 零虚假跳链物理校验 (Zero False Hops)
     false_hops = 0
     for e in edges:
         e_ids = e.get("event_ids", [])
@@ -182,7 +127,6 @@ def analyze_scenario(report_path: str, summary_entry: Dict[str, Any]) -> Dict[st
         "rules_hit": rules_hit,
         "rules_total": rules_total,
         "rule_hit_coverage": rule_hit_coverage,
-        "techniques": techniques,
         "llm_calls": stats.get("llm_calls", 0),
         "verdict_all": v_counts["all"],
         "verdict_none": v_counts["none"],

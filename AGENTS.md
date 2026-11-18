@@ -118,7 +118,7 @@ TraceSage/
 | `docs/agents/test-runbook.md` | 图导入 / 溯源 / 引擎 / 评分四类命令与 7 个核心工具的用途 | 要实际跑一次场景测试或评分 |
 | `docs/agents/evaluation-protocol.md` | 基线产物落盘位置、召回与查准口径、多场景合并平均规则 | 出数字、写评测报告、固化或对比基线 |
 | `parser/README.md` | 解析器实现结构、读取后端 `--backend`、快速开始与已知边界 | 改解析逻辑、查后端选择、看字段实现细节 |
-| `provenance/README.md` | 溯源架构、规则与技术证据分离检索、离线蒸馏与规则库重建 | 改溯源、查运行口径与规则库操作 |
+| `provenance/README.md` | 溯源架构、规则证据检索、离线蒸馏与规则库重建 | 改溯源、查运行口径与规则库操作 |
 | `experiments/DEPIMPACT/baseline/README.md` | 引擎基线 runner 的参数、产物与确定性说明 | 跑引擎测试、核对产物格式 |
 | `docs/PROVENANCE_GRAPH_MODELING_AXIOMS.md` | 建模公理与物理工程规矩 | 判断某条建模是否有物理依据 |
 | `docs/Sysdig-User-Guide.md` | Sysdig 完整使用手册 | 查 sysdig 命令行、字段与输出格式 |

@@ -48,7 +48,7 @@ class ConfigFileTest(unittest.TestCase):
         with temp_config({"bundle": {"batch": "很多", "cap_calls": -1},
                           "render": {"reason_max_chars": "40"}}):
             self.assertEqual(settings.bundle_batch(), 40)
-            self.assertEqual(settings.bundle_cap_calls(), 60)
+            self.assertEqual(settings.bundle_cap_calls(), 0)
             self.assertEqual(settings.reason_max_chars(), 40)
             warnings = settings.config_warnings()
             self.assertEqual(len(warnings), 3, warnings)

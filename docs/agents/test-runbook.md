@@ -26,7 +26,7 @@ python parser/main.py \
   --neo4j-database attack-<场景名小写连字符>-v2
 ```
 
-**provenance 评测（单一检索方式）**：规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）分开检索、分开引用校验；默认取该场景的留一折库。
+**provenance 评测（单一检索方式）**：仅检索训练折规则证据（Motif/Hop），校验规则编号、跳号及角色对齐；默认取该场景的留一折库。运行时判定参数由 `provenance/config/navigator.toml` 控制，默认在无上限模式（`cap_calls = 0`，由五级拓扑与结构闸门自收敛终止）下运行；如需限制调用预算可显式配置正整数上限。
 ```bash
 # 单场景正式运行
 python provenance/main.py --scenario <场景全名> \

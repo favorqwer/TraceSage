@@ -1,9 +1,4 @@
-"""单场景 CLI：规则证据与技术证据分离检索。
-
-基于功能分层架构（Pipeline & Filters），执行高内聚低耦合的调查流水线：
-- 规则证据：只查蒸馏规则库（Motif/Hop）；
-- 技术证据：只查 ATT&CK 行为观测（BehaviorObservable/Technique）。
-"""
+"""单场景 CLI：完整调查流程与训练折规则检索。"""
 from __future__ import annotations
 
 import argparse
@@ -82,7 +77,7 @@ def run_scenario(scenario: str, *, output: str | None = None,
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="provenance 单场景调查：规则证据 + 技术证据"
+        description="provenance 单场景调查：规则证据"
     )
     parser.add_argument("--scenario", required=True, help="场景全名")
     parser.add_argument("--output", default=None,

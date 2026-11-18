@@ -329,8 +329,6 @@ def run_batches(deps: Any, items: list[dict[str, Any]], batches: list[list[dict[
                 "programs": item["programs"], "rels": item["rels"],
                 "syscall": item["syscall"], "dirs": item["dirs"],
                 "rag_rule_ids": list(item.get("_rag_rule_ids") or item.get("_rule_ids") or []),
-                "rag_tech_ids": list(item.get("_tech_ids") or []),
-                "rag_tech_weak": list(item.get("_tech_weak") or []),
             } for item in batch],
             "listing": listing,
             "result": result,

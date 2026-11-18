@@ -54,7 +54,7 @@ warrant_rule = "deriv,proc"
 
 [render]
 # 判定理由长度。提示词按这个数字要求模型写理由，代码按同一个数字截断渲染出来的理由，只写这一处。
-reason_max_chars = 60
+reason_max_chars = 120
 
 [logging]
 # 所有只进日志、审计文件、原始输出样本的文字，统一按这个长度截断。

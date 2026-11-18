@@ -1,30 +1,25 @@
-"""层级束渲染钩子：保留 B1 的层级路由，证据分成规则证据和技术证据两段。
-
-- 规则证据：只来自蒸馏规则库（Motif/Hop），按精确/部分对齐排序；
-- 技术证据：只来自 BehaviorObservable/Technique，T-强注入，T-弱只记录；
-- 两类证据各自编号（R / E），不合并、不互相转化。
-"""
+"""层级束渲染：只检索和渲染训练折规则证据。"""
 from __future__ import annotations
 
 import json
 import os
 import threading
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import settings as cfg
 from rag.graph_retrieve import RuleGraphRetriever
+from rag.motif_likelihood import MotifLikelihoodIndex
 from rag.neo4j_kg import DEFAULT_DATABASE
 from rag.structure import StructureIndex, merge_rounds
 
-TOPK_RULES = 3
-TOPK_TECH = 3
+TOPK_RULES = 5
 
 _BASE_RENDER = None
 _RETRIEVER: Optional[RuleGraphRetriever] = None
 _STRUCT: Optional[StructureIndex] = None
+_MOTIF_LR: Optional[MotifLikelihoodIndex] = None
 _SCENARIO = ""
 _RULE_CACHE: Dict[Tuple, Dict[str, Any]] = {}
-_TECH_CACHE: Dict[Tuple, Dict[str, Any]] = {}
 _LOCK = threading.Lock()
 _EXPLICIT_MATCHER = None
 _EXPLICIT_PARENT_MAP: Dict[str, str] = {}
@@ -46,7 +41,7 @@ def set_parent_map(parent_map: Dict[str, str]) -> None:
 
 
 def set_scenario(scenario: str, matcher: Any = None, parent_map: Optional[Dict[str, str]] = None) -> None:
-    global _SCENARIO, _RETRIEVER, _STRUCT, _RULE_CACHE, _TECH_CACHE, _EXPLICIT_MATCHER, _EXPLICIT_PARENT_MAP
+    global _SCENARIO, _RETRIEVER, _STRUCT, _MOTIF_LR, _RULE_CACHE, _EXPLICIT_MATCHER, _EXPLICIT_PARENT_MAP
     _SCENARIO = scenario
     if matcher is not None:
         _EXPLICIT_MATCHER = matcher
@@ -54,16 +49,17 @@ def set_scenario(scenario: str, matcher: Any = None, parent_map: Optional[Dict[s
         _EXPLICIT_PARENT_MAP = dict(parent_map)
     _RETRIEVER = None
     _STRUCT = None
+    _MOTIF_LR = MotifLikelihoodIndex(scenario)
     _RULE_CACHE = {}
-    _TECH_CACHE = {}
 
 
 def close() -> None:
-    global _RETRIEVER, _STRUCT
+    global _RETRIEVER, _STRUCT, _MOTIF_LR
     if _RETRIEVER is not None:
         _RETRIEVER.close()
         _RETRIEVER = None
     _STRUCT = None
+    _MOTIF_LR = None
 
 
 def _get_retriever() -> RuleGraphRetriever:
@@ -134,39 +130,6 @@ def _rule_lines(item: Dict[str, Any], ranked: List[Dict[str, Any]],
     return lines
 
 
-def _tech_lines(item: Dict[str, Any], ranked: List[Dict[str, Any]],
-                total: int) -> List[str]:
-    if not ranked:
-        return [cfg.render_section("evidence_tech.md", "empty")]
-    lines = [cfg.render_section("evidence_tech.md", "header",
-                                SIZE=item.get('size'), TOTAL=total)]
-    item["_tech_ids"] = []
-    item["_tech_evidence"] = {}
-    for idx, rec in enumerate(ranked, 1):
-        eid = f"E{idx}"
-        item["_tech_ids"].append(eid)
-        item["_tech_evidence"][eid] = {
-            "attack_id": rec["attack_id"],
-            "observable_ids": list(rec["strong_observable_ids"]),
-            "conditions": list(rec["strong_conditions"]),
-            "confidence": float(rec["confidence"]),
-        }
-        tactics = "、".join(rec.get("tactics") or [])
-        lines.append(cfg.render_section(
-            "evidence_tech.md", "row", EID=eid, ATTACK_ID=rec['attack_id'],
-            NAME=rec.get('name') or '',
-            TACTICS=cfg.render_section("evidence_tech.md", "tactics", TACTICS=tactics)
-            if tactics else ""))
-        lines.append(cfg.render_section("evidence_tech.md", "conditions",
-                                        CONDITIONS="；".join(rec["strong_conditions"])))
-        verified = cfg.render_section(
-            "evidence_tech.md", "verified_ok" if rec["verified"] else "verified_none")
-        lines.append(cfg.render_section("evidence_tech.md", "confidence",
-                                        CONFIDENCE=f"{float(rec['confidence']):.2f}",
-                                        VERIFIED=verified))
-    return lines
-
-
 def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
     matcher = _matcher()
     if matcher is None:
@@ -179,20 +142,21 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
     member_roles: set = set()
     member_edges: List[tuple] = []
     rules_by_mid: Dict[str, Dict[str, Any]] = {}
-    techs_by_id: Dict[str, Dict[str, Any]] = {}
 
     for triple in members:
         edge = records.get(triple)
         if not edge:
             continue
         sc = str(edge.get("syscall") or "")
-        src_role = matcher.role_of(edge["src"])
-        dst_role = matcher.role_of(edge["dst"])
+        s_src = str(edge.get("src") or "")
+        s_dst = str(edge.get("dst") or "")
+
+        src_role = matcher.role_of(s_src)
+        dst_role = matcher.role_of(s_dst)
         src_label = str(edge.get("src_label") or "")
         dst_label = str(edge.get("dst_label") or "")
         member_roles.add((src_role, sc, dst_role))
-        member_edges.append((str(edge["src"]), sc, str(edge["dst"]), src_role, dst_role,
-                             str(edge.get("src_label") or ""), str(edge.get("dst_label") or "")))
+        member_edges.append((s_src, sc, s_dst, src_role, dst_role, src_label, dst_label))
         key = (src_role, sc, dst_role, src_label, dst_label, tuple(programs))
 
         if key not in _RULE_CACHE:
@@ -214,42 +178,25 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
             else:
                 rec["partial"] += 1
 
-        if key not in _TECH_CACHE:
-            with _LOCK:
-                if key not in _TECH_CACHE:
-                    _TECH_CACHE[key] = retriever.retrieve_techniques(
-                        sc, src_role, dst_role, src_label, dst_label,
-                        programs=programs,
-                        paths=[str(edge.get("src") or ""), str(edge.get("dst") or "")])
-        tres = _TECH_CACHE[key]
-        for t in (tres.get("strong") or []) + (tres.get("weak") or []):
-            tid = str(t.get("attack_id") or "")
-            if not tid:
-                continue
-            rec = techs_by_id.setdefault(tid, {
-                "attack_id": tid, "name": str(t.get("name") or ""),
-                "tactics": list(t.get("tactics") or []),
-                "members": set(), "strong": False,
-                "strong_observable_ids": set(), "strong_conditions": set(),
-                "confidence": 0.0, "verified": False,
-            })
-            rec["members"].add(triple)
-            rec["strong"] = rec["strong"] or bool(t.get("strong"))
-            rec["strong_observable_ids"].update(t.get("strong_observable_ids") or [])
-            rec["strong_conditions"].update(t.get("strong_conditions") or [])
-            rec["confidence"] = max(rec["confidence"], float(t.get("confidence") or 0.0))
-            rec["verified"] = rec["verified"] or bool(t.get("verified"))
-
     item["_rag_member_roles"] = sorted([list(x) for x in member_roles])
+
+    # ===== 通道一：留一折似然比 LR 排序规则 =====
+    for mid, rec in rules_by_mid.items():
+        rec["lr"] = _MOTIF_LR.get_lr(mid) if _MOTIF_LR else 0.0
+        rec["weighted_lr"] = _MOTIF_LR.get_weighted_lr(mid) if _MOTIF_LR else 0.0
 
     def rule_rank(rec: Dict[str, Any]):
         g = rec["g"]
         m = g.get("motif") or {}
         prec = m.get("precision")
-        return (-int(g.get("alignment") or 0),
-                -(float(prec) if prec is not None else -1.0),
-                -int(m.get("attack_hits") or 0),
-                str(m.get("motif_id") or ""))
+        return (
+            -int(g.get("alignment") or 0),
+            -len(rec["members"]),
+            -float(rec.get("weighted_lr", rec.get("lr", 0.0))),
+            -(float(prec) if prec is not None else -1.0),
+            -int(m.get("attack_hits") or 0),
+            str(m.get("motif_id") or ""),
+        )
 
     keep_a, keep_b = cfg.rule_mix()
     cap_a = keep_a
@@ -264,31 +211,8 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
             print(f"[navigator.render] 结构通道 item={item.get('id')} "
                   f"候选={len(secondary)} 混入={max(0, len(ranked_rules) - cap_a)}", flush=True)
 
-    strong_recs = [r for r in techs_by_id.values() if r["strong"]]
-    for rec in strong_recs:
-        rec["strong_observable_ids"] = sorted(rec["strong_observable_ids"])
-        rec["strong_conditions"] = sorted(rec["strong_conditions"])
-
-    def tech_rank(rec: Dict[str, Any]):
-        return (-float(rec["confidence"]), -len(rec["members"]),
-                -len(rec["strong_conditions"]), str(rec["attack_id"]))
-
-    ranked_tech = sorted(strong_recs, key=tech_rank)[:TOPK_TECH]
-    weak_recs = [r for r in techs_by_id.values() if not r["strong"]]
-    item["_tech_weak"] = [{
-        "attack_id": r["attack_id"], "name": r["name"],
-        "confidence": r["confidence"], "members": len(r["members"]),
-    } for r in sorted(weak_recs, key=tech_rank)]
-
-    if os.environ.get("RAG_DEBUG"):
-        print(f"[navigator.render] item={item.get('id')} size={item.get('size')} "
-              f"members={len(members)} rules={len(rules_by_mid)} "
-              f"tech_strong={len(strong_recs)} tech_weak={len(weak_recs)} "
-              f"scenario={_SCENARIO!r}", flush=True)
-
     lines: List[str] = []
     lines.extend(_rule_lines(item, ranked_rules, total_rules))
-    lines.extend(_tech_lines(item, ranked_tech, len(strong_recs)))
     return lines
 
 

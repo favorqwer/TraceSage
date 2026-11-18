@@ -1,29 +1,10 @@
-"""束级引用守卫：规则证据和技术证据分开校验。
-
-规则证据由 `navigator.render` 写入 `_rule_evidence`：
-    {"R1": {"motif_id": "...", "entry_source": "exact|partial",
-            "hops": [{"index": 1, "syscall": "read",
-                      "src_role": "...", "dst_role": "..."}]}}
-
-技术证据由 `navigator.render` 写入 `_tech_evidence`：
-    {"E1": {"attack_id": "T1071", "observable_ids": [...],
-            "conditions": [...], "confidence": 0.7}}
-
-判定：
-- 规则引用：编号在规则证据里；跳号是整数且在规则里存在；跳的系统调用
-  与束一致；精确规则要求源/目标角色都与同一个成员边一致，部分规则要求
-  至少一个角色一致。
-- 技术引用：编号在技术证据里。技术没有跳号。
-- 两类证据都没有时，任何 R/E 引用都算编造；有证据时至少要引用一个有效编号。
-- 任何一个被引用的编号无效，结论降级为 mixed。
-"""
+"""规则引用校验：编号、跳号和系统调用角色对齐。"""
 from __future__ import annotations
 
 import re
 from typing import Any, Dict, Iterable, List, Tuple
 
 _R_RE = re.compile(r"R\d+")
-_E_RE = re.compile(r"E\d+")
 
 
 def _cited(row: Dict[str, Any], field: str, regex: re.Pattern) -> List[str]:
@@ -78,19 +59,16 @@ def enforce_citations(items: List[Dict[str, Any]],
                       verdicts: Dict[str, Dict[str, Any]]) -> Dict[str, int]:
     stats = {"checked": 0, "downgraded": 0, "no_evidence": 0,
              "fabricated_citation": 0, "missing_citation": 0,
-             "bad_rule": 0, "bad_hop": 0, "bad_alignment": 0,
-             "bad_technique": 0}
+             "bad_rule": 0, "bad_hop": 0, "bad_alignment": 0}
     for item in items:
         row = verdicts.get(item["id"])
         if not row or str(row.get("verdict") or "").lower() != "all":
             continue
         rule_ev = item.get("_rule_evidence") or {}
-        tech_ev = item.get("_tech_evidence") or {}
         cited_r = _cited(row, "rule_id", _R_RE)
-        cited_e = _cited(row, "tech_id", _E_RE)
 
-        if not rule_ev and not tech_ev:
-            if cited_r or cited_e:
+        if not rule_ev:
+            if cited_r:
                 stats["fabricated_citation"] += 1
                 stats["downgraded"] += 1
                 _downgrade(row, "citation without any evidence")
@@ -99,7 +77,7 @@ def enforce_citations(items: List[Dict[str, Any]],
             continue
 
         stats["checked"] += 1
-        if not cited_r and not cited_e:
+        if not cited_r:
             stats["missing_citation"] += 1
             stats["downgraded"] += 1
             _downgrade(row, "all without citation while evidence exists")
@@ -136,12 +114,6 @@ def enforce_citations(items: List[Dict[str, Any]],
                 valid = False
                 stats["bad_alignment"] += 1
                 marker = marker or "cited hop does not match bundle syscall/roles"
-
-        for eid in cited_e:
-            if eid not in tech_ev:
-                valid = False
-                stats["bad_technique"] += 1
-                marker = marker or f"cited technique {eid} not in technique evidence"
 
         if not valid:
             stats["downgraded"] += 1

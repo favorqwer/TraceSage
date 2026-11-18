@@ -10,13 +10,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from llm.guard import enforce_citations  # noqa: E402
 
 
-def make_item(*, rule: bool = True, tech: bool = False, syscall: str = "read") -> dict:
+def make_item(*, rule: bool = True, syscall: str = "read") -> dict:
     item = {
         "id": "B1",
         "syscall": syscall,
         "_rag_member_roles": [["P.out", syscall, "F.in"]],
         "_rule_evidence": {},
-        "_tech_evidence": {},
     }
     if rule:
         item["_rule_evidence"]["R1"] = {
@@ -24,13 +23,6 @@ def make_item(*, rule: bool = True, tech: bool = False, syscall: str = "read") -
             "entry_source": "exact",
             "hops": [{"index": 1, "syscall": syscall,
                       "src_role": "P.out", "dst_role": "F.in"}],
-        }
-    if tech:
-        item["_tech_evidence"]["E1"] = {
-            "attack_id": "T1071",
-            "observable_ids": ["OBS-1"],
-            "conditions": ["角色 N.both 匹配"],
-            "confidence": 0.7,
         }
     return item
 
@@ -116,26 +108,6 @@ class CitationGuardTest(unittest.TestCase):
         self.assertEqual(verdicts["B1"]["verdict"], "mixed")
         self.assertEqual(stats["fabricated_citation"], 1)
 
-    def test_no_evidence_tech_citation_downgrades(self):
-        item = make_item(rule=False)
-        verdicts = {"B1": {"verdict": "all", "tech_id": "E1", "reason": "引用 E1"}}
-        stats = enforce_citations([item], verdicts)
-        self.assertEqual(verdicts["B1"]["verdict"], "mixed")
-        self.assertEqual(stats["fabricated_citation"], 1)
-
-    def test_valid_tech_citation_keeps_all(self):
-        item = make_item(rule=False, tech=True)
-        verdicts = {"B1": {"verdict": "all", "tech_id": "E1", "reason": "引用 E1"}}
-        stats = enforce_citations([item], verdicts)
-        self.assertEqual(verdicts["B1"]["verdict"], "all")
-        self.assertEqual(stats["bad_technique"], 0)
-
-    def test_tech_citation_not_in_evidence_downgrades(self):
-        item = make_item(rule=False, tech=True)
-        verdicts = {"B1": {"verdict": "all", "tech_id": "E2", "reason": "引用 E2"}}
-        stats = enforce_citations([item], verdicts)
-        self.assertEqual(verdicts["B1"]["verdict"], "mixed")
-        self.assertEqual(stats["bad_technique"], 1)
 
     def test_evidence_exists_but_no_citation_downgrades(self):
         item = make_item()
@@ -144,27 +116,6 @@ class CitationGuardTest(unittest.TestCase):
         self.assertEqual(verdicts["B1"]["verdict"], "mixed")
         self.assertEqual(stats["missing_citation"], 1)
 
-    def test_tech_citation_without_tech_evidence_downgrades(self):
-        item = make_item(rule=True, tech=False)
-        verdicts = {"B1": {"verdict": "all", "tech_id": "E1", "reason": "引用 E1"}}
-        stats = enforce_citations([item], verdicts)
-        self.assertEqual(verdicts["B1"]["verdict"], "mixed")
-        self.assertEqual(stats["bad_technique"], 1)
-
-    def test_both_rule_and_tech_valid_keeps_all(self):
-        item = make_item(rule=True, tech=True)
-        verdicts = {"B1": {"verdict": "all", "rule_id": "R1", "hop": 1,
-                           "tech_id": "E1", "reason": "引用 R1 和 E1"}}
-        enforce_citations([item], verdicts)
-        self.assertEqual(verdicts["B1"]["verdict"], "all")
-
-    def test_one_invalid_among_two_downgrades(self):
-        item = make_item(rule=True, tech=True)
-        verdicts = {"B1": {"verdict": "all", "rule_id": "R1", "hop": 1,
-                           "tech_id": "E9", "reason": "引用 R1 和 E9"}}
-        stats = enforce_citations([item], verdicts)
-        self.assertEqual(verdicts["B1"]["verdict"], "mixed")
-        self.assertEqual(stats["bad_technique"], 1)
 
     def test_non_all_verdict_ignored(self):
         item = make_item()

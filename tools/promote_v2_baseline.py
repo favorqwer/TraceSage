@@ -65,7 +65,13 @@ FINGERPRINT_FILES = [
     "provenance/llm/judge.py",
     "provenance/llm/guard.py",
     "provenance/rag/graph_retrieve.py",
+    "provenance/rag/structure.py",
+    "provenance/rag/motif_likelihood.py",
+    "provenance/rag/schema.py",
+    "provenance/rag/build_kg.py",
+    "provenance/rag/stats.py",
     "provenance/rag/neo4j_kg.py",
+    "provenance/config/navigator.toml",
     "provenance/rules/library.py",
     "provenance/rules/online.py",
     "provenance/rules/assembly.py",
@@ -75,9 +81,7 @@ FINGERPRINT_FILES = [
     "provenance/config/prompts/listing_sample_edge.md",
     "provenance/config/prompts/listing_context.md",
     "provenance/config/prompts/evidence_rule.md",
-    "provenance/config/prompts/evidence_tech.md",
     "provenance/config/prompts/output_repair.md",
-    "provenance/config/attack-observables.seed.json",
 ]
 
 PROMPT_FILES = [p for p in FINGERPRINT_FILES if "/config/prompts/" in p]
@@ -182,8 +186,8 @@ def main() -> None:
     caveat = "统一提示词口径：10 个场景使用同一套当前提示词；模块化分层重构后全量端到端验证。"
     summary = {
         "protocol": (
-            "规则证据（Motif/Hop）与技术证据（BehaviorObservable/Technique）"
-            "分开检索、分开编号、分开引用校验；留一折库；score_report_product 官方口径"
+            "规则证据（Motif/Hop）"
+            "检索、编号与引用校验；留一折库；score_report_product 官方口径"
         ),
         "caveat": caveat,
         "model": os.environ.get("OPENAI_MODEL", ""),
@@ -216,7 +220,7 @@ def main() -> None:
         f"- 写入日期：{today}",
         f"- 代码提交：`{fingerprints['git_commit']}`",
         f"- 判定模型：`{summary['model'] or '未记录'}`",
-        f"- 规则库：`{summary['kg_database']}`（全局 ATT&CK + 按折 Motif/Hop/Case）",
+        f"- 规则库：`{summary['kg_database']}`（按折 Motif/Hop/Case）",
         "- 评分：`tools/score_report_product.py`；召回按步骤、查准按边。",
         "",
         "## 口径与限制",

@@ -64,7 +64,6 @@ def parse_trace(path: Path) -> Dict[str, Dict[str, Any]]:
                     b = bundles.setdefault(bid, {})
                     b["members"] = [tuple(x) for x in (item.get("members") or [])]
                     b["rule_ids"] = list(item.get("rag_rule_ids") or item.get("_rule_ids") or [])
-                    b["tech_ids"] = list(item.get("rag_tech_ids") or item.get("_tech_ids") or [])
                     b["level"] = item.get("level")
                     row = verdict_rows.get(bid) or {}
                     if row:
@@ -111,7 +110,7 @@ def classify(b: Dict[str, Any]) -> str:
         return "未进入任何束"
     if b.get("raw_guard"):
         return "引用守卫降级"
-    if not b.get("rule_ids") and not b.get("tech_ids"):
+    if not b.get("rule_ids"):
         return "证据未覆盖"
     raw = str(b.get("raw_verdict") or "")
     reason = str(b.get("reason") or "")
@@ -176,7 +175,6 @@ def main() -> None:
                 "new_verdict": new_b.get("final_verdict") or new_b.get("raw_verdict", ""),
                 "new_guard": new_b.get("raw_guard", ""),
                 "new_rule_ids": new_b.get("rule_ids") or [],
-                "new_tech_ids": new_b.get("tech_ids") or [],
                 "category": category,
             })
         all_rows.extend(rows)

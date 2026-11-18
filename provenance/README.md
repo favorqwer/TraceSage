@@ -1,197 +1,72 @@
-# Provenance: 规则证据与技术证据的溯源图调查
+# Provenance：基于规则证据的溯源图调查
 
-## 1. 当前正式方案
+## 1. 运行流程
 
-运行时只有一种检索方式：规则证据与技术证据分开检索、分开编号、分开引用校验。
-
-对每个候选束，系统同时检索两段独立证据：
-
-1. **规则证据 R**：只查离线蒸馏得到的规则库（Motif/Hop）。
-2. **技术证据 E**：只查 MITRE ATT&CK 行为观测（BehaviorObservable/Technique）。
-
-两段证据分开检索、分开编号、分开排序、分开引用校验，不互相转化：
-
-- 规则卡不含 ATT&CK 技术编号；
-- 技术卡不含规则编号和跳号；
-- 不允许用「技术反查规则」把技术标签包装成规则证据；
-- 没有对应证据时，不允许编造 R/E 编号。
-
-入口：
-
-```bash
-.venv/Scripts/python.exe provenance/main.py --scenario <场景全名>
-```
-
-默认输出 `output/provenance-runs/<场景全名>_rag.json`。
-
-## 2. 两段证据
-
-### 2.1 规则证据
-
-| 维度 | 定义 |
-|---|---|
-| 来源 | 9 个训练场景蒸馏出的 Motif，按折隔离 |
-| 匹配等级 | R2 精确：系统调用、源角色、目标角色三项全同；R1 部分：系统调用相同，且至少一个完整角色相同 |
-| 排序 | R2 优先；再按训练折查准率、攻击命中、匹配成员数 |
-| 上限 | 每束最多 3 条 |
-| 卡片字段 | R 编号、Motif 编号、精确/部分对齐成员数、训练折查准率、攻击/背景/忽略命中、支持场景数、跳链 |
-| 空结果 | 显示「本束没有规则证据」，不生成 R 编号 |
-
-规则卡不显示 ATT&CK 技术。规则与技术的对应关系只保留在离线知识库中，用于评测，不进入检索和提示词。
-
-### 2.2 技术证据
-
-| 维度 | 定义 |
-|---|---|
-| 来源 | ATT&CK 技术库 + 45 条人工行为观测 |
-| T-强 | 系统调用匹配，且观测的角色模式与成员边角色匹配；注入提示词 |
-| T-弱 | 只有进程名或路径匹配，或观测本身只有系统调用条件；默认不注入，只写运行记录 |
-| 排序 | 观测置信度、命中成员数、命中条件数 |
-| 上限 | 每束最多 3 个 |
-| 卡片字段 | E 编号、ATT&CK 编号、技术名称、战术、命中条件、观测置信度、是否人工核验 |
-| 空结果 | 显示「本束没有技术证据」，不生成 E 编号 |
-
-E 是束内证据编号，不是 ATT&CK 编号；ATT&CK 编号形如 T1071，只用于识别技术。
-
-## 3. 引用约束
-
-判 all 时：
-
-- 引用规则：写 `rule_id`（R1）和 `hop`（规则里真实存在的跳号）；跳的系统调用必须与束一致；精确规则要求源/目标角色都与同一个成员边一致，部分规则要求至少一个角色一致。
-- 引用技术：写 `tech_id`（E1）；不要求跳号。
-- 有证据时至少引用一个有效编号；任何一个被引用的编号无效，降级为 mixed。
-- 没有证据却写 R/E，降级为 mixed。
-
-守卫统计写入运行日志的 `RAG_GUARD` 行，并汇总到评测报告。
-
-## 4. 运行流程
+系统从外部提供的目标事件开始调查，在单个场景的标准 `-v2` 图数据库中抽取候选边。运行时通过 Neo4j 查询当前训练折的规则，生成规则证据卡并交给大模型判定。
 
 ```text
-Neo4j 场景图
-  → closure：从 POI 反向抽取候选边
-  → PreFilter：静态只读初筛
-  → 束划分：程序 + 关系 + 系统调用 + 对象类别
-  → 规则检索：Motif/Hop（当前折）
-  → 技术检索：BehaviorObservable → Technique（全局）
-  → 大模型判定：四选一 all / none / mixed / unknown
-  → 引用守卫：规则跳号、技术编号
-  → DebrisPrune + 报告：edges / unexcluded / excluded
-  → score_report_product：召回按步骤、查准按边
+场景图与目标事件
+  → 反向候选抽取 → 静态初筛 → 五级束划分
+  → 训练折规则检索 → 大模型四值判定 → 规则引用校验
+  → 因果公理补全与纯化 → 后置剪枝 → 报告与官方评分
 ```
 
-## 5. 离线知识构建
+一个束是同一程序、关系、系统调用及对象类别上的候选边组。判定为 all、none、mixed 或 unknown；后两种继续细分或保守保留。
 
-离线部分保留，不参与运行时：
+## 2. 规则证据
 
-1. 从 9 个训练场景蒸馏 Motif、Hop、逐规则统计；
-2. 写入 `output/provenance-baseline/distill/fold-libraries/`；
-3. 构建 Rule KG JSON：`tools/build_rule_kg.py`；
-4. ATT&CK 快照与行为观测：`tools/build_attack_kg.py`；
-5. 写入 Neo4j 规则库：`tools/build_rule_kg_neo4j.py`。
+- 来源：排除测试场景后，由其余训练场景蒸馏得到的规则。规则为 Motif，规则中的单步为 Hop。
+- 第一路：按成员边的系统调用、源角色和目标角色查询。精确匹配要求三项一致；部分匹配要求系统调用和至少一端完整角色一致。
+- 第一路排序：对齐等级、命中成员数、训练折加权似然比、训练折查准率、攻击命中数、规则编号。
+- 第二路：按束内实际共用端点检查规则步骤能否连续走通，按走通程度、链长、训练折查准率和编号排序。
+- 名额：`PROV_RULE_MIX` 控制两路规则数量，默认 `3+0`；例如 `2+1` 表示第一路两条、第二路一条。参数来自 `settings.rule_mix()`。
+- 规则卡包含本束 R 编号、规则编号、对齐成员数、训练折统计及跳链。没有候选时显示“本束没有规则证据”，不生成编号。
+- 两路均检索相同的训练折规则，使用同一套 R 编号和引用校验。
 
-规则库 `trace-rules-kg-v1` 的结构：
+训练统计不保证当前场景正确；规则未命中不代表没有攻击。程序、对象、命令行和图上的实际行为仍是判定依据。
 
-- 全局节点：867 Technique、15 Tactic、45 BehaviorObservable；
-- 按折节点：10 折合计 1,454 Motif、2,362 Hop、90 Case；
-- 关系：HAS_HOP、NEXT_HOP、IMPLEMENTS、DERIVED_FROM、BELONGS_TO、OBSERVES。
+## 3. 引用校验
 
-折隔离：测场景 k 时，规则检索只读第 k 折的 Motif/Hop/Case；技术、战术、行为观测是全局知识。
+仅检查 all 结论。有规则证据时，模型必须引用有效 `rule_id` 与整数 `hop`。跳号必须存在，系统调用必须与束一致；精确匹配要求同一成员边的两端角色一致，部分匹配要求至少一端一致。结构检索按其顶点类型匹配契约校验。
 
-## 6. 代码结构
+无证据且无引用时按事实判断；无证据却编造规则引用，或有证据但引用缺失、无效时，降级为 mixed。引用从独立字段和理由文本中的 R 编号提取。校验计数写入 `RAG_GUARD` 日志。
 
-```text
-provenance/
-├── main.py                 # 单场景 CLI
-├── settings.py             # 配置、场景、路径、判据表加载
-├── run_loo_folds.py        # 留一折循环（离线）
-├── core/                   # 在线运行时：七阶段流水线
-│   ├── runner.py           # 装配七个阶段并依次执行
-│   ├── stages/             # s1 闭包 → s2 初筛 → s3 证据 → s4 判定
-│   │                       #   → s5 公理补全 → s6 剪枝 → s7 报告
-│   ├── context.py          # 流水线上下文与配置
-│   ├── prepare.py          # 静态只读初筛
-│   ├── filters.py          # 后置碎屑剪枝
-│   ├── axioms.py           # 因果公理补全与纯化
-│   ├── clustering.py       # 五级束划分
-│   ├── bundling.py         # 束划分与结构闸门统一出口
-│   ├── gates.py            # 四道结构闸门与调查状态机
-│   ├── decoder.py          # 基模解码
-│   ├── render.py           # 规则证据 + 技术证据两段渲染
-│   └── reporting.py        # 报告结构与导出
-├── closure/                # 反向闭包抽取
-├── domain/                 # 边、候选池、角色分类
-├── llm/                    # 束判定、模型接入、结论解析
-├── rules/                  # 在线：library / online / roles
-│                           # 离线：offline / admission / coverage / legacy_roles
-│                           #   + assembly / route / channels（离线 LOO 装配与模式表）
-├── rag/                    # 证据检索与规则知识库
-│   ├── graph_retrieve.py   # retrieve_rules / retrieve_techniques
-│   ├── neo4j_kg.py         # Rule KG 入库
-│   ├── build_kg.py         # 从折库构建 Rule KG JSON
-│   ├── stats.py            # 逐规则训练折统计
-│   ├── attack.py、link.py、schema.py
-│   └── legacy/             # 向量实验：embed / index / rerank / query，主路径不调用
-├── config/                 # 场景、提示词、行为观测种子
-├── tests/
-│   ├── foundation/         # unittest 单元测试
-│   └── manual/             # 手动比对脚本，不是单元测试
-└── tools/                  # 随包分发的规则库维护脚本
+## 4. 在线运行与评分
+
+```powershell
+& ./.venv/Scripts/python.exe provenance/main.py --scenario 8_FTP_WeakCreds_WebShell_Exfiltration --output tmp/provenance-check/report.json
+& ./.venv/Scripts/python.exe tools/score_report_product.py --report tmp/provenance-check/report.json --gt groundtruth/8_FTP_WeakCreds_WebShell_Exfiltration.groundtruth.json
 ```
 
-脚本归属规则：
+默认结果目录为 `output/provenance-runs/`，不自动更新正式基线。评分按人工标准答案步骤计算召回，按源、系统调用、目标、成败四元组计算查准。未排除边不计入确认输出。
 
-- `provenance/tools/`：随包分发的脚本，直接 `python provenance/tools/<脚本>` 执行；
-- 仓库根 `tools/`：评测、评分、库维护与一次性诊断，跨组件，不随包走。
+在线导航参数由 `provenance/config/navigator.toml` 统一配置（包括并发数、批大小、四道结构闸门以及判定调用上限 `cap_calls`；`cap_calls = 0` 为默认的无上限模式，流程由 5 级拓扑划分与空拆/扇出闸门自收敛终止，配置为正整数 N 时在达到 N 次调用后触发截断保护）。
 
-在线闭包只经过 `main.py`、`core/`、`closure/`、`domain/`、`llm/`、
-`rules/library|online|roles`、`rag/graph_retrieve|neo4j_kg`、`settings.py`。
-`rules/offline.py`、`rules/assembly|route|channels`、`rag/legacy/` 与
-`run_loo_folds.py` 不在在线路径上。
+## 5. 离线规则知识构建
 
-## 7. 快速开始
-
-```bash
-# 单场景正式运行
-.venv/Scripts/python.exe provenance/main.py --scenario 1_Web_Exploit_Ransomware \
-  --output output/provenance-runs/1_Web_Exploit_Ransomware_rag.json
-
-# 官方评分
-.venv/Scripts/python.exe tools/score_report_product.py \
-  --report output/provenance-runs/1_Web_Exploit_Ransomware_rag.json \
-  --gt groundtruth/1_Web_Exploit_Ransomware.groundtruth.json
+```powershell
+& ./.venv/Scripts/python.exe tools/build_rule_kg.py --fold-dir output/provenance-baseline/distill/fold-libraries --out output/rule-kg/v1
+& ./.venv/Scripts/python.exe tools/build_rule_kg_neo4j.py --kg-dir output/rule-kg/v1
 ```
 
-离线规则库维护（仅重建折库/规则 KG 时使用，不参与日常评测）：
+第二条命令写入独立规则库 `trace-rules-kg-v1`。节点只有 Motif、Hop、Case，关系为 HAS_HOP、NEXT_HOP、DERIVED_FROM；全部按 fold 隔离。Case 是训练场景，保留其原有攻击阶段描述。在线规则检索不读取测试场景答案。
 
-```bash
-.venv/Scripts/python.exe provenance/run_loo_folds.py --mode rules \
-  --out output/provenance-runs/loo --keep-reports tmp/loo_rules_reports
-.venv/Scripts/python.exe provenance/tools/rebuild_library.py --from-scratch
-```
+知识快照包含规则、规则步骤、训练场景、角色分界和规则统计。现有训练折的来源、规则准入和蒸馏过程不因检索代码变动而重新计算。
 
-## 8. 正式基线
+## 6. 代码与工具
 
-正式基线由 `tools/promote_v2_baseline.py` 生成，包含 10 份压缩报告、`summary_v2.json`、`OVERVIEW.md` 和代码指纹。
+- `main.py`：单场景入口；`core/runner.py`：七阶段装配。
+- `core/render.py`：规则检索结果和上下文渲染；`llm/guard.py`：规则引用校验。
+- `rag/graph_retrieve.py`、`structure.py`、`motif_likelihood.py`：规则查询、结构匹配和训练折排序。
+- `rag/build_kg.py`、`neo4j_kg.py`、`schema.py`、`stats.py`：规则快照构建、数据库导入、结构定义与统计。
+- `tools/eval_graph_retrieval.py`：对照符号规则匹配结果检查检索覆盖，不计算攻击正确率。
+- `tools/audit_rag_entries.py`：规则入口和实际规则卡审计。
+- `tools/sample_evidence_audit.py`：抽样检查规则步骤与成员边的结构对齐。
 
-当前统一提示词口径基线：**77.37% 召回、59.66% 查准**（701/906 步，19540/32751 条边，221 次调用，单次运行）。
+## 7. 边界与测量
 
-基线的逐场景数字、微平均、代码版本与复现命令统一见：
-
-👉 [output/provenance-baseline/OVERVIEW.md](../output/provenance-baseline/OVERVIEW.md)
-
-评分口径：`tools/score_report_product.py`；召回按步骤、查准按边；同一条边多次发生只计一次。
-
-## 9. 边界与限制
-
-1. **运行时没有向量检索和重排。** `rag/legacy/embed.py`、`index.py`、`rerank.py`、`query.py` 是早期文本向量实验模块，主路径不调用；规则和技术都通过 Neo4j 图查询获得。
-2. **证据是束级，不是边级。** 没有逐边证据卡、逐边引用和引用忠实度测量。
-3. **没有增量知识演化。** 新场景、新 ATT&CK 版本的增量摄入、版本回滚未实现。
-4. **ATT&CK 映射不完整。** 45 条人工行为观测覆盖 45 个技术；867 个技术里绝大多数没有行为观测。
-5. **技术答案键是人工草稿。** 技术级命中率在复核前不是最终结论。
-6. **规则正确性没有直接标准答案。** 评测用离线技术链接做代理，需配合人工抽检。
-7. **折库来自 9 个训练场景。** 规则库覆盖范围受训练场景限制；未命中的行为不等于没有攻击。
-8. **当前基线为单次运行。** 没有重复运行，波动范围未知。
-
-## 10. 离线代码归属
-
-离线蒸馏代码（`rules/offline.py`、`admission.py`、`coverage.py`、`roles.py`、`library.py`、`run_loo_folds.py`）保留，用于构建折库和规则 KG。`rules/assembly.py`、`rules/route.py`、`rules/channels.py` 仅服务离线留一折循环，不在在线路径上。历史模式实测数字见 [`docs/history/provenance-historical-modes.md`](../docs/history/provenance-historical-modes.md)。
+1. 规则证据是束级证据，不代表束内每条边都已独立验证。
+2. 规则库受训练场景限制；规则正确性没有独立完整的标准答案，不以规则候选覆盖代替攻击召回。
+3. 没有跨主机对端流量自动对齐模块；目标事件和跨主机关联属于外部输入边界。
+4. 模型单次运行存在波动。现有冻结成绩及其代码版本以 `output/provenance-baseline/OVERVIEW.md` 为准，不作为当前修改版本的实测成绩。
+5. 场景测试、评分和汇总遵循 `docs/agents/test-runbook.md` 与 `docs/agents/evaluation-protocol.md`。

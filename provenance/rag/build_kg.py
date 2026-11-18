@@ -9,8 +9,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from rag.attack import load_behavior_observables
-from rag.link import link_motifs
 from rag.schema import Hop, Motif
 from rag.stats import RuleStats, load_fold_rule_stats
 
@@ -41,8 +39,7 @@ def _roles_and_syscalls(m: Dict[str, Any]) -> tuple[int, List[str], List[str], L
 
 
 def build_fold_kg(scenario: str, fold_library_path: str | Path, *,
-                  version: str = "kg-v1", include_candidates: bool = False,
-                  observables_path: str | Path | None = None) -> Dict[str, Any]:
+                  version: str = "kg-v1", include_candidates: bool = False) -> Dict[str, Any]:
     """构建单个折的 KG 快照。
 
     `include_candidates=False` 时只收录 `selected`（检索只应使用准入规则）；
@@ -81,26 +78,17 @@ def build_fold_kg(scenario: str, fold_library_path: str | Path, *,
         ))
         hops.extend(hop_records)
 
-    links: List[Dict[str, Any]] = []
-    if observables_path:
-        observables = load_behavior_observables(observables_path)
-        links = link_motifs(motifs, observables)
-
     return {
         "version": version,
         "fold_of": scenario,
         "train_scenarios": [str(s) for s in (fold.get("train_scenarios") or [])],
         "role_cuts": fold.get("role_cuts") or {},
-        "observables_path": str(observables_path) if observables_path else "",
         "motifs": [m.to_dict() for m in motifs],
         "hops": [h.to_dict() for h in hops],
-        "technique_links": links,
         "counts": {
             "motifs": len(motifs),
             "admitted": sum(1 for m in motifs if m.admitted),
             "hops": len(hops),
-            "linked_motifs": sum(1 for m in motifs if m.techniques),
-            "technique_links": len(links),
         },
     }
 
@@ -113,8 +101,7 @@ def save_fold_kg(kg: Dict[str, Any], out_dir: str | Path) -> Path:
 
 
 def build_all_folds(fold_dir: str | Path, out_dir: str | Path, *,
-                    version: str = "kg-v1", include_candidates: bool = False,
-                    observables_path: str | Path | None = None) -> Dict[str, Any]:
+                    version: str = "kg-v1", include_candidates: bool = False) -> Dict[str, Any]:
     """对 fold_dir 下全部折库构建 KG，并写 manifest。"""
     fold_dir = Path(fold_dir)
     latest = Path(__file__).resolve().parents[1] / "config" / "rules-library" / "latest.txt"
@@ -126,14 +113,12 @@ def build_all_folds(fold_dir: str | Path, out_dir: str | Path, *,
         "fold_dir": str(fold_dir),
         "counts_note": "各折计数之和；不同折的 selected 集合不同，不是去重后的全局规则数",
         "folds": {},
-        "counts": {"motifs": 0, "admitted": 0, "hops": 0,
-                   "linked_motifs": 0, "technique_links": 0},
+        "counts": {"motifs": 0, "admitted": 0, "hops": 0},
     }
     for path in sorted(fold_dir.glob("*.json")):
         scenario = path.stem
         kg = build_fold_kg(scenario, path, version=version,
-                           include_candidates=include_candidates,
-                           observables_path=observables_path)
+                           include_candidates=include_candidates)
         dest = save_fold_kg(kg, out_dir)
         manifest["folds"][scenario] = {
             "path": str(dest), "counts": kg["counts"],

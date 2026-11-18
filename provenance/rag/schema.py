@@ -32,20 +32,6 @@ class Motif:
     source: str
     version: str
     stats: Optional[Dict[str, Any]] = None
-    techniques: List[Dict[str, Any]] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class Technique:
-    attack_id: str
-    name: str
-    tactics: List[str]
-    description: str = ""
-    url: str = ""
-    stix_version: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -63,24 +49,6 @@ class Case:
 
 
 @dataclass
-class BehaviorObservable:
-    observable_id: str
-    technique_id: str
-    description: str
-    syscall_pattern: List[str] = field(default_factory=list)
-    role_pattern: List[str] = field(default_factory=list)
-    path_pattern: List[str] = field(default_factory=list)
-    process_pattern: List[str] = field(default_factory=list)
-    confidence: float = 0.0
-    source: str = ""
-    observable: bool = True
-    verified: bool = False
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
 class EvidenceCard:
     motif_id: str
     motif_name: str
@@ -92,7 +60,6 @@ class EvidenceCard:
     background_hits: int
     ignore_hits: int
     precision: Optional[float]
-    techniques: List[Dict[str, Any]]
     cases: List[str]
     source: str
     version: str

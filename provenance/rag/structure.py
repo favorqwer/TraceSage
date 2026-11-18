@@ -7,7 +7,7 @@
 - 第二路：拿束内所有边在**束内能否走通**去匹配 Motif 的**整条 hop 序列**，
   按 全链走通 → 走通跳数 → 链长 → 训练折查准率 排序。
 
-本模块只产出规则证据，不读 Technique / BehaviorObservable。
+本模块产出按束内结构匹配得到的规则证据。
 """
 
 from __future__ import annotations

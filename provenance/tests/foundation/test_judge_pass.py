@@ -129,7 +129,8 @@ def run_once(config: dict | None = None, drop_ids: bool = False, drop_all: bool 
     model = ScriptedBundleModel(drop_ids=drop_ids, drop_all=drop_all)
     deps = Deps(scenario=None, graph=None, model=model, budget=LlmBudget(), record=inv,
                 log=logs.append, trace=[])
-    base = {"bundle": {"aggregate": True, "annotate_marks": True, "forward": False}}
+    base = {"bundle": {"aggregate": True, "annotate_marks": True, "forward": False,
+                      "witness_guard": False}}
     if config:
         base["bundle"].update(config.get("bundle") or {})
         for section in ("judge", "render", "logging"):
