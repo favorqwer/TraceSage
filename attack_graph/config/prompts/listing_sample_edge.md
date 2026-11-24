@@ -1,0 +1,1 @@
+    {MID} [进程 {PROCESS}] [{SRC_LABEL}] {SRC} --{SYSCALL}--> [{DST_LABEL}] {DST}（折叠事件数 {INSTANCES}，字节 {BYTES}，时间 {TIME}，层 {DIST}，通道 {VIA}）

@@ -1,0 +1,95 @@
+{
+  "_comment": "POI 调查输入定义：必填项为每个场景的 database 与 poi 规范。实体 key（file_id 或 network_id）必须与图数据库完全一致。",
+  "scenarios": {
+    "1_Web_Exploit_Ransomware": {
+      "database": "attack-1-web-exploit-ransomware-v2",
+      "poi": {
+        "kind": "file",
+        "rel": "p2f",
+        "syscall": "write",
+        "file_id": "/srv/data/README_RESTORE.txt"
+      }
+    },
+    "2_SSH_Spray_Lateral_Exfiltration": {
+      "database": "attack-2-ssh-spray-lateral-exfiltration-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "write",
+        "network_id": "100.116.135.31:45794->100.86.108.4:22"
+      }
+    },
+    "3_Phishing_Beacon_Cryptomining": {
+      "database": "attack-3-phishing-beacon-cryptomining-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "sendto",
+        "network_id": "100.86.108.4:59062->100.84.151.2:8080"
+      }
+    },
+    "4_Repo_Poisoning_Backdoor": {
+      "database": "attack-4-repo-poisoning-backdoor-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "write",
+        "network_id": "100.74.213.15:53648->100.86.108.4:22"
+      }
+    },
+    "5_Exposed_Service_Pivot": {
+      "database": "attack-5-exposed-service-pivot-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "write",
+        "network_id": "100.86.108.4:52972->100.116.135.31:6379"
+      }
+    },
+    "6_Web_SQLi_Data_Exfiltration": {
+      "database": "attack-6-web-sqli-data-exfiltration-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "write",
+        "network_id": "100.74.213.15:40316->100.86.108.4:80"
+      }
+    },
+    "7_DB_Bruteforce_Datawipe": {
+      "database": "attack-7-db-bruteforce-datawipe-v2",
+      "poi": {
+        "kind": "file",
+        "rel": "p2f",
+        "syscall": "unlink",
+        "file_id": "/srv/bizapp/logs/bizapp-sync.log"
+      }
+    },
+    "8_FTP_WeakCreds_WebShell_Exfiltration": {
+      "database": "attack-8-ftp-weakcreds-webshell-exfiltration-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "sendto",
+        "network_id": "100.86.108.4:48182->100.74.213.15:8888"
+      }
+    },
+    "9_Exposed_Container_Escape": {
+      "database": "attack-9-exposed-container-escape-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "sendto",
+        "network_id": "172.17.0.2:56186->100.74.213.15:8808"
+      }
+    },
+    "10_Tomcat_Weakcreds_DNS_Exfiltration": {
+      "database": "attack-10-tomcat-weakcreds-dns-exfiltration-v2",
+      "poi": {
+        "kind": "network",
+        "rel": "p2n",
+        "syscall": "write",
+        "network_id": "100.74.213.15:48370->100.86.108.4:8080"
+      }
+    }
+  }
+}
