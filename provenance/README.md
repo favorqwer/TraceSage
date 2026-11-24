@@ -1,4 +1,6 @@
-# Provenance：基于规则证据的溯源图调查
+# Provenance：基于规则证据的溯源图调查（历史冻结基线与备份）
+
+> **模块定位**：本目录当前作为 **历史冻结基线实现与备份** 保留（对应冻结成绩目录 `output/provenance-baseline/`），日常新功能开发与算法迭代已切换至 [attack_graph/](file:///E:/Work/TraceSage/attack_graph)（参见 [attack_graph/README.md](file:///E:/Work/TraceSage/attack_graph/README.md)）。
 
 ## 1. 运行流程
 

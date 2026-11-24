@@ -4,9 +4,10 @@
 
 ## 基线产物落盘位置
 
+- 当前主线 `attack_graph/` 的正式基线存放目录为 `output/attack-graph-baseline/`：固化 10 场景最终报告（`reports_v2/`）、`summary_v2.json`、代码/输入指纹与 `OVERVIEW.md`；在未经过全 10 场景完整实测并显式晋升前，不得将中间实验写入该目录。
+- 既有 `provenance/` 模块的冻结基线/备份留在 `output/provenance-baseline/`：包含 10 份压缩报告、`summary_v2.json`、代码指纹与 `OVERVIEW.md`（由 `tools/promote_v2_baseline.py` 生成），作为历史对照组参照，严禁擅自覆盖。
 - 调查引擎（DEPIMPACT，位于 `experiments/DEPIMPACT`）的基线一律写 `output/engine-baseline/<场景名>/`：`baseline.json` 是引擎交付的最终图，`groundtruth-eval.txt` 是 `tools/score_graph_product.py` 对同一份产物的完整评分输出；汇总与口径写在 `output/engine-baseline/OVERVIEW.md`。
-- provenance 的基线写 `output/provenance-baseline/`：10 份压缩报告、`summary_v2.json`、代码指纹与 `OVERVIEW.md`，由 `tools/promote_v2_baseline.py` 生成。基线的提示词口径、单次/重复运行限制与已知边界以 `OVERVIEW.md` 为准。
-- 当次用的运行产物写 `output/engine-runs/`、`output/provenance-runs/`；这两处不得当作基线，也不得被引用为成绩来源。
+- 当次用的运行时测试与消融产物分别写 `output/attack-graph-runs/`、`output/provenance-runs/`、`output/engine-runs/`、`output/plain-llm-runs/`；这些目录不得当作正式基线。
 - `tools/run_all_engine_v2.py` 与 `experiments/DEPIMPACT/baseline/run-baseline.sh` 不带输出目录参数时都会写 `output/engine-baseline/`：前者用于批量重跑基线，后者只用于基线复跑；当次测试必须显式传 `output/engine-runs/<场景名>`，否则会覆盖正式基线。
 
 ## 多场景汇总口径（合并平均）

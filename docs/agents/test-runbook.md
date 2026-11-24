@@ -1,17 +1,17 @@
 # 场景测试执行手册
 
-**适用范围**：要实际跑图数据导入、provenance 评测、引擎测试或评分时读本文件。数据库命名与基线归属见根 `AGENTS.md` 第五部分；评分与汇总口径见 `docs/agents/evaluation-protocol.md`。
+**适用范围**：要实际跑图数据导入、`attack_graph` 主线开发评测、历史 `provenance` 基线复现、引擎测试或评分时读本文件。数据库命名与基线归属见根 `AGENTS.md` 第五部分；评分与汇总口径见 `docs/agents/evaluation-protocol.md`。
 
 ## 常用核心工具
 
 | 脚本 | 用途 |
 |---|---|
 | `tools/score_graph_product.py` | 引擎产出 vs 标准答案评分（召回按步骤、查准按四元组，同一条边多次发生只计一次）；产物未内藏 syscall 时按 `-v2` 库反查补全，反查不到即阻断 |
-| `tools/score_report_product.py` | 智能体 / provenance 报告 vs 标准答案评分（与上一条同一口径：召回按步骤、查准按四元组） |
+| `tools/score_report_product.py` | `attack_graph` / `provenance` / 智能体报告 vs 标准答案评分（与上一条同一口径：召回按步骤、查准按四元组） |
 | `tools/rules_match.py` | 评分公共模块：可能集合规则与端点条件判定，动作名 ↔ syscall 词表 |
 | `tools/run_all_engine_v2.py` | 批量在 `-v2` 库上跑调查引擎并自动评分 |
-| `tools/promote_v2_baseline.py` | provenance 的 10 场景结果校验后写成正式基线（压缩报告、summary、代码指纹） |
-| `tools/l1_index.py` | 手动建 / 重建 provenance 第 1 层顶点-时间索引 |
+| `tools/promote_v2_baseline.py` | 10 场景结果校验后晋升为正式基线（压缩报告、summary、代码指纹） |
+| `tools/l1_index.py` | 手动建 / 重建第 1 层顶点-时间索引 |
 | `tools/neo4j_desktop_start.*` / `neo4j_desktop_stop.*` | 本机 Neo4j 桌面版启停 |
 
 ## 场景测试标准流程
@@ -26,16 +26,31 @@ python parser/main.py \
   --neo4j-database attack-<场景名小写连字符>-v2
 ```
 
-**provenance 评测（单一检索方式）**：仅检索训练折规则证据（Motif/Hop），校验规则编号、跳号及角色对齐；默认取该场景的留一折库。运行时判定参数由 `provenance/config/navigator.toml` 控制，默认在无上限模式（`cap_calls = 0`，由五级拓扑与结构闸门自收敛终止）下运行；如需限制调用预算可显式配置正整数上限。
+**`attack_graph` 主线评测（当前主要开发入口）**：运行时判定参数由 `attack_graph/config/navigator.toml` 控制（默认 `cap_calls = 0` 无上限自收敛）。支持通过 `--replay-trace` 复用已有的 `.trace.jsonl` 批次判定记录对后置剪枝与报告生成阶段做零 LLM 调用回归验证：
 ```bash
-# 单场景正式运行
+# 单场景实时运行（调用大模型）
+python attack_graph/main.py --scenario <场景全名> \
+  --output output/attack-graph-runs/<运行编号>/<场景全名>.json
+
+# 单场景免调用重放（用于 Stage 5-7 消融验证）
+python attack_graph/main.py --scenario <场景全名> \
+  --replay-trace output/provenance-runs/attack-graph-20261124/reports/<场景全名>.trace.jsonl \
+  --output output/attack-graph-runs/<运行编号>/<场景全名>.json
+
+# 单元测试（修改 attack_graph 后必跑）
+python -m unittest discover -s attack_graph/tests/foundation -p "test_*.py"
+```
+
+**历史 `provenance` 冻结基线复现 / 备份对照入口**（对应 `output/provenance-baseline/`）：
+```bash
+# 单场景历史基线代码运行
 python provenance/main.py --scenario <场景全名> \
   --output output/provenance-runs/<场景全名>_rag.json
 
 # 离线规则库维护（仅重建折库、核对覆盖表时使用，不参与日常评测）
 python provenance/run_loo_folds.py --mode rules --out output/provenance-runs/loo --keep-reports tmp/loo_rules_reports
 ```
-单场景报告默认写 `output/provenance-runs/<场景全名>_rag.json`。
+日常开发与测试单场景报告默认写 `output/attack-graph-runs/`（原 `provenance` 写 `output/provenance-runs/`），严禁直接写入 `output/attack-graph-baseline/` 或 `output/provenance-baseline/`。
 
 **引擎测试（当次运行，不写基线）：**
 ```bash
