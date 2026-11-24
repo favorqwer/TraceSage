@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import settings as cfg
 from rag.graph_retrieve import RuleGraphRetriever
 from rag.motif_likelihood import MotifLikelihoodIndex
-from rag.neo4j_kg import DEFAULT_DATABASE
 from rag.structure import StructureIndex, merge_rounds
 
 TOPK_RULES = 5
@@ -65,8 +64,7 @@ def close() -> None:
 def _get_retriever() -> RuleGraphRetriever:
     global _RETRIEVER, _STRUCT
     if _RETRIEVER is None:
-        _RETRIEVER = RuleGraphRetriever(cfg.neo4j_uri(), cfg.neo4j_auth(),
-                                        DEFAULT_DATABASE, _SCENARIO)
+        _RETRIEVER = RuleGraphRetriever(fold=_SCENARIO)
         _STRUCT = StructureIndex(_RETRIEVER)
     return _RETRIEVER
 

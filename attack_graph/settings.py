@@ -32,6 +32,22 @@ WORK_DIR = REPO_ROOT / "tmp" / "provenance"
 STATE_DIR = WORK_DIR / "state"
 LOG_DIR = WORK_DIR / "logs"
 L1_INDEX_DIR = WORK_DIR / "l1-index"
+GRAPH_STORE_DIR = Path(os.environ.get("TRACESAGE_GRAPH_DIR") or (REPO_ROOT / "graphs"))
+RULE_KG_DIR = Path(os.environ.get("TRACESAGE_RULE_KG_DIR") or (REPO_ROOT / "output" / "rule-kg" / "v1"))
+
+
+def graph_store_dir() -> Path:
+    return GRAPH_STORE_DIR
+
+
+def graph_path(scenario: str) -> Path:
+    """返回指定场景的正式单文件 .tsg 索引路径（graphs/<scenario>.tsg）。"""
+    safe = str(scenario).replace("/", "_").replace("\\", "_")
+    return GRAPH_STORE_DIR / f"{safe}.tsg"
+
+
+def rule_kg_dir() -> Path:
+    return RULE_KG_DIR
 
 def groundtruth_dir() -> Path:
     return REPO_ROOT / "groundtruth"

@@ -249,6 +249,32 @@ class VertexKinds:
         return cls({}, degraded=degraded, database=database)
 
     @classmethod
+    def for_tsg(cls, tsg_path, database=None):
+        """从单文件 .tsg 索引直接读取全部顶点的内容与种类（零 Neo4j 依赖）。"""
+        import sys
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from tsg.format import TSGReader
+
+        mapping = {}
+        try:
+            with TSGReader(tsg_path) as reader:
+                for _vid, vp in reader.iter_vertices():
+                    label = vp.get("kind")
+                    kind = _LABEL_TO_KIND.get(label)
+                    if not kind:
+                        continue
+                    content = vp.get("content")
+                    if label == "Process":
+                        if not content or (content == vp.get("key") and "|" in str(content)):
+                            content = "<NA>"
+                    if content is not None:
+                        mapping.setdefault(content, set()).add(kind)
+        except Exception:
+            return cls.empty(database=database)
+        return cls({k: frozenset(v) for k, v in mapping.items()}, degraded=False, database=database)
+
+    @classmethod
     def for_database(cls, database):
         """从 Neo4j 读全部顶点的内容与种类；连不上就返回空表（degraded）。
 
@@ -281,8 +307,13 @@ class VertexKinds:
 
     @classmethod
     def for_gt(cls, gt, database=None):
-        """按 GT 的 scenario 找场景库（provenance/config/scenarios.json），读顶点种类。"""
-        db = database or scenario_database(gt.get("scenario"))
+        """优先从单文件 graphs/<scenario>.tsg 读取顶点种类，缺失时才回退旧数据库。"""
+        scenario = gt.get("scenario")
+        db = database or scenario_database(scenario)
+        if scenario:
+            tsg_file = ROOT / "graphs" / f"{scenario}.tsg"
+            if tsg_file.is_file():
+                return cls.for_tsg(tsg_file, database=db)
         if not db:
             return cls.empty()
         return cls.for_database(db)

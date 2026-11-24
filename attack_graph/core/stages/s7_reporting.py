@@ -11,7 +11,14 @@ tools_dir = cfg.REPO_ROOT / "tools"
 if str(tools_dir) not in sys.path:
     sys.path.insert(0, str(tools_dir))
 import score_report_product as scorer
-from core.reporting import RouteOutcome, build_report_from_outcome, save_report
+from core.reporting import (
+    RouteOutcome,
+    build_events_export,
+    build_report_from_outcome,
+    default_events_path,
+    save_events_export,
+    save_report,
+)
 from core.context import PipelineContext
 
 
@@ -26,6 +33,7 @@ def run(
     debris_pruned: List[Dict[str, Any]],
     audit_dict: Dict[str, Any],
     temporal_stats: Dict[str, Any] | None = None,
+    deps: Any = None,
 ) -> Dict[str, Any]:
     outcome = RouteOutcome(
         confirmed=final_confirmed_map,
@@ -69,6 +77,8 @@ def run(
         },
     )
 
+    confirmed_edges_list = list(report["edges"])
+    unexcluded_edges_list = list(report["unexcluded"])
     report["edges"].extend(report["unexcluded"])
     report["stats"]["retained_count"] = len(report["edges"])
     report["stats"]["prefilter_deferred_count"] = len(pruned_background)
@@ -76,6 +86,50 @@ def run(
     if temporal_stats is not None:
         report["stats"]["temporal_pruning"] = temporal_stats
     save_report(report, ctx.out_path, overwrite=False)
+
+    events_file: str | None = None
+    events_count: int | None = None
+    rec_obj = getattr(deps, "record", None)
+    closure_events = getattr(rec_obj, "closure_events", None)
+    raw_events = getattr(rec_obj, "raw_events", None)
+    if closure_events or raw_events:
+        if closure_events and not raw_events:
+            from closure.fold import event_to_raw_dict
+            retained_eids = {
+                int(eid)
+                for edge in report["edges"]
+                for eid in (edge.get("event_ids") or ())
+            }
+            raw_events = [event_to_raw_dict(ev) for ev in closure_events if ev.event_id in retained_eids]
+            vertex_attrs: Dict[str, Dict[str, Any]] = {}
+            tsg_path = str(getattr(rec_obj, "tsg_path", "") or "")
+            if tsg_path and Path(tsg_path).is_file():
+                if str(cfg.REPO_ROOT) not in sys.path:
+                    sys.path.insert(0, str(cfg.REPO_ROOT))
+                from tsg.format import TSGReader
+                with TSGReader(tsg_path) as tsg_r:
+                    for ev in raw_events:
+                        for kind, key in ((ev["src_kind"], ev["src_key"]), (ev["dst_kind"], ev["dst_key"])):
+                            vkey = f"{kind}:{key}"
+                            if vkey not in vertex_attrs:
+                                vid = tsg_r.find_vertex_id(kind, key)
+                                vertex_attrs[vkey] = (
+                                    dict(tsg_r.vertex_props(vid)) if vid is not None else {"kind": kind, "key": key}
+                                )
+        else:
+            vertex_attrs = getattr(rec_obj, "vertex_attrs", None) or {}
+        events_payload = build_events_export(
+            ctx.scenario,
+            str(getattr(rec_obj, "database", "") or ""),
+            confirmed_edges=confirmed_edges_list,
+            unexcluded_edges=unexcluded_edges_list,
+            raw_events=raw_events,
+            vertex_attrs=vertex_attrs,
+            poi_rows=getattr(rec_obj, "poi_rows", None) or [],
+        )
+        events_out = save_events_export(events_payload, default_events_path(ctx.out_path), overwrite=False)
+        events_file = str(events_out)
+        events_count = len(events_payload["events"])
 
     # 官方评分
     gt_path = str(cfg.REPO_ROOT / f"groundtruth/{ctx.scenario}.groundtruth.json")
@@ -109,4 +163,5 @@ def run(
         "llm_calls": ctx.budget.calls,
         "elapsed": elapsed,
         "report_file": ctx.out_path,
+        **({"events_file": events_file, "retained_events": events_count} if events_file is not None else {}),
     }

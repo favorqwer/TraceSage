@@ -43,6 +43,10 @@ class Investigation:
     poi_t1: int = 0
     poi_rows: list[dict[str, Any]] = field(default_factory=list)
     process_context: dict[str, dict[str, Any]] = field(default_factory=dict)
+    closure_events: list[Any] = field(default_factory=list)
+    tsg_path: str = ""
+    raw_events: list[dict[str, Any]] = field(default_factory=list)
+    vertex_attrs: dict[str, dict[str, Any]] = field(default_factory=dict)
     edges: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)
     origin: dict[tuple[str, str, str], str] = field(default_factory=dict)
     confirmed: dict[tuple[str, str, str], dict[str, Any]] = field(default_factory=dict)

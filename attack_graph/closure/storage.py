@@ -25,12 +25,18 @@ from domain.edge import (
 
 # ==== 1. 顶点-时间索引的二进制格式 ====
 
-FORMAT_VERSION = 9   # 9：进程显示名增加命令行首词兜底、删除 cwd；8：索引记录增加成败（effect）
+FORMAT_VERSION = 10  # 10：边记录补全 action/result/空值标志，顶点表补全 host_id/container_id/file_type/uid/容器权限；9：进程显示名兜底
 BUCKET_COUNT = 64
 
 # 定长记录：'<' 无对齐填充
-RECORD = struct.Struct("<IIBHqqqqB")          # 44 字节（一条入射记录，末位 = 成败码）
-BUCKET_RECORD = struct.Struct("<IIIBHqqqqB")  # 48 字节（多一个 block_id）
+# 字段顺序：(owner_id, other_id, rel_code, syscall_id, action_id, start, end, event_id, nbytes, result, effect_code, flags)
+RECORD = struct.Struct("<IIBHHqqqqqBB")          # 55 字节（一条入射记录）
+BUCKET_RECORD = struct.Struct("<IIIBHHqqqqqBB")  # 59 字节（多一个 block_id）
+
+# 空值标志位（无损保留数据库里的 NULL）
+FLAG_HAS_START = 1
+FLAG_HAS_END = 2
+FLAG_HAS_RESULT = 4
 
 PAGE = 20000          # 边表分页大小（构建索引时每次查询返回的行数）
 CHUNK_RECORDS = 4096  # 读取索引时每块解包的记录数
@@ -93,22 +99,31 @@ def name_expr(var: str) -> str:
 
 
 def vertex_query(kind: str) -> str:
-    """顶点表查询：返回 key / content 以及索引读取时要用的静态属性。"""
+    """顶点表查询：返回 key / content 以及索引读取与下游导出所需的静态属性。"""
     if kind == "Process":
         return ("MATCH (p:Process) RETURN "
                 f"{key_expr('p', kind)} AS key, "
                 f"{name_expr('p')} AS content, "
+                "coalesce(p.host_id, '') AS host_id, "
+                "coalesce(p.container_id, '') AS container_id, "
                 "p.pid AS pid, coalesce(p.name, '') AS name, "
                 f"{name_expr('p')} AS exepath, "
                 "coalesce(p.cmdline, p.args, '') AS args, "
-                "coalesce(p.ppid, 0) AS ppid")
+                "coalesce(p.ppid, 0) AS ppid, "
+                "p.uid AS uid, p.euid AS euid, "
+                "p.container_privileged AS container_privileged, "
+                "p.container_host_root_rw AS container_host_root_rw")
     if kind == "File":
         return ("MATCH (f:File) RETURN "
-                f"{key_expr('f', kind)} AS key, f.path AS content")
+                f"{key_expr('f', kind)} AS key, f.path AS content, "
+                "coalesce(f.host_id, '') AS host_id, "
+                "coalesce(f.container_id, '') AS container_id, "
+                "f.file_type AS file_type")
     if kind == "Network":
         return ("MATCH (n:Network) RETURN "
                 f"{key_expr('n', kind)} AS key, "
                 "coalesce(n.endpoints, n.network_id) AS content, "
+                "coalesce(n.host_id, '') AS host_id, "
                 "coalesce(n.proto, n.protocol, '') AS protocol")
     raise ValueError(f"未知顶点类别：{kind!r}")
 
@@ -121,6 +136,7 @@ def _edge_return() -> str:
             "coalesce(e.start_ns, e.starttime) AS starttime, "
             "coalesce(e.end_ns, e.endtime) AS endtime, "
             "coalesce(e.syscall, e.action) AS syscall, "
+            "coalesce(e.action, '') AS action, "
             "e.result AS res, "
             "CASE WHEN e.result > 0 THEN e.result WHEN e.bytes IS NOT NULL THEN e.bytes ELSE 0 END AS bytes, ")
 
@@ -155,6 +171,10 @@ def poi_query(rel: str, kind: str) -> str:
             "elementId(e) AS relationship_id, "
             f"{key_expr('p', 'Process')} AS process_id, "
             f"{name_expr('p')} AS process_content, "
+            "coalesce(p.host_id, '') AS src_host, "
+            "coalesce(o.host_id, '') AS dst_host, "
+            "o.file_type AS dst_kind, "
+            f"{key_expr('o', label)} AS other_key, "
             "coalesce(o.path, o.endpoints, o.file_id, o.network_id) AS other, "
             "labels(o)[0] AS other_label, "
             "coalesce(o.proto, o.protocol, '') AS other_protocol\n"

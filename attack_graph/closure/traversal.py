@@ -33,12 +33,18 @@ class Event:
 
     __slots__ = ("event_id", "rel", "syscall", "bytes", "start", "end", "pid", "owner",
                  "other", "other_label", "other_process_id", "effect",
+                 "action", "result", "has_start", "has_end",
+                 "src_host", "dst_host", "src_kind", "dst_kind",
                  "dist", "via_kind", "via_key", "support")
 
     def __init__(self, event_id: int, rel: str, syscall: str, bytes: int, start: int, end: int,
                  pid: str, owner: str, other: str, other_label: str, other_process_id: str = "",
                  effect: str = "",
-                 dist: int = 0, via_kind: str = "", via_key: str = "", support: int = 0) -> None:
+                 dist: int = 0, via_kind: str = "", via_key: str = "", support: int = 0,
+                 action: str = "", result: Optional[int] = None,
+                 has_start: bool = True, has_end: bool = True,
+                 src_host: str = "", dst_host: str = "",
+                 src_kind: Optional[str] = None, dst_kind: Optional[str] = None) -> None:
         self.event_id = event_id
         self.rel = rel
         self.syscall = syscall
@@ -52,6 +58,15 @@ class Event:
         self.other_process_id = other_process_id
         # 成败（图上 result 换算，与评分口径一致）：success / failure / 空 = 未观测
         self.effect = effect
+        # 完整单事件属性（供阶段 6.5 内存时序剪枝与阶段 7 事件明细导出复用）
+        self.action = action
+        self.result = result
+        self.has_start = has_start
+        self.has_end = has_end
+        self.src_host = src_host
+        self.dst_host = dst_host
+        self.src_kind = src_kind
+        self.dst_kind = dst_kind
         # 结构上下文（只用于判定时的渲染与束的细分，不参与收边判定）：离终点事件最少几跳
         # （种子 = 0）、这条边是从哪个顶点被回推出来的（`via_kind` 为空 = 终点事件本身）、
         # 以及入闭包通道的位掩码（见 `domain.edge.CHANNEL_BITS`）。
@@ -313,6 +328,10 @@ def _to_rows(events: list[Event]) -> list[dict[str, Any]]:
             "event_id": ev.event_id,
             "starttime": ev.start, "endtime": ev.end, "syscall": ev.syscall, "bytes": ev.bytes,
             "effect": ev.effect,
+            "action": ev.action, "result": ev.result,
+            "has_start": ev.has_start, "has_end": ev.has_end,
+            "src_host": ev.src_host, "dst_host": ev.dst_host,
+            "src_kind": ev.src_kind, "dst_kind": ev.dst_kind,
             "dist": ev.dist, "via_kind": ev.via_kind, "via_key": ev.via_key,
             "support": ev.support,
             "other_process_id": ev.other_process_id,

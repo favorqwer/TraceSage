@@ -15,6 +15,7 @@ from domain.edge import (
     content_triple_of,
     is_derivation,
     labels_of,
+    normalize_rel,
     owner_is_source,
     triple,
 )
@@ -22,6 +23,7 @@ from closure.trace import trace_event
 from closure.traversal import Event, run_causal_closure
 from closure.policy import is_startup_dependency
 from closure.snapshot import open_source
+from closure.storage import effect_code, effect_name
 
 # ==== 1. 折叠 ====
 
@@ -321,30 +323,167 @@ def seed_events(deps: "Deps") -> list[Event]:
     """把 intake 命中的终点事件转成闭包种子（终点事件本身永远收进闭包，不受规则影响）。"""
     seeds: list[Event] = []
     for row in deps.record.poi_rows:
-        start = int(row.get("starttime") or 0)
+        raw_start = row.get("starttime")
+        raw_end = row.get("endtime")
+        raw_res = row.get("res")
+        has_start = raw_start is not None
+        has_end = raw_end is not None
+        start = int(raw_start) if has_start else 0
+        end = int(raw_end) if has_end else start
+        res_val = int(raw_res) if raw_res is not None else None
         seeds.append(Event(
             event_id=int(row["event_id"]), rel=str(row.get("rel") or deps.scenario.poi.rel),
             syscall=str(row.get("syscall") or ""), bytes=int(row.get("bytes") or 0), start=start,
-            end=int(row.get("endtime") or start), pid=str(row.get("process_id") or ""),
+            end=end, pid=str(row.get("process_id") or ""),
             owner=str(row.get("process_content") or ""), other=str(row.get("other") or ""),
             other_label=str(row.get("other_label")
                             or SCENARIO_KIND_LABELS.get(deps.scenario.poi.kind, "Network")),
+            effect=effect_name(effect_code(raw_res)),
+            action=str(row.get("action") or ""),
+            result=res_val,
+            has_start=has_start,
+            has_end=has_end,
+            src_host=str(row.get("src_host") or ""),
+            dst_host=str(row.get("dst_host") or ""),
+            dst_kind=row.get("dst_kind"),
         ))
     return seeds
+
+
+def _collect_raw_events_and_vertices(
+    rows: list[dict[str, Any]],
+    source: Any,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """将阶段 1 闭包原始事件整理为规范单事件记录列表与按实体主键去重的属性表。"""
+    has_vertex_attr = hasattr(source, "vertex_attr")
+    vertex_attrs: dict[str, dict[str, Any]] = {}
+    raw_events: list[dict[str, Any]] = []
+
+    def ensure_vertex(kind: str, key: str) -> dict[str, Any]:
+        vkey = f"{kind}:{key}"
+        attr = vertex_attrs.get(vkey)
+        if attr is None:
+            attr = source.vertex_attr(kind, key) if has_vertex_attr else {"kind": kind, "key": key}
+            vertex_attrs[vkey] = attr
+        return attr
+
+    for row in rows:
+        rel_short = normalize_rel(str(row.get("rel") or ""))
+        src_label, dst_label = labels_of(rel_short)
+        rel_full = f"{src_label}To{dst_label}"
+        owner_key = str(row.get("process_id") or "")
+        other_label = str(row.get("other_label") or "")
+        other_key = (
+            str(row.get("other_process_id") or "")
+            if other_label == "Process"
+            else str(row.get("other") or "")
+        )
+        if owner_is_source(rel_short):
+            src_kind, src_key = "Process", owner_key
+            dst_kind, dst_key = other_label or dst_label, other_key
+        else:
+            src_kind, src_key = other_label or src_label, other_key
+            dst_kind, dst_key = "Process", owner_key
+
+        src_attr = ensure_vertex(src_kind, src_key)
+        dst_attr = ensure_vertex(dst_kind, dst_key)
+        src_host = str(row.get("src_host") or src_attr.get("host_id") or "")
+        dst_host = str(row.get("dst_host") or dst_attr.get("host_id") or "")
+        src_file_type = row.get("src_kind") if row.get("src_kind") is not None else src_attr.get("file_type")
+        dst_file_type = row.get("dst_kind") if row.get("dst_kind") is not None else dst_attr.get("file_type")
+        action = str(row.get("action") or "")
+        eid = int(row["event_id"])
+        start_ns = int(row["starttime"]) if row.get("has_start", True) else None
+        end_ns = int(row["endtime"]) if row.get("has_end", True) else None
+
+        raw_events.append({
+            "id": f"{rel_full}:{eid}:{action}",
+            "event_id": eid,
+            "rel": rel_short,
+            "rel_full": rel_full,
+            "action": action,
+            "syscall": str(row.get("syscall") or ""),
+            "start_ns": start_ns,
+            "end_ns": end_ns,
+            "result": row.get("result"),
+            "bytes": int(row.get("bytes") or 0),
+            "effect": str(row.get("effect") or ""),
+            "src_kind": src_kind,
+            "src_key": src_key,
+            "src_host": src_host,
+            "src_file_type": src_file_type,
+            "dst_kind": dst_kind,
+            "dst_key": dst_key,
+            "dst_host": dst_host,
+            "dst_file_type": dst_file_type,
+            "dist": int(row.get("dist") or 0),
+            "via_kind": str(row.get("via_kind") or ""),
+            "via_key": str(row.get("via_key") or ""),
+            "support": int(row.get("support") or 0),
+        })
+    return raw_events, vertex_attrs
+
+
+def event_to_raw_dict(ev: Event) -> dict[str, Any]:
+    """按需将单条轻量 Event 对象转为规范原始事件字典（仅在阶段 6.5 / 阶段 7 对目标事件调用）。"""
+    rel_short = normalize_rel(ev.rel)
+    src_label, dst_label = labels_of(rel_short)
+    rel_full = f"{src_label}To{dst_label}"
+    other_label = ev.other_label
+    other_key = ev.other_process_id if other_label == "Process" else ev.other
+    if owner_is_source(rel_short):
+        src_kind, src_key = "Process", ev.pid
+        dst_kind, dst_key = other_label or dst_label, other_key
+    else:
+        src_kind, src_key = other_label or src_label, other_key
+        dst_kind, dst_key = "Process", ev.pid
+    action = ev.action or ""
+    eid = ev.event_id
+    return {
+        "id": f"{rel_full}:{eid}:{action}",
+        "event_id": eid,
+        "rel": rel_short,
+        "rel_full": rel_full,
+        "action": action,
+        "syscall": ev.syscall,
+        "start_ns": ev.start if ev.has_start else None,
+        "end_ns": ev.end if ev.has_end else None,
+        "result": ev.result,
+        "bytes": ev.bytes,
+        "effect": ev.effect,
+        "src_kind": src_kind,
+        "src_key": src_key,
+        "src_host": ev.src_host,
+        "src_file_type": ev.src_kind,
+        "dst_kind": dst_kind,
+        "dst_key": dst_key,
+        "dst_host": ev.dst_host,
+        "dst_file_type": ev.dst_kind,
+        "dist": ev.dist,
+        "via_kind": ev.via_kind,
+        "via_key": ev.via_key,
+        "support": ev.support,
+    }
 
 
 def prepare(deps: "Deps") -> Prepared:
     """开来源、跑闭包（含受限前向补链）：因果闭包 → 进程摘要 → 折叠记录。失败时关掉来源再抛出。"""
     inv = deps.record
-    source = open_source(deps.graph, log=deps.log)
+    source = getattr(deps, "source", None)
+    if source is None:
+        source = open_source(deps.graph, scenario=inv.scenario, log=deps.log)
     try:
         seeds = seed_events(deps)
         closure_res = run_causal_closure(source, seeds, poi_t0=int(inv.poi_t0 or 0),
-                                         forward_chain=True, log=deps.log)
+                                         forward_chain=True, log=deps.log, with_events=True)
         rows = closure_res["rows"]
         stats = closure_res["stats"]
         seeds = closure_res["seeds"]
         stats["source"] = source.stats()
+
+        # 直接保留轻量 Event 列表与 .tsg 路径，避免阶段 1 提前构造百万级全量字典副本
+        inv.closure_events = closure_res.get("events") or []
+        inv.tsg_path = str(getattr(source, "path", "") or "")
 
         metas = build_process_context(source, rows)
         inv.process_context.update(metas)

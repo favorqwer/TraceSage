@@ -13,18 +13,18 @@ from typing import Any, Iterable
 
 import settings as cfg
 from closure.intake import Deps
-from closure.neo4j import ReadOnlyGraph
 from closure.snapshot import db_fingerprint, snapshot_dir
 from core.filters import AUTH_OR_CONFIG, PERSISTENCE_PREFIXES, is_infra_daemon
 from core.stages.process_protection import protect
-from domain.edge import ALL_RELS, REL_NORM, cypher_rel_match, edge_key
+from domain.edge import ALL_RELS, REL_NORM, cypher_rel_match, edge_key, labels_of, normalize_rel, owner_is_source
 from domain.network import is_loopback_dns_resolver
 
 
 _PAGE_SIZE = 4_000
 _SMALL_QUERY_LIMIT = 20_000
 _CACHE_FORMAT = 1
-_REAL_READONLY_GRAPH = ReadOnlyGraph
+ReadOnlyGraph: Any = None
+_REAL_READONLY_GRAPH: Any = None
 
 _RETURN_FIELDS = (
     "type(e) AS rel, e.event_id AS eid, elementId(e) AS id, "
@@ -285,18 +285,118 @@ def reachable(events: list[dict], alerts: set[str], *, blocked_nodes: set[str] |
     return visited
 
 
+def _load_events_from_stage1(
+    deps: Deps, id_set: set[int]
+) -> tuple[list[dict], set[str]] | None:
+    """优先直接复用阶段 1 保留在内存里的轻量 Event 列表或原始事件字典（零数据库查询）。"""
+    poi_rows = getattr(deps.record, "poi_rows", None) or []
+    if not poi_rows:
+        return None
+    closure_events = getattr(deps.record, "closure_events", None)
+    raw_events = getattr(deps.record, "raw_events", None)
+    if not closure_events and not raw_events:
+        return None
+
+    events: list[dict] = []
+    event_ids_seen: set[str] = set()
+    if closure_events:
+        for ev in closure_events:
+            eid = ev.event_id
+            if eid not in id_set:
+                continue
+            src_host = ev.src_host
+            dst_host = ev.dst_host
+            if not src_host or not dst_host:
+                return None
+            rel_short = normalize_rel(ev.rel)
+            src_label, dst_label = labels_of(rel_short)
+            rel_full = f"{src_label}To{dst_label}"
+            action = ev.action or ""
+            ev_id = f"{rel_full}:{eid}:{action}"
+            other_label = ev.other_label
+            other_key = ev.other_process_id if other_label == "Process" else ev.other
+            if owner_is_source(rel_short):
+                src_node = f"Process:{ev.pid}"
+                dst_node = f"{other_label or dst_label}:{other_key}"
+            else:
+                src_node = f"{other_label or src_label}:{other_key}"
+                dst_node = f"Process:{ev.pid}"
+            event_ids_seen.add(ev_id)
+            events.append({
+                "rel": rel_full,
+                "eid": eid,
+                "id": ev_id,
+                "src": src_node,
+                "dst": dst_node,
+                "src_host": src_host,
+                "dst_host": dst_host,
+                "start": ev.start if ev.has_start else None,
+                "finish": ev.end if ev.has_end else None,
+                "action": action,
+                "result": ev.result,
+                "src_kind": ev.src_kind,
+            })
+    else:
+        for ev in raw_events:
+            eid = int(ev["event_id"])
+            if eid not in id_set:
+                continue
+            src_host = str(ev.get("src_host") or "")
+            dst_host = str(ev.get("dst_host") or "")
+            if not src_host or not dst_host:
+                return None
+            ev_id = str(ev["id"])
+            event_ids_seen.add(ev_id)
+            events.append({
+                "rel": str(ev["rel_full"]),
+                "eid": eid,
+                "id": ev_id,
+                "src": f"{ev['src_kind']}:{ev['src_key']}",
+                "dst": f"{ev['dst_kind']}:{ev['dst_key']}",
+                "src_host": src_host,
+                "dst_host": dst_host,
+                "start": ev.get("start_ns"),
+                "finish": ev.get("end_ns"),
+                "action": str(ev.get("action") or ""),
+                "result": ev.get("result"),
+                "src_kind": ev.get("src_file_type"),
+            })
+    anchors: set[str] = set()
+    for row in poi_rows:
+        rel_short = normalize_rel(str(row.get("rel") or ""))
+        src_label, dst_label = labels_of(rel_short)
+        rel_full = f"{src_label}To{dst_label}"
+        anchor_id = f"{rel_full}:{int(row['event_id'])}:{str(row.get('action') or '')}"
+        if anchor_id not in event_ids_seen:
+            return None
+        anchors.add(anchor_id)
+    print(f"[时序剪枝] 复用阶段 1 内存原始事件 {len(events)} 条（零数据库查询）", flush=True)
+    return events, anchors
+
+
 def _load_events_and_anchors(
     deps: Deps, confirmed: Iterable[dict], pending: list[dict]
 ) -> tuple[list[dict], set[str]]:
     poi_rows = deps.record.poi_rows
-    if not poi_rows or any(not row.get("relationship_id") for row in poi_rows):
+    if not poi_rows:
+        raise RuntimeError("时序剪枝缺少告警关系标识")
+    ids = {int(row["event_id"]) for row in poi_rows}
+    ids.update(int(eid) for edges in (confirmed, pending) for edge in edges for eid in edge.get("event_ids", ()))
+    stage1_loaded = _load_events_from_stage1(deps, ids)
+    if stage1_loaded is not None:
+        return stage1_loaded
+    if any(not row.get("relationship_id") for row in poi_rows):
         raise RuntimeError("时序剪枝缺少告警关系标识")
     anchors = {row["relationship_id"] for row in poi_rows}
-    ids = {row["event_id"] for row in poi_rows}
-    ids.update(eid for edges in (confirmed, pending) for edge in edges for eid in edge.get("event_ids", ()))
     ordered_ids = sorted(ids)
-    graph = ReadOnlyGraph(deps.record.database, scenario=deps.record.scenario,
-                          run_id=f"{deps.record.run_id}-temporal")
+    graph_cls = ReadOnlyGraph
+    if graph_cls is None:
+        raise RuntimeError(
+            "时序剪枝要求阶段 1 内存原始事件（deps.record.raw_events）齐全；"
+            "已移除 Neo4j 数据库回退路径"
+        )
+    graph = graph_cls(deps.record.database, scenario=deps.record.scenario,
+                      run_id=f"{deps.record.run_id}-temporal")
     try:
         events = _fetch_events(graph, deps.record.database, ordered_ids)
     finally:

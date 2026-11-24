@@ -13,21 +13,21 @@ from typing import Any, Callable, Dict, List, Tuple
 import settings as cfg
 from domain.edge import normalize_rel, owner_is_source
 from domain.state import Investigation
-from closure.neo4j import ReadOnlyGraph
-from closure.storage import poi_query
 from closure import fold
+from closure.snapshot import open_tsg_source
 from closure.trace import trace_event
 
 
 @dataclass
 class Deps:
-    """一次运行的依赖（图 / 模型 / 记账 / 记录）。"""
+    """一次运行的依赖（TSG 索引源 / 模型 / 记账 / 记录）。"""
 
     scenario: Any
-    graph: ReadOnlyGraph
+    graph: Any
     model: Any
     budget: Any
     record: Investigation
+    source: Any = None
     log: Callable[[str], None] = print
     trace: list[dict[str, Any]] = field(default_factory=list)
 
@@ -35,14 +35,19 @@ class Deps:
 def build_deps(scenario: Any, run_id: str, *, model: Any = None,
                log: Callable[[str], None] = print) -> Deps:
     cfg.ensure_work_dirs()
-    graph = ReadOnlyGraph(scenario.database, scenario=scenario.name, run_id=run_id)
+    tsg_file = cfg.graph_path(scenario.name)
+    if not tsg_file.is_file():
+        raise FileNotFoundError(
+            f"场景单文件索引缺失：{tsg_file}（请先运行 parser/main.py --sink tsg 生成）"
+        )
+    source = open_tsg_source(tsg_file, database=scenario.database)
     budget = None
     record = Investigation(run_id=run_id, scenario=scenario.name, database=scenario.database)
-    return Deps(scenario=scenario, graph=graph, model=model, budget=budget, record=record, log=log)
+    return Deps(scenario=scenario, graph=None, model=model, budget=budget, record=record, source=source, log=log)
 
 
 def list_scenarios() -> List[str]:
-    """全部场景名（真源：provenance/config/scenarios.json）。"""
+    """全部场景名（真源：attack_graph/config/scenarios.json）。"""
     cfg.load_dotenv()
     return cfg.available_scenarios()
 
@@ -50,12 +55,13 @@ def list_scenarios() -> List[str]:
 # ==== POI 定位 ====
 
 def intake(deps: "Deps") -> dict[str, Any]:
-    """POI 命中校验 + 时间范围现算（实例数/时间范围不写进配置）。"""
+    """离线从 .tsg 索引定位 POI 并计算时间范围（零 Neo4j 查询）。"""
     poi = deps.scenario.poi.as_dict()
-    rows = deps.graph.run(poi_query(poi["rel"], poi["kind"]),
-                          {"key": poi["key"], "sc": poi["syscall"]})
+    if deps.source is None:
+        raise RuntimeError("Deps 缺少 TSG 索引源（source）")
+    rows = deps.source.find_poi(**poi)
     if not rows:
-        raise RuntimeError(f"POI 在库中未命中：{poi}")
+        raise RuntimeError(f"POI 在 .tsg 索引中未命中：{poi}")
 
     process_ids = sorted({r["process_id"] for r in rows})
     owner = rows[0]["process_content"]
@@ -134,7 +140,8 @@ def extract_raw_closure(scenario_name: str, return_deps: bool = False,
     }
 
     fold.finish(prep)
-    deps.graph.close()
+    if deps.graph is not None:
+        deps.graph.close()
 
     if return_deps:
         return raw_edges, stats, deps

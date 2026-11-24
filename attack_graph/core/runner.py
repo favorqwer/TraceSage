@@ -92,4 +92,5 @@ class InvestigationRunner:
             debris_pruned=debris_pruned,
             audit_dict=audit,
             temporal_stats=temporal_stats,
+            deps=deps,
         )

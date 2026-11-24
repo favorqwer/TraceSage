@@ -20,9 +20,9 @@ from closure import storage as S
 
 class StorageFormatTest(unittest.TestCase):
     def test_record_sizes_and_format_version(self) -> None:
-        self.assertEqual(S.RECORD.size, 44)
-        self.assertEqual(S.BUCKET_RECORD.size, 48)
-        self.assertEqual(S.FORMAT_VERSION, 9)
+        self.assertEqual(S.RECORD.size, 55)
+        self.assertEqual(S.BUCKET_RECORD.size, 59)
+        self.assertEqual(S.FORMAT_VERSION, 10)
 
     def test_relation_codes_follow_domain_order(self) -> None:
         self.assertEqual(tuple(S.REL_CODES), ALL_RELS)
