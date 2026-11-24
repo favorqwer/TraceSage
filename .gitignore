@@ -1,4 +1,7 @@
 __pycache__/
+*.py[cod]
+.pytest_cache/
+Thumbs.db
 .venv/
 .env
 input/
@@ -24,3 +27,5 @@ Transparent_Computing_Engagement_3_Dataset/
 # 规则库二进制产物（可由 tools/rebuild_library.py --from-scratch 重建）
 provenance/config/rules-library/*.bitmaps.bin
 provenance/config/rules-library/*.coverage.json.gz
+attack_graph/config/rules-library/*.bitmaps.bin
+attack_graph/config/rules-library/*.coverage.json.gz
