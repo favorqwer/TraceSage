@@ -1,0 +1,9 @@
+调查起点（POI）：
+<<POI>>
+
+全图规模：
+<<STATS>>
+
+本批：第 <<CHUNK_NO>> / <<CHUNK_TOTAL>> 批
+边（每行一条）：
+<<EDGES>>

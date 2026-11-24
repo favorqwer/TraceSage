@@ -1,0 +1,45 @@
+# 纯 LLM 溯源基线运行配置。
+# 模型名、端点、密钥默认从仓库根目录 .env 读取（OPENAI_MODEL / OPENAI_BASE_URL /
+# OPENAI_API_KEY），这里留空表示沿用 .env；填了则以本文件为准。
+
+model: ""
+base_url: ""
+api_key_env: OPENAI_API_KEY
+
+temperature: 0
+max_tokens: null
+# 供应商要求的额外请求头；端点包含 opencode.ai 时自动补 x-opencode-session（与 provenance 基线一致）。
+extra_headers: {}
+opencode_session: ses_tracesage_plainllm
+# 额外请求体字段：当前模型默认关闭思考模式，与 provenance 基线同一口径。
+extra_body: {"thinking": {"type": "disabled"}}
+# 部分 OpenAI 兼容服务不支持 response_format，默认关闭；打开后要求服务返回 JSON 对象。
+response_format_json: false
+
+# 阶段一：每批边数。与 ProGQL 的 progql.llm.noise.batch.size / slice.size 同量级（200）。
+chunk_size: 200
+# 阶段二：每批候选边数。
+assemble_chunk: 150
+# 阶段一并发请求数。
+concurrency: 4
+
+max_retries: 3
+retry_base_seconds: 2.0
+request_timeout: 180
+
+# 是否把每次调用的完整提示词写进 calls.jsonl（用于事后核对与复现）。
+log_prompts: true
+
+# 每条边载荷预览的最大字符数（0 表示不给载荷）。
+payload_preview_chars: 48
+# 单条边文本最大字符数，超出按字符截断。
+max_line_chars: 320
+
+output_root: output/plain-llm-runs
+prompt_dir: experiments/plain_llm/prompts
+scenarios_file: provenance/config/scenarios.json
+
+# Neo4j：只读访问 -v2 图库；密码留空则读 .env 的 NEO4J_PASSWORD。
+neo4j_uri: bolt://127.0.0.1:7687
+neo4j_user: neo4j
+neo4j_password: ""
