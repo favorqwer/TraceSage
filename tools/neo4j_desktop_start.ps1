@@ -31,7 +31,7 @@ function Find-DbmsHome {
     # 自动定位包含 attack 场景库的实例目录
     $dbmssRoot = Join-Path $env:USERPROFILE ".Neo4jDesktop2\Data\dbmss"
     $hit = Get-ChildItem $dbmssRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
-        Test-Path (Join-Path $_.FullName "data\databases\attack-1-web-exploit-ransomware")
+        Test-Path (Join-Path $_.FullName "data\databases\attack-1-web-exploit-ransomware-v2")
     } | Select-Object -First 1
     if ($hit) { return $hit.FullName }
     throw "找不到包含 attack 场景库的 Neo4j 实例目录（目录：$dbmssRoot）。"
