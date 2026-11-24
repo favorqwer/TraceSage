@@ -19,7 +19,7 @@ _RETRIEVER: Optional[RuleGraphRetriever] = None
 _STRUCT: Optional[StructureIndex] = None
 _MOTIF_LR: Optional[MotifLikelihoodIndex] = None
 _SCENARIO = ""
-_RULE_CACHE: Dict[Tuple, Dict[str, Any]] = {}
+_RULE_CACHE: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 _LOCK = threading.Lock()
 _EXPLICIT_MATCHER = None
 _EXPLICIT_PARENT_MAP: Dict[str, str] = {}
@@ -138,7 +138,6 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
     if not members:
         return []
     retriever = _get_retriever()
-    programs = [str(p) for p in (item.get("programs") or [])]
     member_roles: set = set()
     member_edges: List[tuple] = []
     rules_by_mid: Dict[str, Dict[str, Any]] = {}
@@ -157,7 +156,7 @@ def _card_lines(item: Dict[str, Any], records: Dict[Any, Any]) -> List[str]:
         dst_label = str(edge.get("dst_label") or "")
         member_roles.add((src_role, sc, dst_role))
         member_edges.append((s_src, sc, s_dst, src_role, dst_role, src_label, dst_label))
-        key = (src_role, sc, dst_role, src_label, dst_label, tuple(programs))
+        key = (src_role, sc, dst_role)
 
         if key not in _RULE_CACHE:
             with _LOCK:
