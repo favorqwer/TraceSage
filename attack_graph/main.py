@@ -58,9 +58,9 @@ def run_scenario(scenario: str, *, output: str | None = None,
     fold_path = fold or str(
         REPO_ROOT / f"output/provenance-baseline/distill/fold-libraries/{scenario}.json")
     out_path = (Path(output).resolve() if output else
-                REPO_ROOT / "output" / "provenance-runs" / "attack-graph" / uuid4().hex / "report.json")
+                REPO_ROOT / "output" / "attack-graph-runs" / uuid4().hex / "report.json")
     if any(out_path.is_relative_to((REPO_ROOT / "output" / directory).resolve())
-           for directory in ("provenance-baseline", "engine-baseline")):
+           for directory in ("attack-graph-baseline", "provenance-baseline", "engine-baseline")):
         raise ValueError("当次运行产物必须写到正式基线目录之外")
     if out_path.exists() or out_path.with_suffix(".trace.jsonl").exists():
         raise FileExistsError(f"报告或分析记录已存在，请使用新的输出路径：{out_path}")
@@ -91,7 +91,7 @@ def main() -> int:
     )
     parser.add_argument("--scenario", required=True, help="场景全名")
     parser.add_argument("--output", default=None,
-                        help="输出报告（默认 output/provenance-runs/attack-graph/<运行编号>/report.json）")
+                        help="输出报告（默认 output/attack-graph-runs/<运行编号>/report.json）")
     parser.add_argument("--fold", default=None,
                         help="折库路径（默认 output/provenance-baseline/distill/fold-libraries/<场景>.json）")
     parser.add_argument("--replay-trace", default=None,
