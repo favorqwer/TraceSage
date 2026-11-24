@@ -29,3 +29,6 @@ provenance/config/rules-library/*.bitmaps.bin
 provenance/config/rules-library/*.coverage.json.gz
 attack_graph/config/rules-library/*.bitmaps.bin
 attack_graph/config/rules-library/*.coverage.json.gz
+
+# 单文件溯源图二进制索引（可由 parser --sink tsg 或 tools/export_neo4j_to_tsg.py 生成）
+graphs/*.tsg
