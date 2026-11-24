@@ -4,9 +4,10 @@
 
 | 系统 | 位置 |
 |---|---|
-| provenance（本仓库方法） | `output/provenance-baseline/` |
-| engine（DEPIMPACT 纯图遍历） | `output/engine-baseline/` |
-| 纯 LLM（本目录） | `output/plain-llm-runs/` |
+| attack_graph（当前主线正式基线，零 Neo4j） | `output/attack-graph-baseline/` |
+| provenance（历史冻结基线） | `output/provenance-baseline/` |
+| engine（DEPIMPACT 纯图遍历，读取 `-v2` Neo4j） | `output/engine-baseline/` |
+| 纯 LLM（本目录，读取 `-v2` Neo4j） | `output/plain-llm-runs/` |
 
 提示词口径参考 `E:\Work\ProGQL` 的 LLM 用法：边以 `[类型|标识] --动作--> [类型|标识]` 文本给出，模型只回答"删/留"，温度 0，严格 JSON，按 200 条一批。**没有**移植 ProGQL 的查询引擎、入口预排序、子图切分和语义修复 Agent——这些属于额外机制，不属于"最普通的 LLM 用法"。
 

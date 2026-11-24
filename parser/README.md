@@ -1,9 +1,9 @@
 # parser
 
 `docs/LINUX_SYSDIG_LOG_PARSER_DESIGN_V2.md` 的实现：把 Sysdig `.scap` 直接流式解析成
-Neo4j 溯源图（3 类顶点、5 类边），并把"每条日志行去了哪里"记成可对账的账本。
+单文件全属性溯源图索引 `graphs/<scenario>.tsg`（`tsg-v2`，3 类顶点、5 类边；可选 `--sink neo4j` 兼容写入 Neo4j 图数据库），并把"每条日志行去了哪里"记成可对账的账本。
 
-- 状态：可运行；172 个单测（含架构依赖方向测试）。默认 **2 趟**：容器元数据预扫 + 主趟。
+- 状态：可运行；238 个单测（含架构依赖方向测试）。默认 **2 趟**：容器元数据预扫 + 主趟。
 - 主趟 16 列：`%proc.exepath` 取完整可执行路径，`%evt.rawres` 取统一结果，
   `%evt.latency` 供配对校验，`%evt.buffer` 配 `-b` 取 base64 载荷；所有条件字段配 `*`，缺失输出 `<NA>`，不再整行消失。
 - 已补齐：`uid`（euid）、容器带序号挂载、`dirfd`、cwd/chroot 状态、
@@ -21,7 +21,7 @@ Neo4j 溯源图（3 类顶点、5 类边），并把"每条日志行去了哪里
 - 配对：键 `(container,pid,tid,call)` + `%evt.latency` 时间校验；同键多个 pending 不做盲 FIFO，
   歧义/时间不符记未配对——宁可缺边，不配错边。
 - 边带 `syscall`（家族名，如 `sendmsg -> sendto`、`mkdirat -> mkdir`）；原始 `evt.type` 用 `event_id` 回日志核对。
-  `edges.csv` 与 Neo4j 都写，报告输出 `edges.by_syscall`。
+  `edges.csv` 与 `.tsg`（或可选 Neo4j）均写入，报告输出 `edges.by_syscall`。
 - `mmap` 建边时读 `prot/flags`，不落 flags 属性，动作值三态对称：`FileToProcess mmap_read`；`MAP_SHARED|PROT_WRITE` 建 `ProcessToFile mmap_write`；`PROT_EXEC` 建 `FileToProcess mmap_exec`；私有写不建文件写边。
 - `/proc/<pid>/mem` 才派生 `ProcessToProcess`：读 `mem_read` 目标→读取者，写 `mem_write` 写入者→目标；`maps/cmdline/environ` 等元数据不再标 `mem_read`。
 - 方向修正：`mem_read/process_vm_readv/ptrace PEEK/pidfd_getfd/wait` 目标→当前；`mem_write/process_vm_writev/ptrace POKE` 当前→目标；`exit` 子→父。
@@ -76,7 +76,7 @@ Neo4j 溯源图（3 类顶点、5 类边），并把"每条日志行去了哪里
 # 探测当前可用的读取后端
 python parser/main.py --detect-backends
 
-# 只解析、不写库（推荐先跑这个）
+# 只解析、不写图（推荐先跑这个）
 python parser/main.py \
   --scap attack/data/5/capture.scap \
   --scenario 5_Exposed_Service_Pivot \
@@ -87,9 +87,14 @@ python parser/main.py \
   --scap attack/data/1/capture.scap --scenario 1_Web_Exploit_Ransomware \
   --dry-run --max-events 20000 --out-dir tmp/parser-run
 
-# 写库（默认清掉该 host_id 的旧图；库名默认 attack-<scenario>）
+# 默认直出单文件全属性索引（--sink tsg，默认写至 graphs/<scenario>.tsg，可用 --tsg-out 指定路径）
 python parser/main.py \
   --scap attack/data/1/capture.scap --scenario 1_Web_Exploit_Ransomware
+
+# 可选：兼容导入 Neo4j（默认清掉该 host_id 的旧图；库名默认 attack-<scenario>）
+python parser/main.py \
+  --scap attack/data/1/capture.scap --scenario 1_Web_Exploit_Ransomware \
+  --sink neo4j --neo4j-database attack-1-web-exploit-ransomware-v2
 ```
 
 后端：`--backend auto|local|wsl|ssh|docker`。Windows 上默认走 WSL 里的 sysdig（实测可用）。
@@ -133,10 +138,11 @@ provenance/
   adapters/              外部世界
     scap/                backends/ + template.py + capture.py
     config/tables.py     TOML 加载器（把 verbs/calls 转成 core 的内存表）
-    neo4j.py             Neo4jWriter + Cypher
+    tsg_writer.py        TSGGraphWriter + 单文件 .tsg（默认 --sink tsg）
+    neo4j.py             Neo4jWriter + Cypher（--sink neo4j 兼容）
     report/              collector.py（统计 + edges.csv）
                          payload.py / tables.py / markdown.py / blocks.py / writer.py
-tests/                   172 个标准库 unittest
+tests/                   238 个标准库 unittest
 ```
 
 依赖方向只有三条：

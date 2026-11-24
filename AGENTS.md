@@ -4,7 +4,7 @@
 
 ## 项目定位
 
-TraceSage 使用 Sysdig 生成的主机系统调用事件流（SCAP 二进制文件直接流式解析）构建溯源图并存入 Neo4j 图数据库。图模型以 `parser` 代码为准，完整字段口径见 `parser/README.md`，建模公理见 `docs/PROVENANCE_GRAPH_MODELING_AXIOMS.md`。
+TraceSage 使用 Sysdig 生成的主机系统调用事件流（SCAP 二进制文件直接流式解析）构建溯源图，默认直接写出为单文件全属性图索引 `graphs/<场景名>.tsg`（`tsg-v2`，可选 `--sink neo4j` 兼容历史图数据库）。图模型以 `parser` 代码为准，完整字段口径见 `parser/README.md`，建模公理见 `docs/PROVENANCE_GRAPH_MODELING_AXIOMS.md`。
 
 本文件只放全局约束、顶层结构与文档索引；图模型契约、场景测试流程、评分与汇总口径拆分在 `docs/agents/` 下，按第六部分的索引按需读取。
 
@@ -89,24 +89,25 @@ TraceSage/
 │   ├── plain-llm-runs/       # 纯大模型对照实验（plain_llm）产出
 │   ├── rule-kg/              # 规则知识库快照与检索评测输出
 │   └── agent-vs-engine/      # score_report_product.py 默认结果目录（按需生成）
-├── tmp/                      # 临时文件与诊断数据区（随时可清；含 L1/L6 事件缓存与索引）
-├── tools/                    # 评测与检查工具（如 score_report_product.py）
-├── parser/                   # SCAP 流式解析与 Neo4j 溯源图构建入库
-├── attack_graph/             # 当前主要开发与迭代的溯源图重构主线（神经符号规则 + 双向因果剪枝）
-├── provenance/               # 原溯源系统冻结基线实现与备份（对应 output/provenance-baseline/）
+├── tmp/                      # 临时文件与诊断数据区（随时可清）
+├── graphs/                   # 10 场景正式单文件 .tsg（tsg-v2）全属性图索引（主线运行期零 Neo4j）
+├── tsg/                      # 单文件 .tsg（TSG2）二进制读写引擎与离线查询 CLI
+├── tools/                    # 评测与检查工具（如 score_report_product.py、export_neo4j_to_tsg.py）
+├── parser/                   # SCAP 流式解析并构建 .tsg 溯源图索引（可选 --sink neo4j 兼容旧库）
+├── attack_graph/             # 当前研究点一开发与迭代主线（零 Neo4j：.tsg + 本地规则库 + 双向因果剪枝）
+├── attack_path/              # 当前研究点二开发主线（零查库消费 events_v2/*.events.json.gz 与 .tsg）
+├── provenance/               # 原溯源系统冻结基线实现与备份（对应 output/provenance-baseline/，仍依赖 Neo4j）
 ├── experiments/              # 对比实验与历史基线
 │   ├── DEPIMPACT/            # 调查引擎基线（基于 Neo4j 与 GQL 的纯图路径遍历）
-│   └── plain_llm/            # 无图规则约束的纯大模型对照组
+│   └── plain_llm/            # 无图规则约束的纯大模型对照组（读取 -v2 Neo4j）
 └── paper/                    # 参考论文
 ```
 
-## 第五部分：数据库与产物归属
+## 第五部分：图存储、数据库与产物归属
 
-### 数据库命名规范
-每个场景对应独立的 Neo4j 数据库（小写字母与连字符，前缀统一为 `attack-`，默认全部采用 `-v2` 标准物理规范 Schema 数据库）
-
-- **默认使用 -v2 库底线**：历史无 `-v2` 后缀的库（如 `attack-1-web-exploit-ransomware`）缺少必需的边属性（`action`、`start_ns`、`result` 等），属于早期遗留非标准库，严禁使用；系统调用图分析、基线评测与标注默认且必须连接 `-v2` 结尾的标准库。
-- 数据库操作严格使用官方驱动与参数化 Cypher，禁止字符串拼接构造 Cypher。
+### 图存储与数据库命名规范
+- **主线零 Neo4j 存储口径**：`parser` 默认输出、`attack_graph`、`attack_path` 与 `tools/score_report_product.py` 均在运行期不连接 Neo4j，直接读写单文件全属性索引 `graphs/<场景名>.tsg`（`tsg-v2`）、本地规则快照 `output/rule-kg/v1/folds/<场景名>.json` 与伴生事件明细 `events_v2/*.events.json.gz`。
+- **Neo4j `-v2` 兼容与外围模块底线**：每个场景对应的历史 Neo4j 数据库采用小写字母与连字符命名，前缀统一为 `attack-`，结尾为 `-v2`（标准物理规范 Schema）。仍连接 Neo4j 的外围工具与对比基线（`gt-annotator`、`experiments/DEPIMPACT`、`experiments/plain_llm`、历史 `provenance/`、`tools/score_graph_product.py` 以及 `parser --sink neo4j`）严禁使用无 `-v2` 后缀的早期遗留库（缺少 `action`、`start_ns`、`result` 等属性），且数据库操作必须使用官方驱动与参数化 Cypher，禁止字符串拼接构造 Cypher。
 
 ### 基线产物归属
 
@@ -119,15 +120,18 @@ TraceSage/
 
 | 文档 | 用途 | 什么时候读 |
 |---|---|---|
-| `docs/agents/graph-model.md` | 顶点 3 类、边 5 类的主键与属性、`action` 取值、方向约定、写库约束 | 写 Cypher、改建图逻辑、判定某系统调用落哪条边、读标注 |
-| `docs/agents/test-runbook.md` | 图导入 / `attack_graph` 与备份基线评测 / 引擎 / 评分命令与核心工具用途 | 要实际跑一次场景测试或评分 |
-| `docs/agents/evaluation-protocol.md` | 基线产物落盘位置、召回与查准口径、多场景合并平均规则 | 出数字、写评测报告、固化或对比基线 |
-| `parser/README.md` | 解析器实现结构、读取后端 `--backend`、快速开始与已知边界 | 改解析逻辑、查后端选择、看字段实现细节 |
-| `attack_graph/README.md` | 当前开发主线：`attack_graph` 架构、判定重放、流式缓存与双向因果剪枝 | 开发或改动 `attack_graph`、查运行与评测口径 |
+| `docs/agents/graph-model.md` | 顶点 3 类、边 5 类的主键与属性、`action` 取值、方向约定、写图/写库约束 | 改建图/写库逻辑、写图查询、判定某系统调用落哪条边、读标注 |
+| `docs/agents/test-runbook.md` | `.tsg` 导入与构建 / `attack_graph` 与备份基线评测 / 引擎 / 评分命令与核心工具用途 | 要实际跑一次场景测试或评分 |
+| `docs/agents/evaluation-protocol.md` | 基线产物落盘位置（含 `events_v2`）、召回与查准口径、多场景合并平均规则 | 出数字、写评测报告、固化或对比基线 |
+| `tsg/README.md` | 单文件 `.tsg`（`TSG2`）二进制布局、只读 API 与离线查询 CLI | 查看 `.tsg` 结构、改写索引引擎或离线查边 |
+| `parser/README.md` | 解析器实现结构、`--sink tsg\|neo4j`、读取后端 `--backend`、快速开始与已知边界 | 改解析逻辑、查后端选择、看字段实现细节 |
+| `attack_graph/README.md` | 研究点一主线：`attack_graph` 零 Neo4j 架构、判定重放、内存事件流与双向因果剪枝 | 开发或改动 `attack_graph`、查运行与评测口径 |
+| `attack_path/README.md` | 研究点二主线：`attack_path` 零查库加载 `events_v2` / `.tsg` 与阶段规划 | 开发或改动 `attack_path`、查问题 1 ～ 24 进展 |
+| `docs/研究点二实现问题清单与解决方案.md` | 研究点二 24 个核心问题与 3 项外延衔接的定位与方案 | 核对研究点二工程问题拆分与边界 |
 | `provenance/README.md` | 原 `provenance` 冻结基线与备份模块的架构、规则库重建与运行参考 | 复现或核对 `output/provenance-baseline/` 历史基线 |
 | `experiments/DEPIMPACT/baseline/README.md` | 引擎基线 runner 的参数、产物与确定性说明 | 跑引擎测试、核对产物格式 |
 | `docs/PROVENANCE_GRAPH_MODELING_AXIOMS.md` | 建模公理与物理工程规矩 | 判断某条建模是否有物理依据 |
 | `docs/Sysdig-User-Guide.md` | Sysdig 完整使用手册 | 查 sysdig 命令行、字段与输出格式 |
 | `docs/Sysdig-Quick-Reference-Guide.md` | Sysdig 命令与选项速查 | 只需要查某个参数时 |
 | `docs/多主机环境系统调用图物理级不可见与拓扑盲区攻击清单.md` | 主机日志物理不可见与多主机拓扑盲区的攻击清单 | 声明系统能力边界、评估覆盖范围 |
-| `gt-annotator/AGENTS.md` | GT 标注助手的操作规范与交付格式 | 需要做 groundtruth 标注或校验时 |
+| `gt-annotator/AGENTS.md` | GT 标注助手的操作规范与交付格式（当前仍连 `-v2` Neo4j 库） | 需要做 groundtruth 标注或校验时 |

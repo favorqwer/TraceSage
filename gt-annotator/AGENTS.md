@@ -3,6 +3,8 @@
 你在本目录中协助人类专家对 TraceSage 攻击场景标注 Ground Truth（GT，标准答案）。
 **人类专家做最终决策；你负责检索图数据库、提出候选证据、管理步骤状态机并在质检门禁下闭环交付。**
 
+> **系统边界备注**：主线推理与评测模块（`parser` 默认输出、`attack_graph/`、`attack_path/`、`tools/score_report_product.py`）已切换至 `graphs/<场景名>.tsg` 单文件索引（零 Neo4j 运行）；当前 `gt-annotator/gt.py` 仍通过只读连接标准 `-v2` Neo4j 图数据库开展交互式标注与 `validate`。
+
 ---
 
 ## 1. 核心定位与行为红线

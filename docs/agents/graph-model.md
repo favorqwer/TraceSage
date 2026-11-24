@@ -1,6 +1,6 @@
 # 溯源图模型契约
 
-**适用范围**：需要写 Cypher、修改建图逻辑、判定某条系统调用落到哪条边，或阅读 groundtruth 标注时读本文件。日常汇报、规划与文档整理不必读。
+**适用范围**：需要理解图模型字段、修改建图/写图逻辑、编写图查询或 Cypher、判定某条系统调用落到哪条边，或阅读 groundtruth 标注时读本文件。日常汇报、规划与文档整理不必读。
 
 图模型以 `parser` 代码为准，完整字段口径见 `parser/README.md`，建模公理见 `docs/PROVENANCE_GRAPH_MODELING_AXIOMS.md`。本文件是 agent 判定用的契约口径；实现细节（读取后端、模板字段、已知边界）以 `parser/README.md` 为准。
 
@@ -13,7 +13,7 @@
 
 顶点 3 类，主键均以 `host_id` 开头：
 
-| 顶点 | 主键（Neo4j MERGE 键） | 主要属性 | 说明 |
+| 顶点 | 主键（图顶点唯一键 / Neo4j MERGE 键） | 主要属性 | 说明 |
 |---|---|---|---|
 | `Process` | `host_id, container_id, pid, start_ns` | `exe_path`、`cmdline`、`ppid`、`uid`、`euid`、`container_privileged`、`container_host_root_rw` | `start_ns` 是进程实例的出生时刻；同一 `pid` 不同 `start_ns` 代表 exec 前后的两个进程，`0` 表示出生时刻未知。`ppid` 是父进程的 pid 数字，不是父节点键。 |
 | `File` | `host_id, container_id, path` | `file_type` | `path` 是规范化后的路径；`file_type ∈ {file, directory, pipe, unix, memfd, unknown}`。unix 套接字与 memfd 也建 `File` 节点，网络套接字不建。 |
@@ -33,11 +33,11 @@
 | `ProcessToNetwork` | 进程 → 连接 | `connect`、`bind`、`listen`、`send` |
 | `NetworkToProcess` | 连接 → 进程 | `accept`、`recv` |
 
-## 边属性与写库约束
+## 边属性与写图约束
 
 边属性：`event_id`、`action`、`start_ns`、`end_ns`、`syscall`、`result`、`payload_b64`、`to_path`、`mode`。
 
-- 写库以 `(event_id, action)` 作为关系唯一约束；同一事件可以产生多条边（如 `exec` 出 `ProcessToProcess` + `FileToProcess`，`rename` 出 `FileToProcess` + `ProcessToFile`）；自环不落图。
+- `graphs/<场景名>.tsg` 单文件索引与 `-v2` Neo4j 写库共用同一物理契约：以 `(event_id, action)` 作为关系唯一约束；同一事件可以产生多条边（如 `exec` 出 `ProcessToProcess` + `FileToProcess`，`rename` 出 `FileToProcess` + `ProcessToFile`）；自环不落图。
 - `result` 是单字段三语义：数据类为字节数、失败为负错误码、`0` 为实测零；未观测时不写该属性。`fd` 号与 `mmap` 成功返回的地址不写入 `result`。
 - `syscall` 是系统调用家族名（如 `sendmsg -> sendto`），原始 `evt.type` 用 `event_id` 回原始捕获核对。
 - `payload_b64` 是载荷前 N 字节的 base64，不是可打印文本；`to_path` 只用于 `link` 的目标路径；`mode` 只用于 `chmod` 的权限模式。
