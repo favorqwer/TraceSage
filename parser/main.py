@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from provenance.adapters.neo4j import Neo4jWriter  # noqa: E402
+from provenance.adapters.tsg_writer import TSGGraphWriter  # noqa: E402
 from provenance.adapters.report import ReportCollector, ReportWriter  # noqa: E402
 from provenance.adapters.scap import ScapCapture  # noqa: E402
 from provenance.adapters.scap.backends import detect_available_backends  # noqa: E402
@@ -40,7 +41,10 @@ def _build() -> argparse.ArgumentParser:
     ap.add_argument("--detect-backends", action="store_true", help="探测并打印后端可用性后退出")
     ap.add_argument("--max-events", type=int, default=0, help="只读前 N 个事件（开发用）")
     ap.add_argument("--no-payload", action="store_true", help="边属性不写 payload_b64 载荷")
-    ap.add_argument("--dry-run", action="store_true", help="只解析，不写 Neo4j")
+    ap.add_argument("--dry-run", action="store_true", help="只解析，不写索引或数据库")
+    ap.add_argument("--sink", default="tsg", choices=["tsg", "neo4j"],
+                    help="图存储写出目标：tsg（默认，直出单文件 graphs/<scenario>.tsg）或 neo4j（旧库兼容）")
+    ap.add_argument("--tsg-out", default="", help="TSG 单文件输出路径（默认 graphs/<scenario>.tsg）")
     ap.add_argument("--out-dir", default="", help="报告目录（默认 output/parser-v2/<scenario>）")
     ap.add_argument("--fd-cap", type=int, default=4096)
     ap.add_argument("--neo4j-uri", default="")
@@ -154,26 +158,45 @@ def main(argv: list[str] | None = None) -> int:
         classifier = load_classifier(settings.data_dir)
         capture = ScapCapture(settings.scap)
         writer = None
+        tsg_out = ""
         if not settings.run.dry_run:
-            writer = Neo4jWriter(settings.neo4j)
-            if settings.neo4j.reset_db:
-                writer.reset(settings.run.host_id)
+            if args.sink == "tsg":
+                repo_root = Path(__file__).resolve().parent.parent
+                tsg_path = Path(args.tsg_out) if args.tsg_out else (repo_root / "graphs" / f"{args.scenario}.tsg")
+                tsg_out = str(tsg_path)
+                writer = TSGGraphWriter(
+                    tsg_path,
+                    scenario=args.scenario,
+                    database=settings.database,
+                    source_scap=settings.scap.scap,
+                )
+            else:
+                writer = Neo4jWriter(settings.neo4j)
+                if settings.neo4j.reset_db:
+                    writer.reset(settings.run.host_id)
         graph = GraphStore(writer, settings.graph)
         collector = ReportCollector(settings.report)
-        snapshot = run_pipeline(
-            settings.run,
-            settings.graph,
-            settings.emit,
-            capture,
-            graph,
-            collector,
-            classifier,
-            scap=settings.scap.scap,
-            database=settings.database,
-        )
+        try:
+            snapshot = run_pipeline(
+                settings.run,
+                settings.graph,
+                settings.emit,
+                capture,
+                graph,
+                collector,
+                classifier,
+                scap=settings.scap.scap,
+                database=settings.database,
+            )
+        except BaseException:
+            if isinstance(writer, TSGGraphWriter):
+                writer.abort()
+            raise
         print("[3/3] 收尾：节点快照与报告…", flush=True)
         payload = ReportWriter(settings.report).write(snapshot)
         payload["report_dir"] = str(settings.report_dir)
+        if tsg_out:
+            payload["tsg_file"] = tsg_out
         from provenance.graph.emitter import PATH_AUDIT
 
         payload["path_audit"] = {"dirty": PATH_AUDIT["dirty"],
