@@ -102,7 +102,7 @@ class TestGraphDelivery(unittest.TestCase):
                 self.assertEqual(scenario, "unit")
                 self.assertEqual([edge["event_ids"] for edge in report["edges"]], [[3], [2], [1]])
                 self.assertEqual([edge["origin"] for edge in report["edges"]], ["confirmed", "kept", "kept"])
-                self.assertEqual(report["edges"][1]["effects"], ["success"])
+                self.assertNotIn("effects", report["edges"][1])
                 self.assertEqual([edge["event_ids"] for edge in report["excluded"]], [[4]])
                 self.assertEqual(report["stats"]["pruned_noise_count"], 1)
                 return dict.fromkeys(("recall", "precision", "steps_hit", "steps_total", "reported_triples",

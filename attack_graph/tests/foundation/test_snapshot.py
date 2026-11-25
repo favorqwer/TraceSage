@@ -62,13 +62,13 @@ class MemoryReferenceSource:
         out: list[C.Event] = []
         for key, lo, hi in items:
             for e in self.edges:
-                rel, eid, start, _end, _sc, _nb, a_key, b_key = e
+                rel, eid, start, _end, sc, _nb, a_key, b_key = e
                 if not lo < start <= hi:
                     continue
                 owner = a_key if rel in PRODUCER_RELS else b_key
                 if not (owner == key or (rel == "p2p" and a_key == key)):
                     continue
-                if seen is not None and (eid, rel) in seen:
+                if seen is not None and (eid, rel, sc) in seen:
                     continue
                 out.append(self._to_event(e))
         return out
@@ -89,7 +89,7 @@ class MemoryReferenceSource:
                     continue
                 if "not_delivery" in event_ruling(rel, sc, nb).effects:
                     continue
-                if seen is not None and (eid, rel) in seen:
+                if seen is not None and (eid, rel, sc) in seen:
                     continue
                 out.append(self._to_event(e))
         return out

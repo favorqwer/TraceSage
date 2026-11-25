@@ -333,6 +333,7 @@ def _load_events_from_stage1(
                 "start": ev.start if ev.has_start else None,
                 "finish": ev.end if ev.has_end else None,
                 "action": action,
+                "syscall": ev.syscall or "",
                 "result": ev.result,
                 "src_kind": ev.src_kind,
             })
@@ -358,6 +359,7 @@ def _load_events_from_stage1(
                 "start": ev.get("start_ns"),
                 "finish": ev.get("end_ns"),
                 "action": str(ev.get("action") or ""),
+                "syscall": str(ev.get("syscall") or ""),
                 "result": ev.get("result"),
                 "src_kind": ev.get("src_file_type"),
             })
@@ -404,15 +406,27 @@ def _load_events_and_anchors(
     return events, anchors
 
 
+def _match_edge_events(
+    edge: dict,
+    members: dict[tuple[int, str], list[dict]],
+) -> tuple[list[dict], bool]:
+    ids = set(edge.get("event_ids", ()))
+    relations = {REL_NORM.get(rel) for rel in edge.get("rels", ())}
+    edge_sc = str(edge.get("syscall") or "")
+    matched = [
+        event for eid in ids for rel in relations for event in members.get((eid, rel), ())
+        if not edge_sc or not event.get("syscall") or event.get("syscall") == edge_sc
+    ]
+    complete = bool(ids) and None not in relations and {event["eid"] for event in matched} == ids
+    return matched, complete
+
+
 def prune(pending: list[dict], members: dict[tuple[int, str], list[dict]], visited: set[str]
           ) -> tuple[list[dict], list[dict], int]:
     kept, removed = [], []
     incomplete = 0
     for edge in pending:
-        ids = set(edge.get("event_ids", ()))
-        relations = {REL_NORM.get(rel) for rel in edge.get("rels", ())}
-        matched = [event for eid in ids for rel in relations for event in members.get((eid, rel), ())]
-        complete = bool(ids) and None not in relations and {event["eid"] for event in matched} == ids
+        matched, complete = _match_edge_events(edge, members)
         if not complete or any(event["id"] in visited or event["start"] is None or event["finish"] is None
                                for event in matched):
             kept.append(edge)
@@ -690,10 +704,7 @@ def run_bidirectional(
         if edge.get("class") == "anchor":
             kept_conf_map[key] = edge
             continue
-        ids = set(edge.get("event_ids", ()))
-        relations = {REL_NORM.get(rel) for rel in edge.get("rels", ())}
-        matched = [event for eid in ids for rel in relations for event in members.get((eid, rel), ())]
-        complete = bool(ids) and None not in relations and {event["eid"] for event in matched} == ids
+        matched, complete = _match_edge_events(edge, members)
         if not complete or any(
             ev["id"] in keep_ev or ev["eid"] in signals["persist_eids"] or ev["start"] is None or ev["finish"] is None
             for ev in matched
@@ -704,15 +715,13 @@ def run_bidirectional(
             rem_conf.append({
                 **edge,
                 "origin": "excluded",
+                "prune_stage": "s6_5_temporal",
                 "previous_reason": edge.get("reason") or edge.get("verdict_reason"),
                 "reason": "因果连通剪枝：已确认边缘孤立组件，既不在告警可达链上也无持久化或受损派生关联",
             })
 
     for edge in pending:
-        ids = set(edge.get("event_ids", ()))
-        relations = {REL_NORM.get(rel) for rel in edge.get("rels", ())}
-        matched = [event for eid in ids for rel in relations for event in members.get((eid, rel), ())]
-        complete = bool(ids) and None not in relations and {event["eid"] for event in matched} == ids
+        matched, complete = _match_edge_events(edge, members)
         if not complete or any(
             _is_unexcluded_causal(edge, ev, visited, comp_procs, pkg_nodes, comp_pipes) for ev in matched
         ):
@@ -722,6 +731,7 @@ def run_bidirectional(
             rem_unex.append({
                 **edge,
                 "origin": "excluded",
+                "prune_stage": "s6_5_temporal",
                 "previous_reason": edge.get("reason") or edge.get("verdict_reason"),
                 "reason": "时序剪枝：全部已核查原始事件均未落在双向因果可达分量内",
             })
@@ -737,10 +747,15 @@ def run_bidirectional(
         if rem_conf:
             protected_conf, rem_conf = protect(kept_conf_seed, rem_conf, members, max_finish)
             for edge in protected_conf:
-                kept_conf_map[edge_key(edge)] = {**edge, "origin": "confirmed"}
+                restored = {**edge, "origin": "confirmed"}
+                restored.pop("prune_stage", None)
+                kept_conf_map[edge_key(edge)] = restored
         if rem_unex:
             protected_unex, rem_unex = protect(list(kept_conf_map.values()), rem_unex, members, max_finish)
-            kept_unex.extend(protected_unex)
+            for edge in protected_unex:
+                restored = dict(edge)
+                restored.pop("prune_stage", None)
+                kept_unex.append(restored)
 
     removed = rem_conf + rem_unex
     protected_total = len(protected_conf) + len(protected_unex)

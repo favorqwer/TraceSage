@@ -11,6 +11,7 @@ tools_dir = cfg.REPO_ROOT / "tools"
 if str(tools_dir) not in sys.path:
     sys.path.insert(0, str(tools_dir))
 import score_report_product as scorer
+from triplet_report import merge_report_edges, refresh_event_totals
 from core.reporting import (
     RouteOutcome,
     build_events_export,
@@ -79,13 +80,16 @@ def run(
 
     confirmed_edges_list = list(report["edges"])
     unexcluded_edges_list = list(report["unexcluded"])
-    report["edges"].extend(report["unexcluded"])
+    report["edges"] = merge_report_edges(confirmed_edges_list + unexcluded_edges_list)
+    report["scoring_protocol"] = scorer.rm.SCORING_PROTOCOL
     report["stats"]["retained_count"] = len(report["edges"])
+    report["stats"]["llm_request_attempts"] = ctx.budget.request_attempts
+    report["stats"]["llm_tokens_in"] = ctx.budget.tokens_in
+    report["stats"]["llm_tokens_out"] = ctx.budget.tokens_out
     report["stats"]["prefilter_deferred_count"] = len(pruned_background)
     report["stats"]["postfilter_deferred_count"] = len(debris_pruned)
     if temporal_stats is not None:
         report["stats"]["temporal_pruning"] = temporal_stats
-    save_report(report, ctx.out_path, overwrite=False)
 
     events_file: str | None = None
     events_count: int | None = None
@@ -126,11 +130,15 @@ def run(
             raw_events=raw_events,
             vertex_attrs=vertex_attrs,
             poi_rows=getattr(rec_obj, "poi_rows", None) or [],
+            aggregate_indices={(edge["src"], edge["syscall"], edge["dst"]): index
+                               for index, edge in enumerate(report["edges"])},
         )
+        refresh_event_totals(report["edges"], events_payload["events"])
         events_out = save_events_export(events_payload, default_events_path(ctx.out_path), overwrite=False)
         events_file = str(events_out)
         events_count = len(events_payload["events"])
 
+    save_report(report, ctx.out_path, overwrite=False)
     # 官方评分
     gt_path = str(cfg.REPO_ROOT / f"groundtruth/{ctx.scenario}.groundtruth.json")
     ev = scorer.evaluate(ctx.out_path, gt_path, scenario=ctx.scenario)
@@ -147,6 +155,7 @@ def run(
 
     return {
         "scenario": ctx.scenario,
+        "scoring_protocol": scorer.rm.SCORING_PROTOCOL,
         "recall": ev["recall"],
         "steps_hit": ev["steps_hit"],
         "steps_total": ev["steps_total"],

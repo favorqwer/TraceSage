@@ -35,12 +35,14 @@
 
 ## 4. 在线运行、免调用重放与评分
 
+重放按轨迹恢复首层分组和组内成员的原始顺序，随后校验场景、模型和完整请求指纹。图、规则、提示词或判定配置发生影响请求的变化时，重放会报错。重放只读取已记录的判定。
+
 ```powershell
 # 实时运行单场景（调用大模型判定）
 & ./.venv/Scripts/python.exe attack_graph/main.py --scenario 8_FTP_WeakCreds_WebShell_Exfiltration --output output/attack-graph-runs/check/report.json
 
 # 基于已有 .trace.jsonl 免 API 重放判定（用于判定后剪枝阶段回归与消融，0 LLM 调用）
-& ./.venv/Scripts/python.exe attack_graph/main.py --scenario 8_FTP_WeakCreds_WebShell_Exfiltration --replay-trace output/provenance-runs/attack-graph-20261124/reports/8_FTP_WeakCreds_WebShell_Exfiltration.trace.jsonl --output output/attack-graph-runs/check/report.json
+& ./.venv/Scripts/python.exe attack_graph/main.py --scenario 8_FTP_WeakCreds_WebShell_Exfiltration --replay-trace output/attack-graph-baseline/traces/8_FTP_WeakCreds_WebShell_Exfiltration.trace.jsonl --output output/attack-graph-runs/check/report.json
 
 # 官方口径评分
 & ./.venv/Scripts/python.exe tools/score_report_product.py --report output/attack-graph-runs/check/report.json --gt groundtruth/8_FTP_WeakCreds_WebShell_Exfiltration.groundtruth.json
@@ -50,9 +52,9 @@
 & ./.venv/Scripts/python.exe -m unittest discover -s tsg/tests -p "test_*.py"
 ```
 
-默认结果目录为 `output/attack-graph-runs/<运行编号>/`；`attack_graph/` 的唯一正式基线归档至 `output/attack-graph-baseline/`。整体流程全程零 Neo4j：阶段 1（`intake.py` / `fold.py`）通过 `TSGSource` 从 `graphs/<场景名>.tsg` 离线定位 POI 并在内存保留原始单事件列表（`closure_events`）与当前 `tsg_path`；阶段 6 之后执行 `temporal_pruning.run_bidirectional` 直接复用阶段 1 内存单事件与 `TSGSource`（不再查询 Neo4j，也不再维护 `temporal_events.pkl`），阻断 `/dev/null`·广播总线·`systemd-*`·后台包更新守护进程与未确认包管理文件桥接，联合执行双向因果连通分量剪枝与时间窗进程保护；阶段 7（`s7_reporting.py` / `reporting.py`）在写聚合报告的同时，同目录同步导出伴生单事件明细 `<输出文件去后缀>.events.json.gz`（按 `(event_id, rel, identities)` 精确回配 `report_status`/`verdict`/`class`/`origin`/`reason`/`bundle_triple` 与去重 `entities` 表）。报告的 `edges` 是交给下游并用于评分的基础图，`unexcluded` 列出待复核保留边，`process_guard_evidence` 记录保护依据，`excluded` 记录被删边的事件编号与理由，`stats.temporal_pruning` 记录保护和剪枝数量。召回按标注步骤，查准按源、系统调用、目标、成败四元组。
+默认结果目录为 `output/attack-graph-runs/<运行编号>/`；`attack_graph/` 的唯一正式基线归档至 `output/attack-graph-baseline/`。整体流程全程零 Neo4j：阶段 1（`intake.py` / `fold.py`）通过 `TSGSource` 从 `graphs/<场景名>.tsg` 离线定位 POI 并在内存保留原始单事件列表（`closure_events`）与当前 `tsg_path`；阶段 6 之后执行 `temporal_pruning.run_bidirectional` 直接复用阶段 1 内存单事件与 `TSGSource`（不再查询 Neo4j，也不再维护 `temporal_events.pkl`），阻断 `/dev/null`·广播总线·`systemd-*`·后台包更新守护进程与未确认包管理文件桥接，联合执行双向因果连通分量剪枝与时间窗进程保护；阶段 7（`s7_reporting.py` / `reporting.py`）在写聚合报告的同时，同目录同步导出伴生单事件明细 `<输出文件去后缀>.events.json.gz`（按 `(event_id, rel, identities)` 精确回配 `report_status`/`verdict`/`class`/`origin`/`reason`/`bundle_triple` 与去重 `entities` 表）。报告的 `edges` 是交给下游并用于评分的基础图，`unexcluded` 列出待复核保留边，`process_guard_evidence` 记录保护依据，`excluded` 记录被删边的事件编号与理由，`stats.temporal_pruning` 记录保护和剪枝数量。召回按标注步骤，查准按源、系统调用、目标三元组。
 
-在线导航与碎片剪枝参数由 `attack_graph/config/navigator.toml` 统一配置（包括并发数、批大小、结构闸门、`[prune]` 包管理器词表与 FHS 静态资源子目录以及判定调用上限 `cap_calls`；`cap_calls = 0` 为默认的无上限模式，流程由 5 级拓扑划分与空拆/扇出闸门自收敛终止）。
+在线导航与碎片剪枝参数由 `attack_graph/config/navigator.toml` 统一配置（当前默认并发 `concurrency = 6`、单次请求超时 `timeout_seconds = 60`；发生限流或传输超时重试时 `llm/client.py` 输出 `[LLM_RETRY]` 日志；另含批大小、结构闸门、`[prune]` 包管理器词表与 FHS 静态资源子目录以及判定调用上限 `cap_calls`；`cap_calls = 0` 为默认的无上限模式，流程由 5 级拓扑划分与空拆/扇出闸门自收敛终止）。
 
 ## 5. 离线规则知识构建
 
@@ -83,7 +85,7 @@
 1. 规则证据是束级证据，不代表束内每条边都已独立验证。
 2. 规则库受训练场景限制；规则正确性没有独立完整的标准答案，不以规则候选覆盖代替攻击召回。
 3. 没有跨主机对端流量自动对齐模块；目标事件和跨主机关联属于外部输入边界。
-4. 模型单次运行存在波动。原 `provenance` 冻结基线成绩以 `output/provenance-baseline/OVERVIEW.md` 为准；`attack_graph/` 唯一正式基线固化在 `output/attack-graph-baseline/`，日常测试与消融运行写 `output/attack-graph-runs/`（早期重放轨迹也见于 `output/provenance-runs/`）。
+4. 模型单次运行存在波动。原 `provenance` 冻结基线成绩以 `output/provenance-baseline/OVERVIEW.md` 为准；`attack_graph/` 唯一正式基线固化在 `output/attack-graph-baseline/`（含 `reports_v2/`、`events_v2/` 与可离线重放的 `traces/`），日常测试与消融运行写 `output/attack-graph-runs/`。
 5. 场景测试、评分和汇总遵循 `docs/agents/test-runbook.md` 与 `docs/agents/evaluation-protocol.md`。
 
 ## 8. 近期工程优化与重构说明
@@ -92,14 +94,14 @@
 
 1. **彻底去 Neo4j 与单文件 `TSG2` 全属性图索引重构**（`tsg/`、`closure/snapshot.py`、`closure/intake.py`、`closure/fold.py`、`core/stages/temporal_pruning.py`、`rag/graph_retrieve.py`）：
    - 废除运行期 Neo4j 场景库查询、`trace-rules-kg-v1` 规则库连接以及 `tmp/provenance/l1-index/` / `temporal_events.pkl` 二级缓存，全面切换为 `graphs/<场景名>.tsg`（`TSGReader`/`TSGSource` `mmap` 零拷贝读取）与本地规则快照 `output/rule-kg/v1/folds/<fold>.json`。
-   - 阶段 1 保留原始单事件列表（`closure_events`）与 `tsg_path` 于内存；阶段 6.5 直接复用内存事件执行双向时序剪枝（零数据库查询）；阶段 7 同步导出伴生事件级明细 `*.events.json.gz`（10 场景基线合计 **1,244,136** 条单事件，供研究点二 `attack_path/loader.py` 零查库直读）。
-   - 10 场景全流程屏蔽 `neo4j` 驱动重放总耗时 **176.6 秒**（原 Neo4j 基线 199.4 秒），召回与查准指标 0 差异完全对齐。
+   - 闭包遍历与时序剪枝统一采用 `(event_id, rel, syscall)` 三键去重匹配，避免同 `event_id` 的 `clone` 与 `execve` 等多系统调用边互相覆盖。
+   - 阶段 1 保留原始单事件列表（`closure_events`）与 `tsg_path` 于内存；阶段 6.5 直接复用内存事件执行双向时序剪枝（零数据库查询）；阶段 7 同步导出伴生事件级明细 `*.events.json.gz`（当前 10 场景正式基线合计 **1,126,747** 条单事件，完整携带 `decision_source`、`llm_bundle_id`、`llm_bundle_level`、`llm_bundle_size`、`llm_verdict`、`rag_rules` 与排除集合的 `prune_stage`，供研究点二 `attack_path/loader.py` 零查库直读）。
 2. **`.trace.jsonl` 逐批判定轨迹免调用重放**（`llm/replay.py`、`llm/judge.py`、`main.py --replay-trace`）：
-   - 按 `(level, sorted(members))` 复用已记录的批次模型判定与规则引用校验后结论，支持在不修改阶段 1–4 逻辑时以 **0 LLM API 调用**复现并迭代测试阶段 5–7 后置剪枝逻辑（详见 `tests/foundation/test_trace_replay.py`）。
+   - 按 `(level, sorted(members))` 复用已记录的批次模型判定与规则引用校验后结论，支持在不修改阶段 1–4 逻辑与输入时以 **0 LLM API 调用**复现并迭代测试阶段 5–7 后置剪枝逻辑（详见 `tests/foundation/test_trace_replay.py`）；10 场景基线轨迹已随正式基线统一归档至 `output/attack-graph-baseline/traces/`。
 3. **判定后纯化、不复活排除边与写入防投毒守卫**（`core/stages/s6_pruning.py`、`core/stages/s5_causal_heal.py`、`core/axioms.py`）：
    - 取消阶段 6 将 `excluded_edges`、`pruned_background`、`unpromoted_ambiguous`、`debris_pruned` 塞回 `final_unexcluded` 的做法；统一过滤未确认态 `verdict == "none"`、`ioctl`/元数据探测调用以及 `.so`/`.pyc`/启动初始化配置读取。
    - 新增 `collect_written_paths()` 检查：凡在图内曾被任何进程创建、写入或修改过的库文件与启动配置均受保护，防止借由伪装共享库或启动配置劫持的攻击被误剪。
 4. **双向因果分量剪枝与通用运维噪音隔离**（`core/stages/temporal_pruning.py` `run_bidirectional`、`core/filters.py`、`config/navigator.toml`、`core/runner.py`）：
    - 反向可达遍历 `reachable()` 阻断 `/dev/null`·`/dev/zero`·`/dev/urandom` 等无状态设备、D-Bus/journal 广播套接字、`systemd-*` 基础设施守护进程、后台包更新守护进程及未确认包管理写桥接，防止无关进程借共读共享资源反向串联。
    - 以反向可达点、图内已写持久化单元/账号修改、非包管理外联伴随变更以及非包管理交互 Shell 派生作为初始种子，沿 `exec`/`clone`/`fork`、反向 `exit` 子进程关联及写后读数据流正向扩展，同时将 `[prune]` 收敛至标准 FHS 静态子目录（不整片屏蔽 `/usr/share/`）。
-   - 验证结果（`attack_graph/tests/foundation` 122 项、`tsg/tests` 2 项、`attack_path/tests` 5 项全过；10 场景 `--replay-trace` 消融评测）：微观召回率由基线 **83.89%（760/906）** 保持至 **84.00%（761/906）**，微观查准率由 **10.66%（19,620/184,118）** 提升至 **53.43%（19,616/36,716）**。
+   - 验证结果（`attack_graph/tests/foundation` 127 项、`tsg/tests` 2 项、`attack_path/tests` 23 项、`parser/tests` 242 项全过；2026-11-25 重建 `.tsg` 后 10 场景全量评测）：字面微观召回率 **83.00%（752/906；还原 9 条因恢复真实进程路径而不再匹配旧 `<NA>` 标注的步骤后实际仍为 84.00% / 761/906）**，微观查准率 **51.55%（18,186/35,281）**；下游研究点二 DAG 覆盖 **293/906** 步且 10 场景全部严格无环。

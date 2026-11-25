@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -25,7 +26,7 @@ from domain.edge import (
 from llm.text import rel_time, short
 from llm.verdict import parse_bundle_verdicts
 from llm.client import BudgetCallback, call_json, make_model
-from llm.replay import TraceReplay
+from llm.replay import TraceReplay, request_sha256
 
 # ==== 1. 束划分与结构闸门（已委托至 core.bundling 实现高内聚） ====
 from core.bundling import (  # noqa: F401
@@ -282,9 +283,9 @@ def judge_bundles(model: Any, items: list[dict[str, Any]], listing: str, *, budg
                   ) -> dict[str, Any]:
     """单批模型判定：发出 JSON 结构化请求并解析结论字典。"""
     if isinstance(model, TraceReplay):
-        return model.judge_batch(items)
+        return model.judge_batch(items, request_sha256(cfg.llm_model(), BUNDLE_SYSTEM, listing))
     config = {"callbacks": [BudgetCallback(budget, node="bundle")]}
-    result = call_json(model, BUNDLE_SYSTEM, listing, config=config, role="bundle")
+    result = call_json(model, BUNDLE_SYSTEM, listing, config=config, role="bundle", request_budget=budget)
     if not result.get("_raw_ok", True):
         out = {"ok": False, "error": result.get("_error") or "未知错误", "calls": 1}
         if "_raw_text" in result:
@@ -307,6 +308,7 @@ def run_batches(deps: Any, items: list[dict[str, Any]], batches: list[list[dict[
         return verdicts, out
     header = build_task_header(inv.poi_rows)
     annotate = cfg.annotate_marks_enabled()
+    stopped = threading.Event()
 
     def run_single_batch(batch: list[dict[str, Any]]) -> dict[str, Any]:
         listing = render(batch, inv.edges, ref_t, level_name=level_name, header=header,
@@ -314,14 +316,23 @@ def run_batches(deps: Any, items: list[dict[str, Any]], batches: list[list[dict[
                          state=state)
         result: dict[str, Any] = {}
         calls = 0
-        for attempt in range(cfg.batch_attempts()):
-            result = judge_bundles(deps.model, batch, listing, budget=deps.budget)
+        is_replay = isinstance(deps.model, TraceReplay)
+        attempts = 1 if is_replay else cfg.batch_attempts()
+        for attempt in range(attempts):
+            if stopped.is_set():
+                raise RuntimeError("本场景已有模型批次失败，取消后续请求")
+            try:
+                result = judge_bundles(deps.model, batch, listing, budget=deps.budget)
+            except Exception:
+                stopped.set()
+                raise
             calls += 1
             if result.get("ok"):
                 break
-            deps.log(f"    [judge] 一批调用失败（第 {attempt + 1}/{cfg.batch_attempts()} 次，"
+            deps.log(f"    [judge] 一批调用失败（第 {attempt + 1}/{attempts} 次，"
                      f"{len(batch)} 个束 / {len(listing)} 字符）：{short(result.get('error'))}")
         _emit_trace({
+            "request_sha256": request_sha256(cfg.llm_model(), BUNDLE_SYSTEM, listing),
             "level_name": level_name,
             "items": [{
                 "id": item["id"], "level": item["level"], "size": item["size"],
@@ -333,6 +344,9 @@ def run_batches(deps: Any, items: list[dict[str, Any]], batches: list[list[dict[
             "listing": listing,
             "result": result,
         })
+        if deps.budget.request_limit is not None and not result.get("ok"):
+            stopped.set()
+            raise RuntimeError(f"模型批次在重试后失败：{level_name}，停止场景验证")
         ok = bool(result.get("ok"))
         return {
             "ok": ok, "verdicts": result.get("verdicts") or {}, "calls": calls,
@@ -359,13 +373,16 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
                 cap_calls: int) -> dict[str, Any]:
     """单轮判定推进：从第 1 级开始，对判为混杂的束逐级细化推进。"""
     started = time.time()
-    levels = build_levels(triples, inv.edges, keyer)
+    replay = deps.model if isinstance(deps.model, TraceReplay) else None
+    ordered_triples = replay.order_members(triples) if replay else triples
+    levels = build_levels(ordered_triples, inv.edges, keyer)
     key_of = level_members(levels)
     last = len(levels) - 1
-    scale_index = build_scale_index(triples, inv.edges, keyer)
+    scale_index = build_scale_index(ordered_triples, inv.edges, keyer)
     ref_t = int(inv.poi_t0 or 0)
     parent_map: dict[Any, tuple] = {}
-    frontier = _frontier_order(levels[0], inv.edges, ref_t)
+    frontier = (replay.order_first_bundles(levels[0]) if replay
+                else _frontier_order(levels[0], inv.edges, ref_t))
     seq = 0
     calls_before = stats["calls"]
     level_stats: list[dict[str, Any]] = []
@@ -452,7 +469,17 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
             verdict, reason, witnesses = v_info["verdict"], v_info["reason"], v_info["witnesses"]
             counts[verdict] = counts.get(verdict, 0) + 1
 
-            note = {"verdict": verdict, "verdict_reason": short(reason)}
+            bundle_uid = f"L{level}:{item['id']}"
+            rag_rules = list(item.get("_rag_rules") or ())
+            note = {
+                "verdict": verdict,
+                "llm_verdict": verdict,
+                "verdict_reason": short(reason),
+                "llm_bundle_id": bundle_uid,
+                "llm_bundle_level": int(level),
+                "llm_bundle_size": int(item["size"]),
+                "rag_rules": rag_rules,
+            }
             for member in item["members"]:
                 if inv.origin.get(member) != "confirmed":
                     inv.edges[member].update(note)
@@ -488,7 +515,13 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
                 for w_m in confirmed_witnesses:
                     inv.edges[w_m].update({
                         "verdict": "witness_confirmed",
+                        "llm_verdict": "witness_confirmed",
+                        "decision_source": "llm_witness",
                         "verdict_reason": f"大模型在混杂束中明确指认为攻击证据 ({short(reason)})",
+                        "llm_bundle_id": bundle_uid,
+                        "llm_bundle_level": int(level),
+                        "llm_bundle_size": int(item["size"]),
+                        "rag_rules": rag_rules,
                     })
                 w_item = {
                     "all_dirs": item.get("all_dirs") or [],
@@ -502,6 +535,8 @@ def _judge_pass(deps: "Deps", triples: set[Any], *, keyer: Any, state: Any,
 
             if verdict == "all":
                 inv.mark(item["members"], "confirmed")
+                for member in item["members"]:
+                    inv.edges[member].setdefault("decision_source", "llm_all")
                 state.note_confirmed(item, inv.edges)
                 remove_confirmed_from_future_levels(set(item["members"]), level + 1)
                 item_confirmed_n += len(item["members"])
@@ -616,8 +651,11 @@ class LlmJudge:
         self.max_calls = max_calls if max_calls is not None else cfg.bundle_cap_calls()
         if self.deps is not None:
             if replay_trace:
-                scenario = getattr(getattr(self.deps, "record", None), "scenario", None) or None
-                self.deps.model = TraceReplay.from_file(replay_trace, expected_scenario=scenario)
+                scenario = getattr(getattr(self.deps, "record", None), "scenario", None) or ""
+                if not scenario:
+                    raise ValueError("trace 重放缺少当前场景名")
+                self.deps.model = TraceReplay.from_file(
+                    replay_trace, expected_scenario=scenario, expected_model=cfg.llm_model())
             elif self.deps.model is None:
                 self.deps.model = make_model()
 
@@ -660,6 +698,9 @@ class LlmJudge:
             self.deps, triples_to_judge, keyer=keyer, state=state, inv=inv,
             stats=stats, detail=detail, pass_no=1, cap_calls=self.max_calls
         )
+        if isinstance(self.deps.model, TraceReplay):
+            if self.deps.model.replayed_batches != self.deps.model.recorded_batches:
+                raise RuntimeError("重放结束时仍有轨迹批次未使用")
 
         elapsed = time.time() - t0
 
@@ -674,10 +715,12 @@ class LlmJudge:
             if origin == "confirmed":
                 edge_rec["origin"] = "confirmed"
                 edge_rec["class"] = "story"
+                edge_rec.setdefault("decision_source", "llm_all")
                 edge_rec["reason"] = f"慢速通道：大语言模型判定整束相关 ({edge_rec.get('verdict_reason', '')})"
                 confirmed_edges.append(edge_rec)
             elif origin == "excluded":
                 edge_rec["origin"] = "excluded"
+                edge_rec["prune_stage"] = "s4_llm_none"
                 edge_rec["reason"] = f"慢速通道：大语言模型判定整束无关 ({edge_rec.get('verdict_reason', '')})"
                 excluded_edges.append(edge_rec)
             else:

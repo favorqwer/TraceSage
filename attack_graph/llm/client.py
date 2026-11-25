@@ -33,6 +33,10 @@ from llm.text import short
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
 
+class LlmRequestLimit(RuntimeError):
+    """The approved request budget has been exhausted."""
+
+
 @dataclass
 class LlmBudget:
     """token / 调用次数 / **每次调用耗时** 记账。
@@ -51,6 +55,15 @@ class LlmBudget:
     by_node_out_chars: dict[str, int] = field(default_factory=dict)
     log: list[dict[str, Any]] = field(default_factory=list)
     run_nodes: dict[Any, str] = field(default_factory=dict)
+    request_limit: int | None = None
+    request_attempts: int = 0
+    request_lock: Any = field(default_factory=threading.Lock, repr=False)
+
+    def reserve_request(self) -> None:
+        with self.request_lock:
+            if self.request_limit is not None and self.request_attempts >= self.request_limit:
+                raise LlmRequestLimit(f"模型请求已达到批准上限 {self.request_limit}，停止本次运行")
+            self.request_attempts += 1
 
     def charge(self, node: str, tokens_in: int, tokens_out: int, ms: float = 0.0, ok: bool = True,
                error: str = "", prompt_chars: int = 0, out_chars: int = 0) -> None:
@@ -337,6 +350,7 @@ def _invoke_with_retry(
     max_retries: Any = None,
     base_delay: Any = None,
     config: Optional[dict[str, Any]] = None,
+    request_budget: LlmBudget | None = None,
 ) -> Any:
     """带退避的调用。**限流（429）单独给更长的等待与更多次重试**，其余错误按指数退避。
 
@@ -355,6 +369,8 @@ def _invoke_with_retry(
     plain = 0       # 普通传输错误次数
     limited = 0     # 限流次数
     while True:
+        if request_budget is not None:
+            request_budget.reserve_request()
         try:
             return model.invoke(messages, config=config)
         except Exception as exc:  # noqa: BLE001 - 统一按传输错误处理，交给上层降级
@@ -364,11 +380,21 @@ def _invoke_with_retry(
                 if limited > rate_limit_waits:
                     break
                 wait = max(_retry_after_seconds(exc) or 0.0, min(wait_max, wait_start * limited))
+                print(
+                    f"[LLM_RETRY] kind=rate_limit attempt={limited}/{rate_limit_waits} "
+                    f"wait={wait:.1f}s err={type(exc).__name__}: {short(str(exc), 160)}",
+                    flush=True,
+                )
             else:
                 plain += 1
                 if plain > max_retries:
                     break
                 wait = base_delay * (2 ** (plain - 1))
+                print(
+                    f"[LLM_RETRY] kind=transport attempt={plain}/{max_retries} "
+                    f"wait={wait:.1f}s err={type(exc).__name__}: {short(str(exc), 160)}",
+                    flush=True,
+                )
             time.sleep(wait)
     raise last  # type: ignore[misc]
 
@@ -381,6 +407,7 @@ def call_json(
     max_retries: Any = None,
     config: Optional[dict[str, Any]] = None,
     role: str = "judge",
+    request_budget: LlmBudget | None = None,
 ) -> dict[str, Any]:
     """要求模型只输出 JSON；解析失败回灌自校正；**传输失败降级不抛异常**。
 
@@ -395,7 +422,9 @@ def call_json(
     for _attempt in range(max_retries + 1):
         t0 = time.perf_counter()
         try:
-            response = _invoke_with_retry(model, messages, config=config)
+            response = _invoke_with_retry(model, messages, config=config, request_budget=request_budget)
+        except LlmRequestLimit:
+            raise
         except Exception as exc:  # noqa: BLE001 - 降级：返回失败标记，由调用方决定如何退化
             _log_raw(role, prompt_chars, "", (time.perf_counter() - t0) * 1000.0, (0, 0),
                      ok=False, error=f"{type(exc).__name__}: {exc}")

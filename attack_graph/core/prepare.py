@@ -30,6 +30,7 @@ class PreFilter:
                 if not self.tf.is_tainted(src):
                     rec = dict(e)
                     rec["origin"] = "kept"
+                    rec["prune_stage"] = "s2_prefilter"
                     rec["reason"] = "因果初筛：系统只读静态资源且无前序写入污染，归入未排除"
                     moved.append(rec)
                     continue
@@ -37,6 +38,7 @@ class PreFilter:
                 if not self.tf.is_tainted(src):
                     rec = dict(e)
                     rec["origin"] = "kept"
+                    rec["prune_stage"] = "s2_prefilter"
                     rec["reason"] = "因果初筛：无物理数据载荷的只读元数据探测且无前序污染，归入未排除"
                     moved.append(rec)
                     continue

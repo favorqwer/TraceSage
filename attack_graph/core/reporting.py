@@ -146,6 +146,7 @@ def build_events_export(
     raw_events: List[Dict[str, Any]],
     vertex_attrs: Dict[str, Dict[str, Any]],
     poi_rows: List[Dict[str, Any]],
+    aggregate_indices: Optional[Dict[Tuple[Any, Any, Any], int]] = None,
 ) -> Dict[str, Any]:
     """按最终保留的聚合边筛选并导出完整单事件明细与去重实体属性表。"""
     raw_by_eid_rel: Dict[Tuple[int, str], List[Dict[str, Any]]] = defaultdict(list)
@@ -165,6 +166,8 @@ def build_events_export(
     missing_refs: List[Dict[str, Any]] = []
 
     for agg_index, report_status, edge in retained_entries:
+        if aggregate_indices is not None:
+            agg_index = aggregate_indices[(edge["src"], edge["syscall"], edge["dst"])]
         allowed_rels = {normalize_rel(str(r)) for r in (edge.get("rels") or ())}
         src_idents = {
             (str(pair[0]), str(pair[1]))
@@ -185,7 +188,13 @@ def build_events_export(
                 str(edge.get("dst") or ""),
             ],
             "verdict": str(edge.get("verdict") or ""),
+            "llm_verdict": str(edge.get("llm_verdict") or edge.get("verdict") or ""),
+            "decision_source": str(edge.get("decision_source") or ""),
             "verdict_reason": str(edge.get("verdict_reason") or ""),
+            "llm_bundle_id": str(edge.get("llm_bundle_id") or ""),
+            "llm_bundle_level": (int(edge["llm_bundle_level"]) if edge.get("llm_bundle_level") is not None else None),
+            "llm_bundle_size": (int(edge["llm_bundle_size"]) if edge.get("llm_bundle_size") is not None else None),
+            "rag_rules": list(edge.get("rag_rules") or ()),
             "origin": str(edge.get("origin") or ""),
             "class": str(edge.get("class") or ""),
             "reason": str(edge.get("reason") or ""),
@@ -194,6 +203,7 @@ def build_events_export(
             "channels": int(edge.get("channels") or 0),
         }
 
+        edge_sc = str(edge.get("syscall") or "")
         for raw_eid in (edge.get("event_ids") or ()):
             eid = int(raw_eid)
             candidates: List[Dict[str, Any]] = []
@@ -201,6 +211,9 @@ def build_events_export(
                 candidates.extend(raw_by_eid_rel.get((eid, rel_short), ()))
             matched: List[Dict[str, Any]] = []
             for ev in candidates:
+                ev_sc = str(ev.get("syscall") or "")
+                if edge_sc and ev_sc and ev_sc != edge_sc:
+                    continue
                 src_pair = (str(ev["src_kind"]), str(ev["src_key"]))
                 dst_pair = (str(ev["dst_kind"]), str(ev["dst_key"]))
                 if src_idents and src_pair not in src_idents:
@@ -247,7 +260,13 @@ def build_events_export(
                         "agg_edge_index": agg_index,
                         "report_status": report_status,
                         "verdict": membership["verdict"],
+                        "llm_verdict": membership["llm_verdict"],
+                        "decision_source": membership["decision_source"],
                         "verdict_reason": membership["verdict_reason"],
+                        "llm_bundle_id": membership["llm_bundle_id"],
+                        "llm_bundle_level": membership["llm_bundle_level"],
+                        "llm_bundle_size": membership["llm_bundle_size"],
+                        "rag_rules": membership["rag_rules"],
                         "origin": membership["origin"],
                         "class": membership["class"],
                         "reason": membership["reason"],
@@ -255,7 +274,7 @@ def build_events_export(
                         "memberships": [membership],
                     }
                 else:
-                    if not any(m["agg_edge_index"] == agg_index for m in existing["memberships"]):
+                    if membership not in existing["memberships"]:
                         existing["memberships"].append(membership)
                         if len(existing["memberships"]) == 2:
                             multi_membership_events += 1
@@ -263,7 +282,13 @@ def build_events_export(
                             existing["agg_edge_index"] = agg_index
                             existing["report_status"] = "confirmed"
                             existing["verdict"] = membership["verdict"]
+                            existing["llm_verdict"] = membership["llm_verdict"]
+                            existing["decision_source"] = membership["decision_source"]
                             existing["verdict_reason"] = membership["verdict_reason"]
+                            existing["llm_bundle_id"] = membership["llm_bundle_id"]
+                            existing["llm_bundle_level"] = membership["llm_bundle_level"]
+                            existing["llm_bundle_size"] = membership["llm_bundle_size"]
+                            existing["rag_rules"] = membership["rag_rules"]
                             existing["origin"] = membership["origin"]
                             existing["class"] = membership["class"]
                             existing["reason"] = membership["reason"]

@@ -79,7 +79,7 @@ class Event:
 class GraphSource(Protocol):
     """取边的来源：数据库直查，或顶点-时间索引快照（两者必须给出相同结果）。
 
-    `seen` 是"已经收进闭包的边"的映射，键为 `(event_id, rel)`。给了它，来源可以把这类边
+    `seen` 是"已经收进闭包的边"的映射，键为 `(event_id, rel, syscall)`。给了它，来源可以把这类边
     直接跳掉、不再重造内部表示。它只影响快慢：给了要跳过、不给也不影响收哪些边。
     """
 
@@ -165,7 +165,7 @@ def run_closure(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
 
     `with_events=False` 供"只要边行"的调用方使用：事件集合照样在内部用来生成边行，但不放进返回值。
     """
-    included: dict[tuple[int, str], Event] = {}
+    included: dict[tuple[int, str, str], Event] = {}
     # 待考察清单与"已展开到哪一刻"都按顶点类型分开存：省掉每个顶点拼一个带前缀的字符串键，
     # 也省掉每一轮把两边混在一起比对。三类的处理顺序由 `PENDING_ORDER` 固定，结果与顺序无关；
     # 只有同跳数时 `via` 取哪一份受 `EXPAND_ORDER` 影响。
@@ -204,7 +204,7 @@ def run_closure(source: GraphSource, seeds: list[Event], *, poi_t0: int = 0,
         """
         dist = 0 if from_dist < 0 else int(from_dist) + 1
         mask = _SEED_BIT if from_dist < 0 else CHANNEL_BITS.get(via_kind, 0)
-        edge_key = (ev.event_id, ev.rel)
+        edge_key = (ev.event_id, ev.rel, ev.syscall)
         prev = included.get(edge_key)
         if prev is not None:
             # 同一条边可能从多个顶点被找到：留跳数最少的那一份（跳数相同则保留先到的）

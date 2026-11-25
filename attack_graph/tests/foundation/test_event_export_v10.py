@@ -189,6 +189,18 @@ class EventExportV10Tests(unittest.TestCase):
         self.assertNotIn("File:/tmp/new", payload["entities"])
         self.assertEqual(payload["poi_events"], ["ProcessToFile:60:write"])
 
+        duplicate_triple_pending = {**confirmed[0], "event_ids": [61], "origin": "kept", "verdict": "mixed"}
+        failed_write = {**raw_events[2], "id": "ProcessToFile:61:write", "event_id": 61,
+                        "result": -1, "effect": "failure"}
+        merged = build_events_export(
+            "unit", "unit-v2", confirmed_edges=confirmed, unexcluded_edges=[duplicate_triple_pending],
+            raw_events=[raw_events[2], failed_write], vertex_attrs=vertex_attrs,
+            poi_rows=[{"event_id": 60, "rel": "p2f", "action": "write"}],
+            aggregate_indices={edge_key(confirmed[0]): 0},
+        )["events"]
+        self.assertEqual([(row["agg_edge_index"], row["effect"], row["report_status"]) for row in merged],
+                         [(0, "success", "confirmed"), (0, "failure", "unexcluded")])
+
         # 缺失事件编号时必须阻断报错
         with self.assertRaises(RuntimeError):
             build_events_export(

@@ -58,11 +58,21 @@ def run(
                 e["evidence_motif_id"] = ev["motif_id"]
 
     rejected: Dict[Tuple[Any, Any, Any], Dict[str, Any]] = {}
-    for group in (excluded_edges, pruned_background, unpromoted_ambiguous, debris_pruned):
+    stage_groups = (
+        ("s4_llm_none", excluded_edges),
+        ("s2_prefilter", pruned_background),
+        ("s5_demoted", unpromoted_ambiguous),
+        ("s6_debris", debris_pruned),
+    )
+    for default_stage, group in stage_groups:
         for edge in group:
             key = edge_key(edge)
             if key not in final_confirmed_map:
-                rejected[key] = {**edge, "origin": "excluded"}
+                rejected[key] = {
+                    **edge,
+                    "origin": "excluded",
+                    "prune_stage": str(edge.get("prune_stage") or default_stage),
+                }
 
     # 仅保留真正未决且非被动探测/包管理内部碎片的待复核候选。
     written_paths = collect_written_paths(list(final_confirmed_map.values()) + list(pool.raw))
@@ -74,10 +84,14 @@ def run(
             continue
         drop_reason = _drop_unconfirmed_reason(edge, debris_prune, written_paths)
         if drop_reason:
-            rejected[key] = {**edge, "origin": "excluded", "reason": drop_reason}
+            p_stage = "s4_llm_none" if str(edge.get("verdict") or "").lower() == "none" else "s6_unconfirmed_filter"
+            rejected[key] = {**edge, "origin": "excluded", "prune_stage": p_stage, "reason": drop_reason}
             continue
         seen_unexcluded.add(key)
-        final_unexcluded.append({**edge, "origin": "kept"})
+        rec = {**edge, "origin": "kept"}
+        rec.setdefault("decision_source", "unexcluded_kept")
+        rec.pop("prune_stage", None)
+        final_unexcluded.append(rec)
         rejected.pop(key, None)
 
     for edge in pool.raw:
@@ -86,9 +100,13 @@ def run(
             continue
         drop_reason = _drop_unconfirmed_reason(edge, debris_prune, written_paths)
         if drop_reason:
-            rejected[key] = {**edge, "origin": "excluded", "reason": drop_reason}
+            p_stage = "s4_llm_none" if str(edge.get("verdict") or "").lower() == "none" else "s6_unconfirmed_filter"
+            rejected[key] = {**edge, "origin": "excluded", "prune_stage": p_stage, "reason": drop_reason}
             continue
         seen_unexcluded.add(key)
-        final_unexcluded.append({**edge, "origin": "kept"})
+        rec = {**edge, "origin": "kept"}
+        rec.setdefault("decision_source", "unexcluded_kept")
+        rec.pop("prune_stage", None)
+        final_unexcluded.append(rec)
 
     return final_confirmed_map, debris_pruned, final_unexcluded, list(rejected.values())

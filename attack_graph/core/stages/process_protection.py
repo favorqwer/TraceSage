@@ -12,8 +12,10 @@ def protect(confirmed: Iterable[dict], dropped: list[dict],
             members: dict[tuple[int, str], list[dict]], cutoff: int) -> tuple[list[dict], list[dict]]:
     """返回应恢复的候选及仍可删除的候选，按原始事件记录保留依据。"""
     def matching(edge):
+        edge_sc = str(edge.get("syscall") or "")
         return (event for eid in edge.get("event_ids", ()) for rel in edge.get("rels", ())
-                for event in members.get((eid, REL_NORM.get(rel)), ()))
+                for event in members.get((eid, REL_NORM.get(rel)), ())
+                if not edge_sc or not event.get("syscall") or event.get("syscall") == edge_sc)
 
     inputs, outputs, launches = defaultdict(list), defaultdict(list), defaultdict(list)
     for edge in confirmed:

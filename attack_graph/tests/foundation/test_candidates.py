@@ -28,19 +28,19 @@ def row(event_id: int, *, pid: str = "7sshd", rel: str = "f2p", other: str = "/e
 
 
 class FoldTest(unittest.TestCase):
-    def test_fold_collects_effects(self) -> None:
-        """同一三元组的多条实例成败不同：折叠保留集合，不猜唯一值。"""
+    def test_fold_groups_instances_across_outcomes(self) -> None:
+        """同一关系的不同成败只生成一个模型候选。"""
         rows = [row(1, other="/tmp/x", effect="success"),
                 row(2, other="/tmp/x", effect="failure"),
                 row(3, other="/tmp/x", effect="success")]
         edge = OF.fold(rows).edges[0]
-        self.assertEqual(edge.effects, {"success", "failure"})
-        self.assertEqual(edge.to_dict()["effects"], ["failure", "success"])
+        self.assertNotIn("effects", edge.to_dict())
+        self.assertNotIn("effect", edge.to_dict())
+        self.assertEqual(set(edge.to_dict()["event_ids"]), {1, 2, 3})
 
-    def test_fold_without_effect_keeps_empty_set(self) -> None:
+    def test_fold_without_effect_keeps_candidate(self) -> None:
         edge = OF.fold([row(1, other="/tmp/y")]).edges[0]
-        self.assertEqual(edge.effects, set())
-        self.assertEqual(edge.to_dict()["effects"], [])
+        self.assertNotIn("effects", edge.to_dict())
 
     def test_fold_merges_same_triple(self) -> None:
         rows = [row(1, pid="100bash", other="/home/u/x", at=10),

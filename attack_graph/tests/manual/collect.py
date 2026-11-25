@@ -28,12 +28,11 @@ _TIME_STATS = ("elapsed_seconds", "timestamp", "closure_time_seconds")
 
 
 def _edge_row(edge: dict) -> list:
-    """报告里的边按（源、系统调用、目标、成败集合）归一，顺序无关。"""
+    """报告里的边按源、系统调用、目标归一，顺序无关。"""
     return [
         str(edge.get("src") or ""),
         str(edge.get("syscall") or ""),
         str(edge.get("dst") or ""),
-        sorted(str(x) for x in (edge.get("effects") or [])),
     ]
 
 

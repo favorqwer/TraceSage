@@ -37,6 +37,7 @@ def run(ctx: PipelineContext) -> Tuple[
             rec = dict(e)
             rec["origin"] = "confirmed"
             rec["class"] = "anchor"
+            rec["decision_source"] = "anchor"
             rec["reason"] = "告警事实锚点 (POI)"
             final_confirmed[k] = rec
 

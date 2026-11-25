@@ -168,6 +168,7 @@ def heal_and_purify_causal_closure(
                 rec = dict(e)
                 rec["origin"] = "confirmed"
                 rec["class"] = "story"
+                rec["decision_source"] = "s5_causal_heal"
                 rec["reason"] = "通用因果闭包：失陷进程树发起的子命令派生"
                 final_confirmed[k] = rec
                 promoted_keys.add(k)
@@ -190,6 +191,7 @@ def heal_and_purify_causal_closure(
                 rec = dict(e)
                 rec["origin"] = "confirmed"
                 rec["class"] = "story"
+                rec["decision_source"] = "s5_causal_heal"
                 rec["reason"] = "通用因果闭包：失陷进程临时空间载荷与环境配置"
                 final_confirmed[k] = rec
                 promoted_keys.add(k)
@@ -213,6 +215,7 @@ def heal_and_purify_causal_closure(
             rec = dict(e)
             rec["origin"] = "confirmed"
             rec["class"] = "story"
+            rec["decision_source"] = "s5_causal_heal"
             rec["reason"] = "通用因果公理：前序失陷会话落盘载荷的读取与装载 (RAW)"
             final_confirmed[k] = rec
             promoted_keys.add(k)
@@ -294,6 +297,7 @@ def heal_and_purify_causal_closure(
                 rec = dict(e)
                 rec["origin"] = "confirmed"
                 rec["class"] = "story"
+                rec["decision_source"] = "s5_causal_heal"
                 rec["reason"] = "通用因果公理：失陷命令向有效管道回传输出"
                 final_confirmed[k] = rec
                 promoted_keys.add(k)
@@ -334,6 +338,7 @@ def heal_and_purify_causal_closure(
             rec = dict(e)
             rec["origin"] = "confirmed"
             rec["class"] = "story"
+            rec["decision_source"] = "s5_causal_heal"
             rec["reason"] = "通用因果公理：已确诊失陷服务进程的入站会话与双向通信流"
             final_confirmed[k] = rec
             promoted_keys.add(k)
@@ -354,6 +359,7 @@ def heal_and_purify_causal_closure(
                 rec = dict(e)
                 rec["origin"] = "confirmed"
                 rec["class"] = "story"
+                rec["decision_source"] = "s5_causal_heal"
                 rec["reason"] = "通用因果公理：已确诊失陷服务进程的入站会话与双向通信流"
                 final_confirmed[k] = rec
                 promoted_keys.add(k)
@@ -372,6 +378,8 @@ def heal_and_purify_causal_closure(
         if is_passive_kernel_runtime_edge(e, written_paths=protected_written_paths):
             rec = dict(e)
             rec["origin"] = "kept"
+            rec["decision_source"] = "s5_demoted"
+            rec["prune_stage"] = "s5_demoted"
             unpromoted_ambiguous.append(rec)
             continue
 
@@ -383,6 +391,8 @@ def heal_and_purify_causal_closure(
             if p_obj not in valid_pipes:
                 rec = dict(e)
                 rec["origin"] = "kept"
+                rec["decision_source"] = "s5_demoted"
+                rec["prune_stage"] = "s5_demoted"
                 unpromoted_ambiguous.append(rec)
                 continue
 

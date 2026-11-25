@@ -80,11 +80,13 @@ def _fmt_precision(value: Any) -> str:
 def _rule_lines(item: Dict[str, Any], ranked: List[Dict[str, Any]],
                 total: int) -> List[str]:
     if not ranked:
+        item["_rag_rules"] = []
         return [cfg.render_section("evidence_rule.md", "empty")]
     lines = [cfg.render_section("evidence_rule.md", "header",
                                 SIZE=item.get('size'), TOTAL=total)]
     item["_rule_ids"] = []
     item["_rule_evidence"] = {}
+    item["_rag_rules"] = []
     for idx, rec in enumerate(ranked, 1):
         g = rec["g"]
         m = g.get("motif") or {}
@@ -103,6 +105,19 @@ def _rule_lines(item: Dict[str, Any], ranked: List[Dict[str, Any]],
                 "dst_role": str(h.get("dst_role") or ""),
             } for h in sorted(g.get("hops") or [], key=lambda h: int(h.get("index") or 0))],
         }
+        prec_raw = m.get("precision")
+        item["_rag_rules"].append({
+            "motif_id": mid,
+            "entry_source": entry,
+            "lr": round(float(rec.get("lr", 0.0)), 6),
+            "weighted_lr": round(float(rec.get("weighted_lr", rec.get("lr", 0.0))), 6),
+            "precision": (round(float(prec_raw), 4) if prec_raw is not None else None),
+            "attack_hits": int(m.get("attack_hits") or 0),
+            "background_hits": int(m.get("background_hits") or 0),
+            "support_scenarios": len(m.get("support_scenarios") or []),
+            "exact_members": int(rec.get("exact") or 0),
+            "partial_members": int(rec.get("partial") or 0),
+        })
         aligns = []
         if rec["exact"]:
             aligns.append(cfg.render_section("evidence_rule.md", "align_exact", COUNT=rec['exact']))

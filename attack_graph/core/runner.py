@@ -28,15 +28,11 @@ class InvestigationRunner:
     def __init__(self, render_hook: Any = None):
         self.render_hook = render_hook
 
-    def run(self, ctx: PipelineContext) -> Dict[str, Any]:
-        t0 = time.time()
-        ctx.t0 = t0
-        print(f"\n[{time.strftime('%H:%M:%S')}] >>> 开始执行场景: {ctx.scenario}")
-
+    def prepare(self, ctx: PipelineContext):
         # 阶段 1: 规则库加载、闭包抽取、锚点确认
         (
-            raw_edges, closure_stats, deps,
-            final_confirmed, anchor_triples, anchor_keys,
+            raw_edges, _, deps,
+            final_confirmed, _, anchor_keys,
             pool, tf, rule_lib_tuple
         ) = s1_closure.run(ctx)
 
@@ -51,6 +47,14 @@ class InvestigationRunner:
         # 注册上下文到渲染器
         rag_render.set_matcher(matcher)
         rag_render.set_parent_map(parent_map)
+        return (deps, final_confirmed, anchor_keys, pool, tf, rule_lib_tuple,
+                clean_unexcluded, pruned_background, rule_evidence_map, ambiguous_candidates)
+
+    def run(self, ctx: PipelineContext) -> Dict[str, Any]:
+        ctx.t0 = time.time()
+        print(f"\n[{time.strftime('%H:%M:%S')}] >>> 开始执行场景: {ctx.scenario}")
+        (deps, final_confirmed, anchor_keys, pool, tf, rule_lib_tuple,
+         clean_unexcluded, pruned_background, rule_evidence_map, ambiguous_candidates) = self.prepare(ctx)
 
         # 阶段 4: LLM 智能判定 (带渲染钩子隔离)
         original_render = judge_mod.render

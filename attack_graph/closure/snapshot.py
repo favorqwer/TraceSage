@@ -411,7 +411,8 @@ class SnapshotReader:
                 # 父进程侧是"它启动过谁"，两条都要（同一主体子进程算上游，见 `run_closure`）
                 self.rows += 1
                 rel = REL_BY_CODE[rec[2]]
-                if seen is not None and (rec[7], rel) in seen:
+                syscall = self._syscalls[rec[3]] if rec[3] < len(self._syscalls) else ""
+                if seen is not None and (rec[7], rel, syscall) in seen:
                     self.skipped += 1          # 已经收进闭包：不重造内部表示
                     continue
                 out.append(self._event(rec))
@@ -441,7 +442,7 @@ class SnapshotReader:
                 if "not_delivery" in event_ruling(rel, syscall, rec[8]).effects:
                     continue                # 连接建立类操作不传递内容
                 self.rows += 1
-                if seen is not None and (rec[7], rel) in seen:
+                if seen is not None and (rec[7], rel, syscall) in seen:
                     self.skipped += 1
                     continue
                 out.append(self._event(rec))
@@ -631,6 +632,7 @@ class TSGSource:
         out: list[Event] = []
         reader = self._reader
         rel_by_code = TSG_REL_BY_CODE
+        syscalls = self._syscalls
         make_event = self._event_from_rec
         for key, lo, hi in items:
             vid = reader.find_vertex_id("Process", key)
@@ -640,7 +642,8 @@ class TSGSource:
             for rec in reader.iter_block_raw(vid, lo, hi, outgoing=False):
                 self.rows += 1
                 rel = rel_by_code[rec[8]]
-                if seen is not None and (rec[1], rel) in seen:
+                sc = syscalls[rec[6]] if rec[6] < len(syscalls) else ""
+                if seen is not None and (rec[1], rel, sc) in seen:
                     self.skipped += 1
                     continue
                 out.append(make_event(vid, rec))
@@ -676,7 +679,7 @@ class TSGSource:
                 if "not_delivery" in event_ruling(rel, sc, nbytes).effects:
                     continue
                 self.rows += 1
-                if seen is not None and (rec[1], rel) in seen:
+                if seen is not None and (rec[1], rel, sc) in seen:
                     self.skipped += 1
                     continue
                 out.append(make_event(vid, rec))

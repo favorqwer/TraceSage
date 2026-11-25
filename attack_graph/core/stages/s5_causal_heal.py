@@ -99,6 +99,8 @@ def run(
             if sc in PROBE_SYSCALLS:
                 rec = dict(e)
                 rec["origin"] = "kept"
+                rec["decision_source"] = "s5_demoted"
+                rec["prune_stage"] = "s5_demoted"
                 rec["reason"] = "通用因果验证：无物理数据载荷的只读元数据探测系统调用，降噪归入未排除"
                 unpromoted_llm.append(rec)
                 continue
@@ -108,6 +110,8 @@ def run(
             if is_xdg_cache and (dst not in written_files and src not in written_files):
                 rec = dict(e)
                 rec["origin"] = "kept"
+                rec["decision_source"] = "s5_demoted"
+                rec["prune_stage"] = "s5_demoted"
                 rec["reason"] = "通用因果验证：Linux XDG标准临时缓存访问且无前序写入突变，降噪归入未排除"
                 unpromoted_llm.append(rec)
                 continue
@@ -132,6 +136,8 @@ def run(
                 if not has_mutation:
                     rec = dict(e)
                     rec["origin"] = "kept"
+                    rec["decision_source"] = "s5_demoted"
+                    rec["prune_stage"] = "s5_demoted"
                     rec["reason"] = "通用因果验证：高基数聚合束成员缺乏下游物理状态突变，降级归入未排除"
                     unpromoted_llm.append(rec)
                     continue

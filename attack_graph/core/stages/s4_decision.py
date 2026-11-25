@@ -4,12 +4,14 @@ from __future__ import annotations
 import json
 import threading
 import time
+import settings as cfg
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from domain.edge import edge_key
 from llm.client import set_trace_raw
 from llm.judge import LlmChannel, set_trace_sink
+from llm.replay import INPUT_PROTOCOL
 from core.context import PipelineContext
 
 
@@ -38,6 +40,9 @@ def run(
                                        or item.get("_rag_rule_ids") or [])
             items.append(rec)
         record = {
+            "input_protocol": INPUT_PROTOCOL,
+            "model": cfg.llm_model(),
+            "request_sha256": payload["request_sha256"],
             "scenario": ctx.scenario,
             "ts": time.time(),
             "level_name": payload.get("level_name"),
@@ -69,6 +74,7 @@ def run(
         with trace_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({
                 "scenario": ctx.scenario,
+                "input_protocol": INPUT_PROTOCOL, "model": cfg.llm_model(),
                 "kind": "detail", "detail": trace_details,
             }, ensure_ascii=False, default=str) + "\n")
 
