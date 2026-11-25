@@ -38,10 +38,14 @@ def clone(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
     if call.exit is not None:
         child.uid = call.exit.ruid or parent.uid
         child.ppid = child.ppid or (call.exit.ppid or parent.key.pid)
-    ctx.st.fds.fork(call.container_id, parent.key.pid, child_pid)
+    # 仅当子进程尚未因先到 execve 结束前置段时复制父进程 fd 表，避免覆盖已 prune_cloexec 的新映像 fd。
+    if child.exited_ns is None:
+        ctx.st.fds.fork(call.container_id, parent.key.pid, child_pid)
     ctx.attach(out, ctx.proc_node(parent))
     ctx.attach(out, ctx.proc_node(child))
-    ctx.add(out, ctx.edge(EdgeClass.P2P, "clone", parent.key, child.key, call, result=child_pid))
+    if not child.clone_edge_emitted:
+        ctx.add(out, ctx.edge(EdgeClass.P2P, "clone", parent.key, child.key, call, result=child_pid))
+        child.clone_edge_emitted = True
     return ctx.covered(out, call)
 
 
@@ -55,6 +59,26 @@ def exec_(ctx: EmitContext, call: Call, decision: Decision) -> Outcome:
         return ctx.give_up(out, call, Bucket.OTHER, "result_unobserved:exec")
     if result < 0:
         return ctx.attempt(out, call, "exec", target or call.text("filename"), result)
+
+    # 根治 clone3 采集盲区（如 glibc posix_spawn/popen）：
+    # 当子进程尚未收到 clone 边且 execve 退出行给出客观内核 ppid (>1) 时，在精确存活窗口内补齐父子派生边。
+    exec_ppid = (call.exit.ppid if call.exit and call.exit.ppid else 0) or (old.ppid or 0)
+    inferred_parent = ctx.st.proc.link_exec_parent_from_ppid(old, exec_ppid, call.start_ns)
+    if inferred_parent is not None:
+        ctx.attach(out, ctx.proc_node(inferred_parent))
+        ctx.add(
+            out,
+            ctx.edge(
+                EdgeClass.P2P,
+                "clone",
+                inferred_parent.key,
+                old.key,
+                call,
+                result=call.pid,
+                syscall_override="clone",
+            ),
+        )
+        old.clone_edge_emitted = True
 
     exe = (call.exit.exe if call.exit else "") or old.exe_path
     proc_args = (call.exit.proc_args if call.exit else "") or ""

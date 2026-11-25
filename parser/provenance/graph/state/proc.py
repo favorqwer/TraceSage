@@ -36,6 +36,8 @@ class Seg:
     cwd: str = ""
     root: str = "/"
     threads: set[int] = field(default_factory=set)
+    emitted_to_graph: bool = False
+    clone_edge_emitted: bool = False
 
     @property
     def start_ns(self) -> int:
@@ -65,6 +67,9 @@ class ProcState:
             "born_unknown": 0,
             "born_collision": 0,
             "late_clone_upgrade": 0,
+            "late_clone_kept_key": 0,
+            "late_vfork_reconciled": 0,
+            "clone_inferred_from_exec_ppid": 0,
             "pid_resolve_tie": 0,
             "target_unresolved": 0,
             "target_pid_other_ns": 0,
@@ -134,19 +139,32 @@ class ProcState:
             seg.cwd = P.normalize(P.path_value(row.cwd)) or row.cwd
         return seg
 
+    def mark_emitted(self, key: ProcKey) -> None:
+        """标记该进程段已经产出过图边，后续迟到 clone 到达时不得改键遗弃既有边。"""
+        seg = self._by_key.get(key)
+        if seg is not None:
+            seg.emitted_to_graph = True
+
     # -- 身份事件 ------------------------------------------------------
     def on_clone(self, parent: Seg, child_pid: int, start_ns: int,
                  exe_path: str, cmdline: str) -> Seg:
         cid = parent.key.container_id
         live = self._live(cid, child_pid)
         if live is not None and live.born_src == "unknown":
-            # 子进程的事件早于 clone 退出行到达：把已建的 unknown 段升级成 clone 段。
-            # 旧键已经产出过的边会留下一个 start_ns=0 的节点；计入 late_clone_upgrade。
-            self._by_key.pop(live.key, None)
-            live.key = ProcKey(self.host_id, cid, child_pid, start_ns)
-            self._by_key[live.key] = live
+            # 子进程的事件早于 clone 退出行到达：
+            # 若尚未落图边，可直接升级键为 start_ns；若已经落过图边，保留原键防止产生孤立的 pid|0 占位节点。
+            if not live.emitted_to_graph:
+                self._by_key.pop(live.key, None)
+                live.key = ProcKey(self.host_id, cid, child_pid, start_ns)
+                self._by_key[live.key] = live
+                self.counts["late_clone_upgrade"] += 1
+            else:
+                self.counts["late_clone_kept_key"] += 1
             live.born_src = "clone"
             live.parent = parent.key
+            live.ppid = live.ppid or parent.key.pid
+            if not live.exe_path:
+                live.exe_path = exe_path or parent.exe_path
             live.cwd = live.cwd or parent.cwd
             live.root = parent.root
             live.threads.add(child_pid)
@@ -155,9 +173,47 @@ class ProcState:
                 live.euid = parent.euid
             self.counts["born_clone"] += 1
             self.counts["born_unknown"] = max(0, self.counts["born_unknown"] - 1)
-            self.counts["late_clone_upgrade"] += 1
             self.clone_destinations.add(live.key)
             return live
+
+        # vfork / 慢 clone 退出行晚于子进程 execve 到达：
+        # 查找同一 (cid, child_pid) 在 start_ns 之后刚因 execve 结束的 unknown/clone_ppid 前置段，
+        # 直接挂载父子边到该前置段并把父指针同步到后续 exec 段，绝不新建孤立重复分身。
+        segs = self._segs.get((cid, child_pid), ())
+        for idx in range(len(segs) - 1, -1, -1):
+            cand = segs[idx]
+            if (
+                cand.born_src in ("unknown", "clone_ppid")
+                and cand.exited_ns is not None
+                and cand.exited_ns >= start_ns
+                and (cand.parent is None or cand.parent == parent.key)
+            ):
+                was_unknown = cand.born_src == "unknown"
+                cand.born_src = "clone"
+                cand.parent = parent.key
+                cand.ppid = cand.ppid or parent.key.pid
+                if not cand.exe_path:
+                    cand.exe_path = exe_path or parent.exe_path
+                cand.cwd = cand.cwd or parent.cwd
+                cand.root = cand.root if cand.root != "/" else parent.root
+                if cand.euid is None:
+                    cand.euid = parent.euid
+                if was_unknown:
+                    self.counts["born_clone"] += 1
+                    self.counts["born_unknown"] = max(0, self.counts["born_unknown"] - 1)
+                self.counts["late_vfork_reconciled"] += 1
+                self.clone_destinations.add(cand.key)
+                # 将父进程关系同步传递给该前置段之后紧邻的 exec 段（用于 exit/parent_of 回溯）
+                for follow in segs[idx + 1 :]:
+                    if follow.born_src == "exec" and follow.parent is None:
+                        follow.parent = parent.key
+                        follow.ppid = follow.ppid or parent.key.pid
+                        if follow.euid is None:
+                            follow.euid = parent.euid
+                    else:
+                        break
+                return cand
+
         seg = self._new(cid, child_pid, start_ns, "clone", parent=parent.key)
         self.clone_destinations.add(seg.key)
         seg.ppid = parent.key.pid
@@ -167,6 +223,28 @@ class ProcState:
         seg.root = parent.root
         seg.euid = parent.euid
         return seg
+
+    def link_exec_parent_from_ppid(self, seg: Seg, ppid: int, at_ns: int) -> Seg | None:
+        """当 clone3 等采集端盲区导致子进程在 execve 前缺少 clone 边时，
+        按 execve 退出行客观记录的内核 ppid (>1) 在精确存活窗口内补连父进程。"""
+        if seg.born_src != "unknown" or seg.parent is not None or ppid <= 1:
+            return None
+        parent = self.resolve(seg.key.container_id, ppid, at_ns)
+        if parent is None or parent.key == seg.key:
+            return None
+        seg.born_src = "clone_ppid"
+        seg.parent = parent.key
+        seg.ppid = ppid
+        if not seg.exe_path:
+            seg.exe_path = parent.exe_path
+        seg.cwd = seg.cwd or parent.cwd
+        seg.root = seg.root if seg.root != "/" else parent.root
+        if seg.euid is None:
+            seg.euid = parent.euid
+        self.clone_destinations.add(seg.key)
+        self.counts["clone_inferred_from_exec_ppid"] += 1
+        self.counts["born_unknown"] = max(0, self.counts["born_unknown"] - 1)
+        return parent
 
     def on_exec(self, seg: Seg, start_ns: int, exe_path: str, cmdline: str) -> Seg:
         self.on_exit(seg, start_ns)

@@ -91,6 +91,7 @@ class GraphEmitter:
         payload: bool = False,
         to_path: str = "",
         mode: str = "",
+        syscall_override: str | None = None,
     ) -> Edge | None:
         if src == dst:
             self.counts["self_loop"] += 1
@@ -108,7 +109,7 @@ class GraphEmitter:
             event_id=call.event_id,
             start_ns=call.start_ns,
             end_ns=call.end_ns,
-            syscall=canonical_syscall(call.call),
+            syscall=syscall_override or canonical_syscall(call.call),
             result=result,
             payload_b64=payload_b64,
             to_path=to_path or None,
@@ -123,6 +124,7 @@ class GraphEmitter:
         # 边端点必须都在节点登记表里，否则写库时 MATCH 不到端点。
         for key in (edge.src, edge.dst):
             if isinstance(key, ProcKey):
+                self.st.proc.mark_emitted(key)
                 node = self.node_for(key)
                 if node is not None and not any(n.key == key for n in out.nodes):
                     out.nodes.append(node)

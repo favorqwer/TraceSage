@@ -3,7 +3,7 @@
 `docs/LINUX_SYSDIG_LOG_PARSER_DESIGN_V2.md` 的实现：把 Sysdig `.scap` 直接流式解析成
 单文件全属性溯源图索引 `graphs/<scenario>.tsg`（`tsg-v2`，3 类顶点、5 类边；可选 `--sink neo4j` 兼容写入 Neo4j 图数据库），并把"每条日志行去了哪里"记成可对账的账本。
 
-- 状态：可运行；238 个单测（含架构依赖方向测试）。默认 **2 趟**：容器元数据预扫 + 主趟。
+- 状态：可运行；242 个单测（含架构依赖方向测试与 `tests/test_process_links.py` 进程链路回归测试）。默认 **2 趟**：容器元数据预扫 + 主趟；已修复 `emitted_to_graph` 滞后补写 `clone`、晚到 `clone` 逆扫回接已退出 `unknown`/`clone_ppid` 前驱、`execve` 按 `ppid` 补建父子 `clone` 边以及子进程段继承父进程 `exe_path`。
 - 主趟 16 列：`%proc.exepath` 取完整可执行路径，`%evt.rawres` 取统一结果，
   `%evt.latency` 供配对校验，`%evt.buffer` 配 `-b` 取 base64 载荷；所有条件字段配 `*`，缺失输出 `<NA>`，不再整行消失。
 - 已补齐：`uid`（euid）、容器带序号挂载、`dirfd`、cwd/chroot 状态、
@@ -142,7 +142,7 @@ provenance/
     neo4j.py             Neo4jWriter + Cypher（--sink neo4j 兼容）
     report/              collector.py（统计 + edges.csv）
                          payload.py / tables.py / markdown.py / blocks.py / writer.py
-tests/                   238 个标准库 unittest
+tests/                   242 个标准库 unittest
 ```
 
 依赖方向只有三条：
@@ -215,7 +215,7 @@ JSON 模式是 `null`。`<NA>` 在解码时还原成缺失语义。
 
 ## 账本与报告
 
-每个场景输出（默认 `output/parser-v2/<scenario>/`）：
+默认 `--sink tsg` 直接写至 `graphs/<scenario>.tsg`；当显式传入 `--out-dir`（如 `output/parser-v2/<scenario>/`）时才写出以下调试账本文件：
 
 - `report.json`：账本、缺号分解、参数可得性、未归类、容器、边分布、
   **`edges.result`（每个 action 的 result 语义 + null/负/零/正 四分类）**、身份/fd 统计、边界清单。
