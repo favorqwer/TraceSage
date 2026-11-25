@@ -35,9 +35,6 @@ class CollapsedEdge:
     dst_label: str = "Process"
     instances: int = 0
     bytes: int = 0
-    # 成败集合：同一内容三元组的多条实例可能既有成功又有失败（图上 result <0 / >=0）。
-    # 报告按（三元组 × 成败）拆开输出，不去猜“哪一条代表它”。
-    effects: set[str] = field(default_factory=set)
     event_ids: list[int] = field(default_factory=list)
     t0: int = 0
     t1: int = 0
@@ -70,7 +67,6 @@ class CollapsedEdge:
             "dst_label": self.dst_label,
             "instances": self.instances,
             "bytes": self.bytes,
-            "effects": sorted(self.effects),
             "t0": self.t0,
             "t1": self.t1,
             "rels": sorted(self.rels),
@@ -178,9 +174,6 @@ def fold(rows: Iterable[dict[str, Any]]) -> FoldResult:
                 edge.via_kind = str(row.get("via_kind") or "")
                 edge.via_key = str(row.get("via_key") or "")
         edge.instances += 1
-        effect = str(row.get("effect") or "")
-        if effect:
-            edge.effects.add(effect)
         edge.bytes += max(0, int(row.get("bytes") or 0))
         edge.event_ids.append(int(row["event_id"]))
         edge.t0 = min(edge.t0, int(row["starttime"]))

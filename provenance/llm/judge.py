@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -322,6 +323,9 @@ def run_batches(deps: Any, items: list[dict[str, Any]], batches: list[list[dict[
             deps.log(f"    [judge] 一批调用失败（第 {attempt + 1}/{cfg.batch_attempts()} 次，"
                      f"{len(batch)} 个束 / {len(listing)} 字符）：{short(result.get('error'))}")
         _emit_trace({
+            "request_sha256": hashlib.sha256(
+                json.dumps([cfg.llm_model(), BUNDLE_SYSTEM, listing], ensure_ascii=False).encode("utf-8")
+            ).hexdigest(),
             "level_name": level_name,
             "items": [{
                 "id": item["id"], "level": item["level"], "size": item["size"],

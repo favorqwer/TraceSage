@@ -40,7 +40,7 @@
 & ./.venv/Scripts/python.exe tools/score_report_product.py --report tmp/provenance-check/report.json --gt groundtruth/8_FTP_WeakCreds_WebShell_Exfiltration.groundtruth.json
 ```
 
-默认结果目录为 `output/provenance-runs/`，不自动更新正式基线。评分按人工标准答案步骤计算召回，按源、系统调用、目标、成败四元组计算查准。未排除边不计入确认输出。
+默认结果目录为 `output/provenance-runs/`，不自动更新正式基线。评分按人工标准答案步骤计算召回，按源、系统调用、目标三元组计算查准。未排除边不计入确认输出。
 
 在线导航参数由 `provenance/config/navigator.toml` 统一配置（包括并发数、批大小、四道结构闸门以及判定调用上限 `cap_calls`；`cap_calls = 0` 为默认的无上限模式，流程由 5 级拓扑划分与空拆/扇出闸门自收敛终止，配置为正整数 N 时在达到 N 次调用后触发截断保护）。
 

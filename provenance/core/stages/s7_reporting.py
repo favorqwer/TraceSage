@@ -11,6 +11,7 @@ tools_dir = cfg.REPO_ROOT / "tools"
 if str(tools_dir) not in sys.path:
     sys.path.insert(0, str(tools_dir))
 import score_report_product as scorer
+from triplet_report import merge_report_edges
 from core.reporting import RouteOutcome, build_report_from_outcome, save_report
 from core.context import PipelineContext
 
@@ -68,6 +69,8 @@ def run(
     )
 
     Path(ctx.out_path).parent.mkdir(parents=True, exist_ok=True)
+    report["edges"] = merge_report_edges(report["edges"])
+    report["scoring_protocol"] = scorer.rm.SCORING_PROTOCOL
     save_report(report, ctx.out_path)
 
     # 官方评分
@@ -86,6 +89,7 @@ def run(
 
     return {
         "scenario": ctx.scenario,
+        "scoring_protocol": scorer.rm.SCORING_PROTOCOL,
         "recall": ev["recall"],
         "steps_hit": ev["steps_hit"],
         "steps_total": ev["steps_total"],

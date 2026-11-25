@@ -385,6 +385,7 @@ def summarize(results, lib_name, folds_total, elapsed):
     rec = sorted(r["recall"] for r in results)
     pre = sorted(r["precision"] for r in results)
     return {
+        "scoring_protocol": "triplet-v1",
         "protocol": "留一交叉：测试场景的标准答案与其候选池不参与蒸馏，"
                     "每折规则库只由其余 9 个场景生成（含档位分界与形态枚举）",
         "mode": "rules（0 次大模型调用）",
