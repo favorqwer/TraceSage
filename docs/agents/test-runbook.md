@@ -6,15 +6,31 @@
 
 | 脚本 | 用途 |
 |---|---|
-| `tools/score_report_product.py` | `attack_graph` / `provenance` / 智能体报告 vs 标准答案评分（召回按步骤、查准按四元组，同一条边多次发生只计一次）；优先从 `graphs/<场景名>.tsg` 读取顶点标签（零 Neo4j） |
+| `tools/score_report_product.py` | `attack_graph` / `provenance` / 智能体报告 vs 标准答案评分（召回按步骤、查准按三元组，同一条边多次发生只计一次）；优先从 `graphs/<场景名>.tsg` 读取顶点标签（零 Neo4j） |
 | `tools/score_graph_product.py` | 引擎 `baseline.json` vs 标准答案评分（与上一条同一口径）；产物未内藏 syscall 时仍按 `-v2` Neo4j 库反查补全，反查不到即阻断 |
 | `tools/rules_match.py` | 评分公共模块：可能集合规则与端点条件判定，动作名 ↔ syscall 词表（优先读取 `.tsg`） |
 | `python -m tsg.query` | 离线 `.tsg` 图查询与 SQLite 导出 CLI（`info`/`find-vertex`/`event`/`edges`/`neighbors`/`export-sqlite`） |
 | `tools/export_neo4j_to_tsg.py` | 将标准 `-v2` Neo4j 场景图一次性流式导出或重打包为 `graphs/<场景名>.tsg`（`TSG2`） |
 | `tools/run_all_engine_v2.py` | 批量在 `-v2` Neo4j 库上跑调查引擎并自动评分 |
+| `tools/preflight_triplet.py` | 检查十场景本地输入、引擎依赖和只读数据库连接，模型调用 0 次 |
+| `tools/run_triplet_validation.py` | 在独立目录重建四套系统的三元组结果，并验证研究点二的单事件回配与因果图 |
+| `tools/verify_baseline.py` | 校验三元组重建结果的场景、计数和输入输出指纹 |
 | `tools/promote_v2_baseline.py` | 历史 `provenance` 10 场景结果校验后晋升至 `output/provenance-baseline/` |
 | `tools/l1_index.py` | 历史 `provenance/` 模块专用的第 1 层本地索引构建脚本（主线 `attack_graph` 已改用 `.tsg`，不再使用） |
 | `tools/neo4j_desktop_start.*` / `neo4j_desktop_stop.*` | 本机 Neo4j 桌面版启停（仅 `DEPIMPACT` 引擎、`gt-annotator`、`plain_llm` 与历史 `provenance/` 需要） |
+
+### 独立验证 attack_graph
+
+对每个场景执行 `python attack_graph/main.py --scenario <场景名> --preflight`，读取本地输入并计算分批规模。首层批次数由实际候选分组确定，其余层给出结构上界，整个预检没有模型请求。
+
+实时验证按资源报备的额度运行。仅验证主线时使用 `--attack-graph-only`，启动前不会执行 Neo4j 联合预检。
+
+```powershell
+python tools/run_triplet_validation.py --attack-graph-only --run-dir output/attack-graph-runs/<运行编号> --scene-timeout <每场景秒数> --run-timeout <总秒数> --request-limit <请求额度>
+python tools/verify_baseline.py --run-dir output/attack-graph-runs/<运行编号>
+```
+
+十场景与下游校验通过后，`release-candidate/` 提供待晋升的报告、事件、判定轨迹和指纹。
 
 ## 场景测试标准流程
 
@@ -43,7 +59,7 @@ python attack_graph/main.py --scenario <场景全名> \
 
 # 单场景免调用重放（用于 Stage 5-7 消融验证与伴生事件导出）
 python attack_graph/main.py --scenario <场景全名> \
-  --replay-trace output/provenance-runs/attack-graph-20261124/reports/<场景全名>.trace.jsonl \
+  --replay-trace output/attack-graph-runs/<三元组实时运行编号>/<场景全名>.trace.jsonl \
   --output output/attack-graph-runs/<运行编号>/<场景全名>.json
 
 # 单元测试（修改 tsg / attack_graph / attack_path 后必跑）

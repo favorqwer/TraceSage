@@ -73,21 +73,18 @@ TraceSage/
 ├── requirements.txt          # Python 依赖清单
 ├── .env                      # 数据库连接环境配置
 ├── attack/data/              # 各攻击场景 capture.scap 原始二进制捕获
-├── input/sysdig/             # 历史场景 JSONL 日志备份
 ├── groundtruth/              # 10 个攻击场景人工标注标准答案
 ├── docs/                     # 图模型公理、攻击清单等设计文档
 │   └── agents/               # agent 操作契约：图模型、测试手册、评分口径
 ├── gt-annotator/             # groundtruth 标注与校验工具
 ├── output/                   # 产出结果（严格分类，不可混淆）
-│   ├── attack-graph-baseline/# attack_graph 主线正式基线存放目录与 OVERVIEW.md
+│   ├── attack-graph-baseline/# attack_graph 主线唯一正式基线（reports_v2/、events_v2/、traces/ 与 OVERVIEW.md）
 │   ├── attack-graph-runs/    # attack_graph 运行时测试、消融与重放产物（不得当基线）
-│   ├── provenance-baseline/  # 原 provenance 冻结基线（历史备份基线）与 OVERVIEW.md
+│   ├── provenance-baseline/  # 原 provenance 冻结基线（含 distill/fold-libraries/）与 OVERVIEW.md
 │   ├── engine-baseline/      # 调查引擎基线与 OVERVIEW.md
-│   ├── parser-v2/            # 解析器当次报告（含历史运行）
 │   ├── engine-runs/          # 引擎当次运行产物（不得当基线）
-│   ├── provenance-runs/      # provenance 当次运行及早期轨迹存档（不得当基线）
 │   ├── plain-llm-runs/       # 纯大模型对照实验（plain_llm）产出
-│   ├── rule-kg/              # 规则知识库快照与检索评测输出
+│   ├── rule-kg/              # 规则知识库快照（v1/）
 │   └── agent-vs-engine/      # score_report_product.py 默认结果目录（按需生成）
 ├── tmp/                      # 临时文件与诊断数据区（随时可清）
 ├── graphs/                   # 10 场景正式单文件 .tsg（tsg-v2）全属性图索引（主线运行期零 Neo4j）
@@ -113,7 +110,7 @@ TraceSage/
 
 - 正式基线：当前开发主线 `attack_graph` 写 `output/attack-graph-baseline/`；既有 `provenance` 冻结基线/备份留在 `output/provenance-baseline/`；调查引擎写 `output/engine-baseline/<场景名>/`。
 - 当次运行与测试产物：`attack_graph` 写 `output/attack-graph-runs/`，`provenance` 写 `output/provenance-runs/`，引擎写 `output/engine-runs/`，纯大模型实验写 `output/plain-llm-runs/`，均不得当作正式基线，也不得覆盖既有基线。
-- `tools/run_all_engine_v2.py` 与 `experiments/DEPIMPACT/baseline/run-baseline.sh` 不带输出目录参数时都会写 `output/engine-baseline/`；当次测试必须显式传 `output/engine-runs/<场景名>`，否则会覆盖正式基线。
+- `tools/run_all_engine_v2.py` 必须显式传入当次运行的 `--output-root`。直接调用 `experiments/DEPIMPACT/baseline/run-baseline.sh` 做当次测试时，必须显式传输出目录，默认目录指向正式基线。
 - 落盘文件构成（`baseline.json`、`groundtruth-eval.txt`、`OVERVIEW.md`、留一折库）与汇总口径见 `docs/agents/evaluation-protocol.md`。
 
 ## 第六部分：文档索引
