@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from neo4j import GraphDatabase
 
-from .chunking import ns_to_iso
+from .chunking import ns_to_iso, triple_key
 from .settings import Config
 
 
@@ -19,15 +19,6 @@ def load_scenarios(path: Path) -> dict[str, dict[str, Any]]:
 
 def scenarios_fingerprint(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _effect(result: Any) -> Optional[str]:
-    if result is None:
-        return None
-    try:
-        return "success" if int(result) >= 0 else "failure"
-    except (TypeError, ValueError):
-        return None
 
 
 def resolve_anchor(cfg: Config, database: str, poi: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -55,7 +46,7 @@ def _resolve_file(session: Any, poi: dict[str, Any]) -> Optional[dict[str, Any]]
     WHERE (f.path = $path OR f.path ENDS WITH ('|' + $path))
       AND ($call IS NULL OR coalesce(r.syscall, r.action) = $call)
     RETURN p.exe_path AS src, coalesce(r.syscall, r.action) AS call, f.path AS dst,
-           r.result AS result, r.start_ns AS t0, type(r) AS rel
+           r.start_ns AS t0, type(r) AS rel
     ORDER BY r.start_ns DESC LIMIT 1
     """
     for tier, call_filter in ((1, call), (2, None)):
@@ -68,7 +59,7 @@ def _resolve_file(session: Any, poi: dict[str, Any]) -> Optional[dict[str, Any]]
     WHERE (f.path = $path OR f.path ENDS WITH ('|' + $path))
     RETURN f.path AS src, coalesce(r.syscall, r.action) AS call,
            coalesce(x.exe_path, x.path, x.endpoints) AS dst,
-           r.result AS result, r.start_ns AS t0, type(r) AS rel
+           r.start_ns AS t0, type(r) AS rel
     ORDER BY r.start_ns DESC LIMIT 1
     """
     row = session.run(query_src, path=path).single()
@@ -83,7 +74,7 @@ def _resolve_network(session: Any, poi: dict[str, Any]) -> Optional[dict[str, An
     WHERE n.endpoints = $endpoints
       AND ($call IS NULL OR coalesce(r.syscall, r.action) = $call)
     RETURN p.exe_path AS src, coalesce(r.syscall, r.action) AS call, n.endpoints AS dst,
-           r.result AS result, r.start_ns AS t0, type(r) AS rel
+           r.start_ns AS t0, type(r) AS rel
     ORDER BY r.start_ns DESC LIMIT 1
     """
     for tier, call_filter in ((1, call), (2, None)):
@@ -94,7 +85,7 @@ def _resolve_network(session: Any, poi: dict[str, Any]) -> Optional[dict[str, An
     MATCH (n:Network)-[r]->(p:Process)
     WHERE n.endpoints = $endpoints
     RETURN n.endpoints AS src, coalesce(r.syscall, r.action) AS call, p.exe_path AS dst,
-           r.result AS result, r.start_ns AS t0, type(r) AS rel
+           r.start_ns AS t0, type(r) AS rel
     ORDER BY r.start_ns DESC LIMIT 1
     """
     row = session.run(query_rev, endpoints=endpoints).single()
@@ -109,21 +100,19 @@ def _anchor_row(row: Any, tier: int, src_kind: str, dst_kind: str) -> dict[str, 
         "call": row["call"] or "<NA>",
         "dst": dst if dst is not None else "<NA>",
         "dst_kind": dst_kind,
-        "effect": _effect(row["result"]),
         "first_ns": int(row["t0"]) if row["t0"] is not None else None,
         "rel": row["rel"],
         "tier": tier,
     }
 
 
-def find_anchor_quad(anchor: Optional[dict[str, Any]], quads: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
-    """在导出边表里定位锚点边（按内容四元组匹配）。"""
+def find_anchor_triple(anchor: Optional[dict[str, Any]], triples: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """在导出边表里定位锚点边（按内容三元组匹配）。"""
     if not anchor:
         return None
-    for quad in quads:
-        if (quad["src"] == anchor["src"] and quad["call"] == anchor["call"]
-                and quad["dst"] == anchor["dst"] and quad.get("effect") == anchor.get("effect")):
-            return quad
+    for triple in triples:
+        if triple_key(triple) == triple_key(anchor):
+            return triple
     return None
 
 
@@ -131,7 +120,7 @@ def stats_block(stats: dict[str, Any], vertices: Optional[dict[str, int]] = None
     first = ns_to_iso(stats.get("first_ns"))
     last = ns_to_iso(stats.get("last_ns"))
     lines = [
-        f"内容四元组 {stats.get('quads', 0):,} 条（实例边 {stats.get('instances', 0):,} 条）",
+        f"内容三元组 {stats.get('triples', 0):,} 条（实例边 {stats.get('instances', 0):,} 条）",
         f"时间范围 {first} ~ {last}",
     ]
     if vertices:

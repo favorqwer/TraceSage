@@ -5,13 +5,13 @@
 """
 from __future__ import annotations
 
-import json
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from .chunking import batches, format_edge_block, order_quads
+from .chunking import batches, format_edge_block, order_triples
+from .checkpoint import load_checkpoint, request_identity, write_checkpoint
 from .client import LlmClient, LlmError, extract_json
 from .settings import Config
 
@@ -58,15 +58,18 @@ def _parse_selection(payload: dict[str, Any] | None, valid: set[str]) -> tuple[l
 
 def run_scan(
     cfg: Config,
-    quads: list[dict[str, Any]],
+    triples: list[dict[str, Any]],
     poi_text: str,
     stats_text: str,
     out_dir: Path,
     client: LlmClient,
+    *,
+    scenario: str,
+    resume: bool = True,
 ) -> dict[str, Any]:
     system = (cfg.prompt_dir / "scan.system.txt").read_text(encoding="utf-8")
     user_template = (cfg.prompt_dir / "scan.user.txt").read_text(encoding="utf-8")
-    ordered = order_quads(quads)
+    ordered = order_triples(triples)
     if not ordered:
         print("  阶段一：边表为空，跳过", flush=True)
         return {"selected_ids": [], "chunks": 0, "failed_chunks": 0, "invalid_ids": 0}
@@ -78,13 +81,6 @@ def run_scan(
 
     def work(index: int, batch: list[dict[str, Any]]) -> dict[str, Any]:
         path = ckpt_dir / f"chunk_{index:05d}.json"
-        if path.exists():
-            try:
-                cached = json.loads(path.read_text(encoding="utf-8"))
-                if not cached.get("error"):
-                    return cached
-            except json.JSONDecodeError:
-                pass
         valid = {q["id"] for q in batch}
         user = _render(user_template, {
             "<<POI>>": poi_text,
@@ -93,6 +89,10 @@ def run_scan(
             "<<CHUNK_TOTAL>>": str(len(chunks)),
             "<<EDGES>>": format_edge_block(batch, cfg.max_line_chars),
         })
+        identity = request_identity(cfg, scenario, system, user)
+        cached = load_checkpoint(path, identity) if resume else None
+        if cached is not None:
+            return cached
         payload: dict[str, Any] | None = None
         error = ""
         try:
@@ -111,6 +111,7 @@ def run_scan(
             error = "响应无法解析为 JSON 对象"
         selected, invalid = _parse_selection(payload, valid)
         record = {
+            **identity,
             "chunk": index,
             "total": len(chunks),
             "first_id": batch[0]["id"],
@@ -121,7 +122,7 @@ def run_scan(
             "summary": (payload or {}).get("summary", ""),
             "error": error,
         }
-        path.write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
+        write_checkpoint(path, record)
         return record
 
     records: list[dict[str, Any]] = []

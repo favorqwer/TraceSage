@@ -1,6 +1,6 @@
 """全量溯源图 → 内容去重边表（JSONL）。
 
-只做一件事：把 -v2 图库里的全部关系边按评测口径的内容四元组
+只做一件事：把 -v2 图库里的全部关系边按评测口径的内容三元组
 （源内容, 系统调用, 目标内容, 成败）合并，保留实例数、首末时间、载荷预览。
 不做图遍历、不采样、不按时间或度数过滤。
 """
@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from neo4j import GraphDatabase
+from .checkpoint import ENDPOINT_IDENTITY
 
 # 一条查询取全图关系边。CASE 只做顶点种类判定与内容取值，不做过滤。
 QUERY = """
@@ -36,20 +37,10 @@ RETURN
   type(r) AS rel,
   coalesce(r.syscall, r.action) AS call,
   r.action AS action,
-  r.result AS result,
   r.start_ns AS t0,
   r.end_ns AS t1,
   r.payload_b64 AS pay
 """
-
-
-def _effect(result: Any) -> Optional[str]:
-    if result is None:
-        return None
-    try:
-        return "success" if int(result) >= 0 else "failure"
-    except (TypeError, ValueError):
-        return None
 
 
 def _decode_payload(payload_b64: Any, limit: int) -> Optional[str]:
@@ -84,7 +75,7 @@ def export_graph(
     payload_preview_chars: int = 48,
     progress_every: int = 500_000,
 ) -> dict[str, Any]:
-    """导出并去重；返回统计信息（实例数、四元组数、时间范围等）。"""
+    """导出并去重；返回统计信息（实例数、三元组数、时间范围等）。"""
     started = time.time()
     agg: dict[tuple, dict[str, Any]] = {}
     instances = 0
@@ -100,8 +91,7 @@ def export_graph(
                 call = row["call"] or "<NA>"
                 if call == "<NA>":
                     missing_call += 1
-                eff = _effect(row["result"])
-                key = (row["ka"], row["sa"], call, row["kb"], row["sb"], eff)
+                key = ((row["ka"], row["sa"]), call, (row["kb"], row["sb"]))
                 rec = agg.get(key)
                 if rec is None:
                     rec = {
@@ -110,7 +100,6 @@ def export_graph(
                         "call": call,
                         "dst_kind": row["kb"],
                         "dst": row["sb"],
-                        "effect": eff,
                         "action": row["action"],
                         "rel": row["rel"],
                         "n": 0,
@@ -127,44 +116,47 @@ def export_graph(
                         rec["first_ns"] = int(t0)
                     if rec["last_ns"] is None or t0 > rec["last_ns"]:
                         rec["last_ns"] = int(t0)
-                if t1 is not None and rec["last_ns"] is not None and int(t1) > rec["last_ns"]:
+                if t1 is not None and (rec["last_ns"] is None or int(t1) > rec["last_ns"]):
                     rec["last_ns"] = int(t1)
                 if rec["payload"] is None and row["pay"] and rec["payload_tries"] < 5:
                     rec["payload_tries"] += 1
                     rec["payload"] = _decode_payload(row["pay"], payload_preview_chars)
                 if progress_every and instances % progress_every == 0:
-                    print(f"  导出中：已读 {instances:,} 条实例边，累计 {len(agg):,} 个内容四元组", flush=True)
+                    print(f"  导出中：已读 {instances:,} 条实例边，累计 {len(agg):,} 个内容三元组", flush=True)
             for label, key in (("Process", "process"), ("File", "file"), ("Network", "network")):
                 vertices[key] = session.run(
                     f"MATCH (n:{label}) RETURN count(n) AS c").single()["c"]
     finally:
         driver.close()
 
-    quads = list(agg.values())
-    quads.sort(key=lambda q: (
+    triples = list(agg.values())
+    triples.sort(key=lambda q: (
         q["first_ns"] if q["first_ns"] is not None else 0,
-        q["src"], q["call"], q["dst"], q["effect"] or "",
+        q["src_kind"], q["src"], q["call"], q["dst_kind"], q["dst"],
     ))
-    for idx, quad in enumerate(quads, start=1):
-        quad["id"] = f"E{idx:06d}"
+    for idx, triple in enumerate(triples, start=1):
+        triple["id"] = f"E{idx:06d}"
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as fh:
-        for quad in quads:
-            fh.write(json.dumps(quad, ensure_ascii=False, sort_keys=True) + "\n")
+        for triple in triples:
+            fh.write(json.dumps(triple, ensure_ascii=False, sort_keys=True) + "\n")
 
-    first = min((q["first_ns"] for q in quads if q["first_ns"] is not None), default=None)
-    last = max((q["last_ns"] for q in quads if q["last_ns"] is not None), default=None)
+    first = min((q["first_ns"] for q in triples if q["first_ns"] is not None), default=None)
+    last = max((q["last_ns"] for q in triples if q["last_ns"] is not None), default=None)
     kinds = {"P": 0, "F": 0, "N": 0, "?": 0}
-    for quad in quads:
-        kinds[quad["src_kind"]] = kinds.get(quad["src_kind"], 0) + 1
-        kinds[quad["dst_kind"]] = kinds.get(quad["dst_kind"], 0) + 1
+    for triple in triples:
+        kinds[triple["src_kind"]] = kinds.get(triple["src_kind"], 0) + 1
+        kinds[triple["dst_kind"]] = kinds.get(triple["dst_kind"], 0) + 1
 
     stats = {
+        "input_protocol": "triplet-v1",
+        "endpoint_identity": ENDPOINT_IDENTITY,
+        "payload_preview_chars": payload_preview_chars,
         "database": database,
         "instances": instances,
-        "quads": len(quads),
-        "missing_syscall_quads": sum(1 for q in quads if q["call"] == "<NA>"),
+        "triples": len(triples),
+        "missing_syscall_triples": sum(1 for q in triples if q["call"] == "<NA>"),
         "missing_syscall_instances": missing_call,
         "first_ns": first,
         "last_ns": last,
@@ -174,6 +166,6 @@ def export_graph(
         "edges_jsonl": str(out_path),
         "edges_sha256": _file_sha256(out_path),
     }
-    print(f"  导出完成：{instances:,} 条实例边 → {len(quads):,} 个内容四元组，"
+    print(f"  导出完成：{instances:,} 条实例边 → {len(triples):,} 个内容三元组，"
           f"耗时 {stats['export_seconds']}s", flush=True)
     return stats

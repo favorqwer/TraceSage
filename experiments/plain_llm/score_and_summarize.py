@@ -8,11 +8,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-import re
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -22,16 +23,13 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 
 from plainllm.poi import load_scenarios  # noqa: E402
+from plainllm.checkpoint import ENDPOINT_IDENTITY, PROTOCOL  # noqa: E402
 from plainllm.settings import load_config  # noqa: E402
 
 SCORE_TOOL = ROOT / "tools" / "score_report_product.py"
 GT_DIR = ROOT / "groundtruth"
 PROVENANCE_SUMMARY = ROOT / "output" / "provenance-baseline" / "summary_v2.json"
 ENGINE_DIR = ROOT / "output" / "engine-baseline"
-
-RECALL_RE = re.compile(r"召回（按步骤）\s*(\d+)/(\d+)")
-PRECISION_RE = re.compile(r"查准（按四元组）\s*(\d+)/(\d+)")
-
 
 def _order(name: str) -> tuple[int, str]:
     prefix = name.split("_", 1)[0]
@@ -79,27 +77,51 @@ def collect_reports(out_root: Path) -> list[str]:
 
 
 def score_scenario(name: str, report: Path, metrics_path: Path, rescore: bool) -> Optional[dict[str, Any]]:
-    if metrics_path.exists() and not rescore:
-        data = _read_json(metrics_path)
-        return data.get("totals")
+    report_metadata = _read_json(report)
+    if (report_metadata.get("input_protocol") != PROTOCOL
+            or report_metadata.get("endpoint_identity") != ENDPOINT_IDENTITY):
+        raise ValueError(f"报告需要用新版模型重新生成：{report}")
     gt = GT_DIR / f"{name}.groundtruth.json"
     if not gt.exists():
         print(f"  跳过 {name}: 缺少 {gt}")
         return None
-    cmd = [sys.executable, str(SCORE_TOOL),
-           "--report", str(report), "--gt", str(gt),
-           "--scenario", name, "--json-out", str(metrics_path)]
-    proc = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8")
-    if proc.returncode != 0:
-        print(f"  评分失败 {name}: {proc.stderr.strip()[:400]}")
-        return None
-    return _read_json(metrics_path).get("totals")
+    graph = ROOT / "graphs" / f"{name}.tsg"
+    companion = report.with_suffix(".events.json.gz")
+    paths = [report, gt, SCORE_TOOL, *(ROOT / "tools" / filename for filename in
+             ("score_graph_product.py", "rules_match.py", "triplet_report.py")),
+             ROOT / "parser/data/verbs.toml", graph, companion]
+    identity = {}
+    for path in paths:
+        identity[str(path)] = None
+        if path.is_file():
+            with path.open("rb") as stream:
+                identity[str(path)] = hashlib.file_digest(stream, "sha256").hexdigest()
+    if metrics_path.is_file() and not rescore and identity[str(graph)]:
+        cached = _read_json(metrics_path)
+        if cached.get("scoring_protocol") == PROTOCOL and cached.get("score_inputs") == identity:
+            return cached["totals"]
+    metrics_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=metrics_path.parent) as staging:
+        staged = Path(staging) / metrics_path.name
+        cmd = [sys.executable, str(SCORE_TOOL), "--report", str(report), "--gt", str(gt),
+               "--scenario", name, "--json-out", str(staged)]
+        proc = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8")
+        if proc.returncode != 0:
+            print(f"  评分失败 {name}: {proc.stderr.strip()[:400]}")
+            return None
+        data = _read_json(staged)
+        data["score_inputs"] = identity
+        staged.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        staged.replace(metrics_path)
+    return data["totals"]
 
 
 def load_provenance(path: Path) -> dict[str, dict[str, Any]]:
     if not path.exists():
         return {}
     data = _read_json(path)
+    if data.get("scoring_protocol") != PROTOCOL:
+        raise ValueError(f"对照尚未生成三元组汇总：{path}")
     out: dict[str, dict[str, Any]] = {}
     for row in data.get("results") or []:
         out[row["scenario"]] = {
@@ -118,20 +140,13 @@ def load_engine(engine_dir: Path) -> dict[str, dict[str, Any]]:
     if not engine_dir.exists():
         return out
     for scenario_dir in sorted(engine_dir.iterdir()):
-        eval_path = scenario_dir / "groundtruth-eval.txt"
+        eval_path = scenario_dir / "metrics.json"
         if not scenario_dir.is_dir() or not eval_path.exists():
             continue
-        text = eval_path.read_text(encoding="utf-8")
-        recall = RECALL_RE.search(text)
-        precision = PRECISION_RE.search(text)
-        if not (recall and precision):
-            continue
-        out[scenario_dir.name] = {
-            "steps_hit": int(recall.group(1)),
-            "steps_total": int(recall.group(2)),
-            "correct_edges": int(precision.group(1)),
-            "reported_triples": int(precision.group(2)),
-        }
+        data = _read_json(eval_path)
+        if data.get("scoring_protocol") != PROTOCOL:
+            raise ValueError(f"引擎评分协议不兼容：{eval_path}")
+        out[scenario_dir.name] = data["totals"]
     return out
 
 
@@ -161,13 +176,13 @@ def write_overview(
         "",
         f"- 生成时间：{time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"- 判定模型：`{cfg_model}`（与 provenance 基线同一模型）",
-        "- 评分：`tools/score_report_product.py`；召回按标注步骤、查准按四元组，与另两个基线同一工具、同一分母口径",
+        "- 评分：`tools/score_report_product.py`；召回按标注步骤、查准按三元组，与另两个基线同一工具、同一分母口径",
         f"- 覆盖：纯 LLM {len(plain_rows)}/{len(scenarios)} 个场景，provenance {len(prov_rows)} 个，engine {len(eng_rows)} 个",
         "",
         "## 口径与边界",
         "",
         "1. **前置输入**：解析器建图、-v2 图库、POI 都是外部前置输入；纯 LLM 与另两个基线共用同一套图与同一个 POI。",
-        "2. **输入形态**：模型看到的是全图按内容四元组去重后的边表（含实例数、首末时间、成败、载荷预览），不是原始 syscall 流；"
+        "2. **输入形态**：模型看到的是全图按内容三元组去重后的边表（含实例数、首末时间、载荷预览），不是原始 syscall 流；"
         "去重丢失“同一行为第几次发生”，只留计数与首末时间。",
         "3. **无其他机制**：没有规则库、没有 embedding 检索、没有图遍历、没有时间窗、没有白名单、没有按场景调整的阈值；十场景共用同一套提示词。",
         "4. **评定只看边**：模型自报的阶段名、理由、入口判断都不参与评分。",
@@ -177,7 +192,7 @@ def write_overview(
         "",
         "## 三方合并平均",
         "",
-        "| 系统 | 召回（按步骤） | 查准（按四元组） | 报告四元组 | 覆盖场景 |",
+        "| 系统 | 召回（按步骤） | 查准（按三元组） | 报告三元组 | 覆盖场景 |",
         "|---|---:|---:|---:|---:|",
         f"| 纯 LLM | {_fmt_pct(plain_micro['recall'])}（{plain_micro['steps_hit']}/{plain_micro['steps_total']}） | "
         f"{_fmt_pct(plain_micro['precision'])}（{plain_micro['correct_edges']}/{plain_micro['reported_triples']}） | "
@@ -285,7 +300,7 @@ def write_overview(
         f"- 纯 LLM 报告：`{out_path.parent}/<场景>/report.json`；调用日志：同目录 `calls.jsonl`；"
         "输入指纹与代码/提示词哈希：同目录 `manifest.json`。",
         f"- provenance 数字取自 `{PROVENANCE_SUMMARY.relative_to(ROOT)}`；"
-        f"engine 数字取自 `{ENGINE_DIR.relative_to(ROOT)}/<场景>/groundtruth-eval.txt`。",
+        f"engine 数字取自 `{ENGINE_DIR.relative_to(ROOT)}/<场景>/metrics.json`。",
         "",
     ]
 
@@ -296,7 +311,7 @@ def write_overview(
         "protocol": {
             "score_tool": "tools/score_report_product.py",
             "recall": "命中标注步骤 / 标注步骤总数（必须条目 + 规则）",
-            "precision": "命中四元组 / 报告去重四元组",
+            "precision": "命中三元组 / 报告去重三元组",
             "aggregation": "合并平均（按判定对象加权）",
         },
         "micro": {"plain": plain_micro, "provenance": prov_micro, "engine": eng_micro},

@@ -60,12 +60,19 @@ def main() -> int:
     manifests: list[dict] = []
     for index, name in enumerate(names, start=1):
         out = cfg.output_root / name
-        if args.skip_existing and (out / "report.json").exists():
-            print(f"\n[{index}/{len(names)}] {name} 已有报告，跳过", flush=True)
-            manifest_path = out / "manifest.json"
-            if manifest_path.exists():
-                manifests.append(json.loads(manifest_path.read_text(encoding="utf-8")))
-            continue
+        if args.skip_existing and (out / "report.json").is_file() and (out / "manifest.json").is_file():
+            from plainllm.checkpoint import ENDPOINT_IDENTITY, PROTOCOL
+            from plainllm.run_scenario import _code_hashes, _prompt_hashes, _sha256
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            if (manifest.get("input_protocol") == PROTOCOL and manifest.get("scenario") == name
+                    and manifest.get("endpoint_identity") == ENDPOINT_IDENTITY
+                    and manifest.get("config") == cfg.describe()
+                    and manifest.get("code") == _code_hashes() and manifest.get("prompts") == _prompt_hashes(cfg)
+                    and manifest["inputs"]["scenarios_sha256"] == _sha256(cfg.scenarios_file)
+                    and manifest.get("report_sha256") == _sha256(out / "report.json")):
+                print(f"\n[{index}/{len(names)}] {name} 已有同配置三元组报告，跳过", flush=True)
+                manifests.append(manifest)
+                continue
         print(f"\n[{index}/{len(names)}] {name}", flush=True)
         manifest = run_scenario(cfg, name, out_dir=out,
                                 resume=not args.no_resume, reexport=args.reexport)

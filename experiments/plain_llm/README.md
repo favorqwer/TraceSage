@@ -14,10 +14,10 @@
 ## 输入口径与边界（出数字前必须读）
 
 1. **前置输入共用**：解析器建图、Neo4j `-v2` 图库、POI（调查起点）都不是 LLM 的自主发现能力；三方共用同一套图与同一个 POI（`provenance/config/scenarios.json`）。
-2. **输入是去重边表**：模型看到的是全图按 `(源, 系统调用, 目标, 成败)` 去重后的边，带实例数、首末时间、载荷预览；不是原始 syscall 流。整图实例边合计约 842 万条，任何上下文都放不下，"一次性喂全图"不存在。
+2. **输入是去重边表**：模型看到的是全图按 `(源, 系统调用, 目标)` 去重后的边，带实例数、首末时间、载荷预览；不是原始 syscall 流。整图实例边合计约 842 万条，任何上下文都放不下，"一次性喂全图"不存在。
 3. **去重的代价**：同一行为的多次发生被合并成一行，模型看不到"第几次"，只看到次数与首末时间。
 4. **无其他机制**：没有规则库、embedding、图遍历、时间窗、白名单、按场景调整的阈值；十场景共用同一套提示词（`prompts/`）。
-5. **评定只看边**：模型自报的 stage、why、入口判断都不参与评分；评分只看 `edges` 的 `(src, syscall, dst, effect)`。
+5. **评定只看边**：模型自报的 stage、why、入口判断都不参与评分；评分只看 `edges` 的 `(src, syscall, dst)`。
 6. **模型与温度**：默认沿用仓库根目录 `.env` 的 `OPENAI_MODEL`（当前 `deepseek-v4.1-flash`，与 provenance 基线同一模型），温度 0。
 7. **产物归属**：本目录只写 `output/plain-llm-runs/`，不覆盖 `output/engine-baseline/` 与 `output/provenance-baseline/`。
 
@@ -67,7 +67,7 @@ python experiments/plain_llm/score_and_summarize.py
 - `--concurrency`：阶段一并发数，默认 4。
 - `--no-resume`：忽略已落盘的批次检查点，重新请求。
 - `--reexport`：强制重新导出边表。
-- `--skip-existing`：已有 `report.json` 的场景跳过。
+- `--skip-existing`：校验为同版本、同配置和同输入的报告可跳过。
 
 ## 产物
 
@@ -75,8 +75,8 @@ python experiments/plain_llm/score_and_summarize.py
 
 | 文件 | 内容 |
 |---|---|
-| `edges.jsonl` | 全图内容去重边表（含实例数、首末时间、成败、载荷预览） |
-| `stats.json` | 导出统计（实例边数、四元组数、顶点数、时间范围、文件哈希） |
+| `edges.jsonl` | 全图内容去重边表（含实例数、首末时间、载荷预览） |
+| `stats.json` | 导出统计（实例边数、三元组数、顶点数、时间范围、文件哈希） |
 | `scan/chunk200/chunk_*.json` | 阶段一每批的结论与原始摘要（断点续跑依据） |
 | `assemble/chunk150/batch_*.json` | 阶段二每批保留清单、阶段号、脉络 |
 | `calls.jsonl` | 每次模型调用的耗时、token、状态、完整提示词与响应原文（响应截断 4000 字符） |
@@ -86,28 +86,9 @@ python experiments/plain_llm/score_and_summarize.py
 
 汇总：`output/plain-llm-runs/OVERVIEW.md`（三方对比表）、`summary.json`（机器可读）、`run_summary.json`（批量运行成本）。
 
-## 规模实测（决定了切批数）
+## 批次与成本
 
-| 场景 | 图实例边 | 内容四元组 | 200 条/批 → 批数 |
-|---|---:|---:|---:|
-| 1_Web_Exploit_Ransomware | 1,219,143 | 37,756 | 189 |
-| 2_SSH_Spray_Lateral_Exfiltration | 573,086 | 13,673 | 69 |
-| 3_Phishing_Beacon_Cryptomining | 691,911 | 22,011 | 111 |
-| 4_Repo_Poisoning_Backdoor | 377,701 | 26,247 | 132 |
-| 5_Exposed_Service_Pivot | 123,144 | 20,626 | 104 |
-| 6_Web_SQLi_Data_Exfiltration | 725,504 | 9,664 | 49 |
-| 7_DB_Bruteforce_Datawipe | 142,087 | 6,560 | 33 |
-| 8_FTP_WeakCreds_WebShell_Exfiltration | 1,381,898 | 9,471 | 48 |
-| 9_Exposed_Container_Escape | 375,742 | 17,358 | 87 |
-| 10_Tomcat_Weakcreds_DNS_Exfiltration | 2,810,673 | 129,879 | 650 |
-| **合计** | **8,420,889** | **293,245** | **1,472** |
-
-## 成本估算（未实测，按上一节边数推算）
-
-- 阶段一：1,472 次调用（每批 200 条）。按每条边约 30 token、每次固定提示约 1,500 token 估算，输入约 1,100 万 token；输出按选中边数计，通常几十万 token。
-- 阶段二：批次 = 阶段一选中边数 / 150，输入约为被选中边的全部文本。
-- 墙钟：并发 4、单次 6 秒估算，阶段一约 40 分钟；阶段二与选中量成正比。
-- 以上只是推算，实际数字以 `run_summary.json` 与各场景 `manifest.json` 为准（调用数、token、耗时都是实测落盘）。
+用新版导出的 `stats.json` 中的三元组数计算首轮批次。第二轮批次取决于实际通过首轮判断的关系数。模型用量与耗时以对应场景的 `manifest.json` 为准。
 
 ## 调参纪律
 
