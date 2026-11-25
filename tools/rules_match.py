@@ -25,8 +25,7 @@
 `write`/`read`（因为网络客体上的读写会被解析器改写成 send/recv 动作）。更完整的
 来源说明与影响见 ACTION_TO_SYSCALLS 上方注释。
 
-`effect` 条件：报告边带成败时按 success/failure 严格判定；报告边不带成败时**不否决**该边，
-但由 evaluate_report 记入 `effect_unchecked`，调用方必须把这一点显示出来。
+`effect` 可用于原始证据校验，正式评分按三元组匹配。
 
 端点条件是：叶子字段（vertex / match / value / values）与组合字段（any_of / all_of / none_of）可同现，
 同现时组合字段先算，叶子按“且”叠加：
@@ -65,6 +64,7 @@ from domain.keys import path_part  # noqa: E402
 SCENARIOS = ROOT / "provenance" / "config" / "scenarios.json"
 
 _LABEL_TO_KIND = {"Process": "process", "File": "file", "Network": "network"}
+SCORING_PROTOCOL = "triplet-v1"
 
 # 图上的动作名 -> 该动作可能落在哪些 syscall 上（家族基本名）。
 #
@@ -198,17 +198,9 @@ def _edge_matches(node, edge_attrs):
 # --------------------------------------------------------------------------- 规则判定
 
 
-def rule_matches(rule, src, syscall, dst, kinds=None, edge_attrs=None,
-                 effect=None):
-    """一条报告边是否命中该规则。
-
-    effect 为 success/failure/None（报告未给）。特定 effect 规则遇到未知 effect 时不否决，
-    由 evaluate_report 记入 effect_unchecked 披露。
-    """
+def rule_matches(rule, src, syscall, dst, kinds=None, edge_attrs=None):
+    """判断三元关系及当前记录的其他规则属性。"""
     if not syscall_matches_actions(syscall, rule.get("action") or []):
-        return False
-    wanted_effect = rule.get("effect") or "any"
-    if wanted_effect != "any" and effect is not None and effect != wanted_effect:
         return False
     ok, _ = _edge_matches(rule.get("edge"), edge_attrs)
     if not ok:
@@ -366,96 +358,45 @@ def scenario_database(scenario):
 
 
 def evaluate_report(gt_triples, rules, report_triples, kinds=None):
-    """算命中：召回按步骤（条目 + 规则），查准按四元组 (src, syscall, dst, effect)。
+    """按标注步骤计算召回，按 (src, syscall, dst) 计算查准。
 
-    gt_triples:     [(src, syscall, dst, effect, phase), ...]（必须集合条目；effect 可为 None）
-    rules:          [(动作 id, 规则), ...]（可能集合）
-    report_triples: [(src, syscall, dst, effect[, attrs]), ...]；effect 为 None 表示报告侧没有成败证据
-
-    成败判等：两侧都有值时必须相等；任一侧为空时按三元命中并在输出里披露出「成败未核」的条数。
+    标注行在三元组后携带阶段，报告行可在三元组后携带本条记录的属性。
     """
-    report_keys = []
-    seen = set()
-    report_effects = {}
-    report_attrs = {}
+    report_records = {}
     for edge in report_triples:
-        src, syscall, dst = edge[0], edge[1], edge[2]
-        effect = None
-        attrs = None
-        if len(edge) > 3:
-            if isinstance(edge[3], dict):
-                attrs = edge[3]
-            else:
-                effect = edge[3]
-        if len(edge) > 4 and isinstance(edge[4], dict):
-            attrs = edge[4]
-        key = (src, syscall, dst, effect)
-        if key not in seen:
-            seen.add(key)
-            report_keys.append(key)
-        report_effects.setdefault((src, syscall, dst), set()).add(effect)
-        if attrs is not None:
-            report_attrs[key] = attrs
-
-    gt_effects = {}
-    for t in gt_triples:
-        gt_effects.setdefault((t[0], t[1], t[2]), set()).add(t[3] if len(t) > 3 else None)
+        key = tuple(edge[:3])
+        attrs = edge[3] if len(edge) > 3 else None
+        report_records.setdefault(key, []).append(attrs)
 
     must_hits, must_misses = [], []
-    effect_unchecked_gt = 0
-    for t in gt_triples:
-        triple = (t[0], t[1], t[2])
-        gt_effect = t[3] if len(t) > 3 else None
-        effects = report_effects.get(triple)
-        if effects is None:
-            must_misses.append(t)
-            continue
-        if gt_effect is None or None in effects:
-            must_hits.append(t)
-            effect_unchecked_gt += 1
-        elif gt_effect in effects:
-            must_hits.append(t)
-        else:
-            must_misses.append(t)
+    for step in gt_triples:
+        (must_hits if tuple(step[:3]) in report_records else must_misses).append(step)
 
     rule_hits, rule_misses = [], []
     edge_rule_hits = set()
     edge_attrs_skipped = set()
-    effect_unchecked = set()
-    for step_id, rule in rules:
+    for _, rule in rules:
         hit = False
-        for key in report_keys:
-            src, syscall, dst, effect = key
-            attrs = report_attrs.get(key)
-            if rule.get("edge"):
-                _, skipped = _edge_matches(rule["edge"], attrs)
+        relation_rule = {**rule, "edge": None}
+        for key, records in report_records.items():
+            if not rule_matches(relation_rule, *key, kinds=kinds):
+                continue
+            for attrs in records:
+                ok, skipped = _edge_matches(rule.get("edge"), attrs)
                 if skipped:
                     edge_attrs_skipped.add(rule["rule_id"])
-            if rule_matches(rule, src, syscall, dst, kinds=kinds,
-                            edge_attrs=attrs, effect=effect):
+                if not ok or skipped:
+                    continue
                 hit = True
                 edge_rule_hits.add(key)
-                if (rule.get("effect") or "any") != "any" and effect is None:
-                    effect_unchecked.add(rule["rule_id"])
         (rule_hits if hit else rule_misses).append(rule)
-    rule_hits = [r for r in rule_hits]
 
-    correct_edges = set()
-    for key in report_keys:
-        triple, report_effect = key[:3], key[3]
-        gt_side = gt_effects.get(triple)
-        if not gt_side:
-            continue
-        if report_effect is None or None in gt_side:
-            correct_edges.add(key)
-        elif report_effect in gt_side:
-            correct_edges.add(key)
-    correct_edges |= edge_rule_hits
-    effect_unchecked_edges = sum(1 for k in correct_edges if k[3] is None)
-    extras = sorted(set(report_keys) - correct_edges, key=lambda k: (k[0], k[1], k[2], k[3] or ""))
+    correct_edges = {tuple(step[:3]) for step in must_hits} | edge_rule_hits
+    extras = sorted(report_records.keys() - correct_edges)
     steps_total = len(gt_triples) + len(rules)
     steps_hit = len(must_hits) + len(rule_hits)
     return {
+        "scoring_protocol": SCORING_PROTOCOL,
         "gt_edges": len(gt_triples),
         "rules_total": len(rules),
         "steps_total": steps_total,
@@ -466,12 +407,9 @@ def evaluate_report(gt_triples, rules, report_triples, kinds=None):
         "steps_hit": steps_hit,
         "recall_steps": steps_hit / steps_total if steps_total else 0.0,
         "correct_edges": len(correct_edges),
-        "reported_triples": len(report_keys),
-        "precision_edges": len(correct_edges) / len(report_keys) if report_keys else 0.0,
+        "reported_triples": len(report_records),
+        "precision_edges": len(correct_edges) / len(report_records) if report_records else 0.0,
         "extras": extras,
         "kinds_degraded": bool(kinds is not None and kinds.degraded),
         "edge_attrs_skipped": sorted(edge_attrs_skipped),
-        "effect_unchecked": sorted(effect_unchecked),
-        "effect_unchecked_gt": effect_unchecked_gt,
-        "effect_unchecked_edges": effect_unchecked_edges,
     }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 运行 DEPIMPACT 在 10 个攻击场景 -v2 图库上的全量测试，并用当前 GT 评测。
-产出直接写入 output/engine-baseline/<场景名>/（基线位置，见 AGENTS.md）。
+产出写入显式指定的当次评测目录。
 遵循 AGENTS.md 四大工程法则与对比实验底线（只跑 -v2 图，不碰旧库）。
 """
 
@@ -15,7 +15,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ENGINE = ROOT / "experiments" / "DEPIMPACT"
-BUILD_CLASSES = ENGINE / "build" / "classes"
 M2_REPO = Path(os.environ.get("USERPROFILE", "C:/Users/Favor")) / ".m2" / "repository"
 
 SCENARIOS = {
@@ -72,7 +71,6 @@ SCENARIOS = {
 }
 
 CP_ITEMS = [
-    BUILD_CLASSES,
     M2_REPO / "org/jgrapht/jgrapht-core/1.1.0/jgrapht-core-1.1.0.jar",
     M2_REPO / "org/jgrapht/jgrapht-ext/1.1.0/jgrapht-ext-1.1.0.jar",
     M2_REPO / "org/jgrapht/jgrapht-io/1.1.0/jgrapht-io-1.1.0.jar",
@@ -97,79 +95,63 @@ CP_ITEMS = [
     M2_REPO / "junit/junit/4.13.2/junit-4.13.2.jar",
     M2_REPO / "org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar",
 ]
-CP = ";".join(str(p) for p in CP_ITEMS)
+CP = os.pathsep.join(str(p) for p in CP_ITEMS)
 
 
-def ensure_compiled():
-    if (BUILD_CLASSES / "baseline" / "BaselineRunner.class").exists():
-        return
-    print("Classes not found, compiling...")
-    res = subprocess.run([sys.executable, str(ROOT / "tmp" / "compile_engine.py")], capture_output=True, text=True)
-    if res.returncode != 0:
-        print("Compile failed:", res.stderr)
-        sys.exit(1)
+def ensure_compiled(build_classes):
+    missing = [str(path) for path in CP_ITEMS if not path.is_file()]
+    if missing:
+        raise RuntimeError("引擎依赖缺失：" + ", ".join(missing))
+    build_classes.mkdir(parents=True, exist_ok=True)
+    sources = sorted(path.relative_to(ENGINE).as_posix()
+                     for path in (ENGINE / "src/main/java").rglob("*.java")
+                     if path.name != "BreadthFirstIterator.java")
+    sources.append("baseline/BaselineRunner.java")
+    source_list = build_classes.with_name("sources.txt")
+    source_list.write_text("\n".join(sources) + "\n", encoding="utf-8")
+    subprocess.run(["javac", "-encoding", "UTF-8", "-nowarn", "-d", str(build_classes),
+                    "-cp", CP, f"@{source_list}"], cwd=ENGINE, check=True, timeout=120)
 
 
-def run_engine(scenario_name, db_name, out_dir, poi_args):
+def run_engine(scenario_name, db_name, out_dir, poi_args, build_classes, timeout):
     out_dir_path = Path(out_dir)
     out_dir_path.mkdir(parents=True, exist_ok=True)
-    
-    env = dict(os.environ)
+    from dotenv import dotenv_values
+    env = {**{key: value for key, value in dotenv_values(ROOT / ".env").items() if value is not None},
+           **os.environ}
     env["NEO4J_DATABASE"] = db_name
 
     cmd = [
         "java",
-        "-cp", CP,
+        "-cp", os.pathsep.join((str(build_classes), CP)),
         "baseline.BaselineRunner",
         scenario_name,
         str(out_dir_path),
     ] + poi_args
 
-    print(f"[{scenario_name}] Executing engine on {db_name}...")
-    t0 = time.time()
-    proc = subprocess.Popen(
-        cmd, env=env, cwd=str(ENGINE),
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, encoding="gbk", errors="replace"
-    )
-
-    stdout_lines = []
-    for line in proc.stdout:
-        stdout_lines.append(line)
-        line_s = line.strip()
-        if any(k in line_s for k in ["b_raw:", "b_cpr:", "forward from entry", "forward_union:", "final:", "baseline written:"]):
-            print(f"  {line_s}")
-
-    stderr = proc.stderr.read()
-    proc.wait()
-    dt = time.time() - t0
-
-    if proc.returncode != 0:
-        print(f"[{scenario_name}] Run failed with code {proc.returncode}:\n{stderr}\n{''.join(stdout_lines)}")
-        return False, dt, stderr
-
-    print(f"[{scenario_name}] Finished in {dt:.1f}s")
-    return True, dt, "".join(stdout_lines)
+    print(f"[{scenario_name}] Executing engine on {db_name}...", flush=True)
+    started = time.monotonic()
+    log = out_dir_path / "engine.log"
+    with log.open("wb") as stream:
+        subprocess.run(cmd, env=env, cwd=ENGINE, stdout=stream, stderr=subprocess.STDOUT,
+                       check=True, timeout=timeout)
+    elapsed = time.monotonic() - started
+    print(f"[{scenario_name}] Finished in {elapsed:.1f}s", flush=True)
+    return elapsed
 
 
 def eval_result(baseline_json, gt_path):
+    metrics_path = baseline_json.with_name("metrics.json")
     cmd = [
         sys.executable,
         str(ROOT / "tools" / "score_graph_product.py"),
         str(baseline_json),
         "--gt", str(gt_path),
+        "--json-out", str(metrics_path),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
-    
-    # Parse evaluation metrics
-    recall_str = ""
-    prec_str = ""
-    for line in res.stdout.splitlines():
-        if "召回（按步骤）" in line:
-            recall_str = line.strip()
-        elif "查准（按" in line:
-            prec_str = line.strip()
-    return recall_str, prec_str, res.stdout
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True)
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    return metrics["totals"], res.stdout
 
 
 def main():
@@ -177,9 +159,13 @@ def main():
     parser.add_argument("--scenario", help="指定单个场景名")
     parser.add_argument("--force", action="store_true", help="强制重新运行，即使 baseline.json 已存在")
     parser.add_argument("--skip-run", action="store_true", help="跳过执行，仅重新评分现有产物")
+    parser.add_argument("--output-root", type=Path, required=True, help="本次运行的独立输出目录")
+    parser.add_argument("--timeout", type=int, default=600, help="单场景引擎墙钟超时（秒）")
     args = parser.parse_args()
 
-    ensure_compiled()
+    build_classes = args.output_root.resolve() / ".build" / "classes"
+    if not args.skip_run:
+        ensure_compiled(build_classes)
 
     target_scenarios = [args.scenario] if args.scenario else list(SCENARIOS.keys())
 
@@ -187,29 +173,29 @@ def main():
 
     for name in target_scenarios:
         info = SCENARIOS[name]
-        out_dir = ROOT / "output" / "engine-baseline" / name
+        out_dir = args.output_root.resolve() / name
         baseline = out_dir / "baseline.json"
         gt_path = ROOT / info["gt"]
 
         wall_time = 0.0
         need_run = (not args.skip_run) and (args.force or not baseline.exists())
         if need_run:
-            success, wall_time, _ = run_engine(name, info["db_new"], out_dir, info["poi_args"])
-            if not success:
-                print(f"FAILED on {name}")
-                continue
+            wall_time = run_engine(name, info["db_new"], out_dir, info["poi_args"],
+                                   build_classes, args.timeout)
         elif baseline.exists():
             print(f"[{name}] Reusing existing {baseline}")
 
-        recall, precision, _ = eval_result(baseline, gt_path)
+        metrics, evaluation = eval_result(baseline, gt_path)
+        (out_dir / "groundtruth-eval.txt").write_text(evaluation, encoding="utf-8")
         data = json.loads(baseline.read_text(encoding="utf-8"))
+        (out_dir / "run-timing.json").write_text(
+            json.dumps({"wall_time_seconds": wall_time}, indent=2) + "\n", encoding="utf-8")
 
         results.append({
             "scenario": name,
             "wall_time": wall_time,
             "stages": data.get("stages", {}),
-            "recall": recall,
-            "precision": precision,
+            "metrics": metrics,
         })
 
     # Summary table
@@ -219,7 +205,8 @@ def main():
     for r in results:
         print(f"\n场景: {r['scenario']} (运行耗时: {r['wall_time']:.1f}s)")
         print(f"  阶段: b_raw={r['stages'].get('b_raw')}, final={r['stages'].get('final')}")
-        print(f"  评分: {r['recall']} | {r['precision']}")
+        m = r["metrics"]
+        print(f"  召回：{m['steps_hit']}/{m['steps_total']} | 查准：{m['correct_edges']}/{m['reported_triples']}")
 
 
 if __name__ == "__main__":

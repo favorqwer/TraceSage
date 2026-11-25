@@ -8,33 +8,19 @@ TraceSage 核心机制细粒度支撑指标自动化评测与统计工具 (measu
   - 机制 C (后验状态机与安全降级)：四值判决分布、安全降级与保守兜底量、零虚假跳链校验
 """
 
+import argparse
 import json
-import glob
-import os
+from pathlib import Path
 import networkx as nx
 from typing import Dict, Any, List
-
-# 10 个场景基线对照输入边数 (来源：output/engine-baseline/OVERVIEW.md)
-BASELINE_INPUT_EDGES = {
-    "1_Web_Exploit_Ransomware": 111150,
-    "2_SSH_Spray_Lateral_Exfiltration": 1647,
-    "3_Phishing_Beacon_Cryptomining": 525,
-    "4_Repo_Poisoning_Backdoor": 11580,
-    "5_Exposed_Service_Pivot": 13753,
-    "6_Web_SQLi_Data_Exfiltration": 1287,
-    "7_DB_Bruteforce_Datawipe": 166,
-    "8_FTP_WeakCreds_WebShell_Exfiltration": 363,
-    "9_Exposed_Container_Escape": 13,
-    "10_Tomcat_Weakcreds_DNS_Exfiltration": 235752,
-}
+from rules_match import SCORING_PROTOCOL
 
 
-def analyze_scenario(report_path: str, summary_entry: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_scenario(report_path: str, summary_entry: Dict[str, Any], baseline_edges: int) -> Dict[str, Any]:
     with open(report_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         
-    sc_name = data.get("scenario", os.path.basename(report_path).replace("_rag.json", ""))
-    baseline_edges = BASELINE_INPUT_EDGES.get(sc_name, 0)
+    sc_name = data["scenario"]
     
     edges = data.get("edges", [])
     excluded = data.get("excluded", [])
@@ -42,8 +28,12 @@ def analyze_scenario(report_path: str, summary_entry: Dict[str, Any]) -> Dict[st
     stats = data.get("stats", {})
     rules_lib = data.get("rules_library", {})
     
-    confirmed_count = len(edges)
-    reported_triples = summary_entry.get("reported_triples", confirmed_count)
+    confirmed_count = (
+        int(stats["confirmed_count"])
+        if "confirmed_count" in stats
+        else sum(1 for e in edges if e.get("origin", "confirmed") == "confirmed")
+    )
+    reported_triples = summary_entry["reported_triples"]
     
     # 机制 A.1: 宏观去噪压缩率 (对比经典基线输出边数)
     macro_compression = ((baseline_edges - reported_triples) / baseline_edges * 100.0) if baseline_edges > 0 else 0.0
@@ -51,7 +41,7 @@ def analyze_scenario(report_path: str, summary_entry: Dict[str, Any]) -> Dict[st
     # 机制 A.2: 内部候选事件流降维过滤率
     pruned_noise = stats.get("pruned_noise_count", 0)
     excluded_count = len(excluded)
-    unexcluded_count = len(unexcluded)
+    unexcluded_count = int(stats["unexcluded_count"]) if "unexcluded_count" in stats else len(unexcluded)
     candidate_total = confirmed_count + excluded_count + unexcluded_count + pruned_noise
     internal_filtering_rate = ((candidate_total - confirmed_count) / candidate_total * 100.0) if candidate_total > 0 else 0.0
     
@@ -73,14 +63,26 @@ def analyze_scenario(report_path: str, summary_entry: Dict[str, Any]) -> Dict[st
     # 机制 B.4: 微观因果基模覆盖
     n_candidates = rules_lib.get("n_candidates", 0)
     n_selected = rules_lib.get("n_selected", 0)
-    rules_hit = summary_entry.get("rules_hit", [])
-    rules_total = summary_entry.get("rules_total", 0)
+    rules_hit = summary_entry.get("rules_hit")
+    rules_total = summary_entry.get("rules_total")
+    if rules_hit is None or rules_total is None:
+        val_path = Path(report_path).with_name("validation.json")
+        if val_path.is_file():
+            val_metrics = json.loads(val_path.read_text(encoding="utf-8")).get("metrics") or {}
+            rules_hit = val_metrics.get("rule_hits", [])
+            rules_total = val_metrics.get("rules_total", 0)
+        else:
+            rules_hit, rules_total = [], 0
     rule_hit_coverage = (len(rules_hit) / rules_total * 100.0) if rules_total > 0 else 100.0
     
     
     # 机制 C.5: 四值判决分布统计
     v_counts = {"all": 0, "none": 0, "degraded_safe": 0, "other": 0}
-    for item in edges + excluded + unexcluded:
+    seen_triples = {(e.get("src"), e.get("syscall"), e.get("dst")) for e in edges}
+    all_items = list(edges) + list(excluded) + [
+        e for e in unexcluded if (e.get("src"), e.get("syscall"), e.get("dst")) not in seen_triples
+    ]
+    for item in all_items:
         v = item.get("verdict")
         if v == "all":
             v_counts["all"] += 1
@@ -92,7 +94,7 @@ def analyze_scenario(report_path: str, summary_entry: Dict[str, Any]) -> Dict[st
             r = item.get("reason", "")
             if "无关" in r or "排除" in r:
                 v_counts["none"] += 1
-            elif "确认" in r or item in edges:
+            elif "确认" in r or item.get("origin") == "confirmed":
                 v_counts["all"] += 1
             else:
                 v_counts["other"] += 1
@@ -137,25 +139,20 @@ def analyze_scenario(report_path: str, summary_entry: Dict[str, Any]) -> Dict[st
     }
 
 def main():
-    summary_path = "output/provenance-baseline/summary_v2.json"
-    with open(summary_path, "r", encoding="utf-8") as f:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--summary", required=True, type=Path)
+    parser.add_argument("--json-out", required=True, type=Path)
+    args = parser.parse_args()
+    with args.summary.open(encoding="utf-8") as f:
         summary_data = json.load(f)
-        
-    summary_dict = {item["scenario"]: item for item in summary_data.get("results", [])}
-    
-    # 映射可能存在的命名不一致
-    alias_map = {
-        "10_Tomcat_Weakcreds_DNS_Exfiltration": "10_Tomcat_WeakCreds_DNS_Exfil",
-    }
-    
-    report_files = sorted(glob.glob("output/provenance-runs/*_rag.json"))
-    results = []
-    for rep in report_files:
-        base = os.path.basename(rep).replace("_rag.json", "")
-        lookup_key = alias_map.get(base, base)
-        sentry = summary_dict.get(lookup_key, summary_dict.get(base, {}))
-        res = analyze_scenario(rep, sentry)
-        results.append(res)
+    if summary_data.get("scoring_protocol") != SCORING_PROTOCOL:
+        raise SystemExit("需要三元组重建汇总")
+    systems = summary_data["systems"]
+    engine_counts = {row["scenario"]: row["reported_triples"] for row in systems["engine"]["results"]}
+    results = [
+        analyze_scenario(row["report"]["path"], row, engine_counts[row["scenario"]])
+        for row in systems["attack_graph"]["results"]
+    ]
         
     print(f"\n{'='*120}")
     print(f"TraceSage 三大核心机制细粒度物理支撑数据测试报告 (10 个真实攻击场景)")
@@ -178,14 +175,12 @@ def main():
         print(f"{r['scenario'][:33]:<35} | {r['baseline_edges']:<8} | {r['reported_triples']:<8} | {r['pruned_noise']:<8} | {r['main_component_ratio']:>6.1f}% | {rule_str:<8} | {v_str:<16} | {r['false_hops']:<8}")
         
     print(f"{'-'*120}")
-    tot_macro = (tot_base - tot_out) / tot_base * 100.0
-    print(f"{'全场景合并统计 (Overall Total)':<35} | {tot_base:<8} | {tot_out:<8} | {tot_pruned:<8} | {'90.2% 均值':<8} | {'100% 覆盖':<8} | {f'{tot_all}/{tot_none}/{tot_safe}':<16} | {tot_false:<8}")
+    print(f"{'全场景合并统计 (Overall Total)':<35} | {tot_base:<8} | {tot_out:<8} | {tot_pruned:<8} | {'逐场景':<8} | {'逐场景':<8} | {f'{tot_all}/{tot_none}/{tot_safe}':<16} | {tot_false:<8}")
     print(f"{'='*120}\n")
     
-    out_json = "output/mechanism_supporting_metrics.json"
-    with open(out_json, "w", encoding="utf-8") as f:
+    with args.json_out.open("x", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
-    print(f"[*] 完整测试度量数据已落盘至: {out_json}")
+    print(f"[*] 完整测试度量数据已落盘至: {args.json_out}")
 
 if __name__ == "__main__":
     main()

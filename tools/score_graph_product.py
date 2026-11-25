@@ -16,15 +16,13 @@
       Network=(host_id,endpoints)；评分按内容，不含容器/pid（口径见下）
 
 匹配口径:
-    - 必须集合（attack_path 的 edges）: 四元组 (src, syscall, dst, effect)；同类边多实例命中任一即算命中
+    - 必须集合（attack_path 的 edges）: 三元组 (src, syscall, dst)；同类边多实例命中任一即算命中
     - 可能集合（attack_path 的 rules）: 报告里存在至少一条边满足规则的全部条件即算命中，
       该步骤只算一分；满足规则的边全部算正确边
       规则 action 允许写「动作名」（send/recv/create/mmap_exec…）或「syscall 名」两种词表，
       见 rules_match.ACTION_TO_SYSCALLS
-    - 成败（effect）判等: 标注与报告两侧都有值时必须相等；任一侧为空按三元命中并披露条数
-      （accept/create/clone/mmap_read/exit 这类边不记录返回值，标注 effect 为空时不可判）
     - 召回（按步骤）= (命中条目数 + 命中规则数) / (条目数 + 规则数)
-    - 查准（按四元组）= (命中条目边数 + 满足规则的边数) / 报告去重后的内容四元组数
+    - 查准（按三元组）= 命中必标条目或规则的去重三元组数 / 报告去重三元组数
     - 规则条件里的端点种类（process/file/network）从场景库顶点标签判定；连不上库时该条件不判定
 
 baseline.json 的 final_edges 键是 "host|srcId|dstId|eventId"（数字 id 空间），
@@ -85,7 +83,7 @@ def load_gt(path):
             src = strip_endpoint_key(edge.get("src"))
             dst = strip_endpoint_key(edge.get("dst"))
             if src and call and dst:
-                triples.append((src, call, dst, edge.get("effect"), phase_name))
+                triples.append((src, call, dst, phase_name))
     return gt, triples
 
 
@@ -117,11 +115,12 @@ def load_final_graph(baseline_path):
             embedded = False
         instances.append(
             {
-                "src": id2content.get(src_id, f"<id {src_id}>"),
-                "dst": id2content.get(dst_id, f"<id {dst_id}>"),
+                "src": strip_endpoint_key(id2content.get(src_id)),
+                "dst": strip_endpoint_key(id2content.get(dst_id)),
                 "event_id": event_id,
                 "syscall": entry.get("syscall"),
-                "effect": entry.get("effect"),
+                "bytes": entry.get("bytes"),
+                "duration_ns": entry.get("duration_ns"),
                 "start": entry.get("starttime"),
                 "end": entry.get("endtime"),
                 "weight": entry.get("weight"),
@@ -200,7 +199,7 @@ def enrich(instances, database):
 
 
 def to_triples(instances, window=None, poi=None):
-    """实例 -> 去重内容四元组集合（源, 系统调用, 目标, 成败）。window=(W 秒) 时先按 POI 窗口过滤实例。"""
+    """先过滤原始实例，再构造带属性的三元组行。"""
     kept = instances
     if window is not None:
         assert poi is not None, "window 模拟需要 baseline.json 含 poi 时间"
@@ -213,10 +212,12 @@ def to_triples(instances, window=None, poi=None):
                 continue
             if inst["start"] <= hi and inst["end"] >= lo:
                 kept.append(inst)
-    triples = {}
+    triples = []
     for inst in kept:
-        key = (inst["src"], inst["syscall"], inst["dst"], inst.get("effect"))
-        triples.setdefault(key, inst)
+        src, syscall, dst = inst["src"], inst["syscall"], inst["dst"]
+        if src and syscall and dst and syscall != "<NA>":
+            attrs = {key: inst[key] for key in ("bytes", "duration_ns") if inst.get(key) is not None}
+            triples.append((src, syscall, dst, attrs))
     return triples, kept
 
 
@@ -226,8 +227,7 @@ def fmt_offset(seconds):
 
 
 def report(title, triples, gt_triples, rules=(), kinds=None, instances=None, poi=None):
-    ordered = sorted(triples, key=lambda k: (k[0], k[1], k[2], k[3] or ""))
-    met = rm.evaluate_report(gt_triples, rules, ordered, kinds=kinds)
+    met = rm.evaluate_report(gt_triples, rules, triples, kinds=kinds)
     print(f"\n== {title} ==")
     print(
         f"召回（按步骤） {met['steps_hit']}/{met['steps_total']} = {met['recall_steps']:.1%}   "
@@ -235,24 +235,18 @@ def report(title, triples, gt_triples, rules=(), kinds=None, instances=None, poi
         f"{len(met['rule_hits'])}/{met['rules_total']}）"
     )
     print(
-        f"查准（按四元组） {met['correct_edges']}/{met['reported_triples']} = "
+        f"查准（按三元组） {met['correct_edges']}/{met['reported_triples']} = "
         f"{met['precision_edges']:.1%}"
     )
     if met["kinds_degraded"]:
         print("提示: 未取到场景库的顶点种类，规则里的 vertex 条件未参与判定")
-    if met.get("effect_unchecked"):
-        print(f"提示: 规则 {', '.join(met['effect_unchecked'])} 写了 effect 条件，"
-              "但报告边不带成败，该条件按「不否决」处理")
-    if met.get("effect_unchecked_gt"):
-        print(f"提示: {met['effect_unchecked_gt']} 条必须条目的成败未参与判等"
-              "（标注 effect 为空，或报告侧无成败证据）")
-    if met.get("effect_unchecked_edges"):
-        print(f"提示: 查准分子里有 {met['effect_unchecked_edges']} 条正确边没有成败证据，按三元判等算对")
+    if met["edge_attrs_skipped"]:
+        print(f"提示: 规则 {', '.join(met['edge_attrs_skipped'])} 的数值属性缺失")
     if met["must_misses"]:
         print("未召回的必须条目:")
         for miss in met["must_misses"]:
-            src, syscall, dst, effect, phase = miss
-            print(f"  [{phase}] {src} --{syscall}--> {dst}   [{effect or '成败不记'}]")
+            src, syscall, dst, phase = miss
+            print(f"  [{phase}] {src} --{syscall}--> {dst}")
     if met["rule_misses"]:
         print(f"未命中的规则: {', '.join(met['rule_misses'])}")
     if met["extras"]:
@@ -261,17 +255,17 @@ def report(title, triples, gt_triples, rules=(), kinds=None, instances=None, poi
         if instances is not None and poi is not None:
             for inst in instances:
                 if inst.get("start") is not None and inst.get("end") is not None:
-                    k = (inst["src"], inst["syscall"], inst["dst"], inst.get("effect"))
+                    k = (inst["src"], inst["syscall"], inst["dst"])
                     if k not in key_to_inst:
                         key_to_inst[k] = inst
-        for src, syscall, dst, effect in met["extras"]:
-            line = f"  {src} --{syscall}--> {dst}" + (f"   [{effect}]" if effect else "")
-            inst = key_to_inst.get((src, syscall, dst, effect))
+        for src, syscall, dst in met["extras"]:
+            line = f"  {src} --{syscall}--> {dst}"
+            inst = key_to_inst.get((src, syscall, dst))
             if inst is not None:
                 off = fmt_offset((inst["start"] + inst["end"]) / 2 - poi["start_time"])
                 line += f"   [相对POI {off}]"
             print(line)
-    return met["steps_hit"], met["steps_total"], met["correct_edges"], met["reported_triples"]
+    return met
 
 
 def main():
@@ -282,6 +276,7 @@ def main():
                         help="GT 文件路径（groundtruth/<场景>.groundtruth.json）")
     parser.add_argument("--database",
                         help="场景库名（-v2）；缺省取 baseline.json 的 meta.database")
+    parser.add_argument("--json-out", type=Path, help="写入结构化三元组评分")
     parser.add_argument(
         "--window",
         type=float,
@@ -321,11 +316,13 @@ def main():
         print("syscall 来源: 产物内嵌")
 
     triples_all, _ = to_triples(instances)
-    report("最终图（未过滤）", triples_all, gt_triples, rules=rules, kinds=kinds, instances=instances, poi=poi)
+    metrics = report("最终图（未过滤）", triples_all, gt_triples, rules=rules, kinds=kinds, instances=instances, poi=poi)
+    metrics["skipped_edges"] = len(instances) - len(triples_all)
+    windows = []
 
     for window in args.window or []:
         triples_w, kept = to_triples(instances, window=window, poi=poi)
-        report(
+        window_metrics = report(
             f"POI 时间窗 W={window:g}s（保留实例 {len(kept)}/{len(instances)}）",
             triples_w,
             gt_triples,
@@ -334,6 +331,12 @@ def main():
             instances=instances,
             poi=poi,
         )
+        windows.append({"seconds": window, **window_metrics})
+    if args.json_out:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
+        data = {"scoring_protocol": rm.SCORING_PROTOCOL, "scenario": gt.get("scenario"),
+                "totals": metrics, "windows": windows}
+        args.json_out.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -143,6 +143,8 @@ def main() -> None:
         if not report.is_file():
             raise SystemExit(f"缺少报告：{report}")
         data = json.loads(report.read_text(encoding="utf-8"))
+        if data.get("scoring_protocol") != srp.rm.SCORING_PROTOCOL:
+            raise SystemExit(f"报告需要使用新版模型重新生成：{report}")
         stat = data.get("stats") or {}
         ev = srp.evaluate(str(report), str(gt))
         dest = dest_reports / f"{scenario}_rag.json.gz"
@@ -185,6 +187,7 @@ def main() -> None:
 
     caveat = "统一提示词口径：10 个场景使用同一套当前提示词；模块化分层重构后全量端到端验证。"
     summary = {
+        "scoring_protocol": srp.rm.SCORING_PROTOCOL,
         "protocol": (
             "规则证据（Motif/Hop）"
             "检索、编号与引用校验；留一折库；score_report_product 官方口径"

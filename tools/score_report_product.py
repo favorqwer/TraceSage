@@ -19,13 +19,13 @@
     - 召回（按步骤）= (命中的必须条目数 + 命中的规则数) / (必须条目数 + 规则数)；
     - 查准（按边）= (报告里命中必须条目的边数 + 满足某条规则的边数) / 报告去重后的内容三元组数；
     - 规则 action 允许写动作名（send/recv/create/mmap_exec…）或 syscall 名，动作名按
-      rules_match.ACTION_TO_SYSCALLS 展开后判定；规则里的 effect / bytes 条件只看报告边
-      是否自带对应字段，带就严格判，不带就披露（effect_unchecked / edge_attrs_skipped）；
+      rules_match.ACTION_TO_SYSCALLS 展开后判定；数值属性缺失时披露 edge_attrs_skipped；
     - 规则条件里的端点种类（process/file/network）从场景库（-v2）的顶点标签判定；
     - 缺 syscall 的边无法比对，计入 skipped 并在报告末尾提示（不计入分母）。
 """
 
 import argparse
+import gzip
 import json
 import sys
 from pathlib import Path
@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import score_graph_product as eg  # noqa: E402
 import rules_match as rm  # noqa: E402
+from triplet_report import record_attributes  # noqa: E402
 
 
 def report_syscall(edge):
@@ -55,59 +56,72 @@ def report_syscall(edge):
     return next(iter(candidates)) if len(candidates) == 1 else None
 
 
-def report_effects(edge):
-    """报告边的成败口径：优先单数 effect，其次复数 effects；多值展开为多个四元组。
-
-    评测协议要求四元组 (源, 系统调用, 目标, 成败)。报告边若聚合了成功与失败两类实例，
-    必须分别计入，不能统一写成 None，否则「成败从未核验」。
-    """
-    if edge.get("effect") is not None:
-        return [edge.get("effect")]
-    effects = edge.get("effects")
-    if isinstance(effects, (list, tuple)):
-        return list(effects) if effects else [None]
-    return [effects] if effects is not None else [None]
-
-
 def load_agent_report(path, scenario=None):
-    """agent 报告 -> (scenario, {(src,syscall,dst): dict}, skipped)。
-
-    报告里的其它字段（含模型自报的把握）一律不读：评分只看内容三元组。
-    """
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    """读取场景、带原记录属性的三元组行，以及缺字段的记录数。"""
+    path = Path(path)
+    if path.suffix == ".gz":
+        with gzip.open(path, "rt", encoding="utf-8") as stream:
+            data = json.load(stream)
+    else:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    fallback_scenario = path.name.removesuffix(".gz").removesuffix(".json")
     if isinstance(data, list):
         edges = data
-        scenario = scenario or Path(path).stem
+        scenario = scenario or fallback_scenario
     else:
         edges = data.get("edges") or []
-        scenario = scenario or data.get("scenario") or Path(path).stem
-    # 去重单位 = 四元组（源, 系统调用, 目标, 成败）：同一三元组可能同时存在成功与失败两条，
-    # 若按三元组去重会丢掉其中一条，导致「GT 说成功、报告只剩失败」这种假漏报。
-    quads = {}
+        scenario = scenario or data.get("scenario") or fallback_scenario
+    rows = []
     skipped = 0
     for edge in edges:
         src = eg.strip_endpoint_key(edge.get("src"))
         dst = eg.strip_endpoint_key(edge.get("dst"))
         syscall = report_syscall(edge)
-        if not src or not dst or not syscall:
+        if not src or not dst or not syscall or syscall == "<NA>":
             skipped += 1
             continue
-        for effect in report_effects(edge):
-            quads.setdefault((src, syscall, dst, effect), edge)
-    return scenario, quads, skipped
+        attributes = edge.get("record_attributes")
+        for attrs in attributes or [record_attributes(edge)]:
+            rows.append((src, syscall, dst, attrs))
+    return scenario, rows, skipped
+
+
+def event_attribute_rows(report_path, rows):
+    """Use retained syscall instances as numeric evidence when available."""
+    report = Path(report_path)
+    name = report.name.removesuffix(".gz").removesuffix(".json") + ".events.json.gz"
+    companion = report.with_name(name)
+    if not companion.is_file() and report.parent.name == "reports_v2":
+        companion = report.parent.parent / "events_v2" / name
+    if not companion.is_file():
+        return rows
+    with gzip.open(companion, "rt", encoding="utf-8") as stream:
+        events = json.load(stream)["events"]
+    requested = {tuple(row[:3]) for row in rows}
+    attributes = {}
+    for event in events:
+        attrs = record_attributes(event)
+        start, end = event.get("start_ns"), event.get("end_ns")
+        if start is not None and end is not None and end >= start:
+            attrs["duration_ns"] = end - start
+        for membership in event["memberships"]:
+            src, syscall, dst = membership["bundle_triple"]
+            key = (eg.strip_endpoint_key(src), syscall, eg.strip_endpoint_key(dst))
+            if key in requested:
+                attributes.setdefault(key, []).append(attrs)
+    return [(*key, attrs) for key in sorted(requested) for attrs in attributes.get(key, [{}])]
 
 
 def evaluate(report_path, gt_path, scenario=None):
-    scenario, quads, skipped = load_agent_report(report_path, scenario)
+    scenario, rows, skipped = load_agent_report(report_path, scenario)
     gt, gt_triples = eg.load_gt(gt_path)
     rules = rm.load_rules(gt)
+    if any(rule.get("edge") for _, rule in rules):
+        rows = event_attribute_rows(report_path, rows)
     kinds = rm.VertexKinds.for_gt(gt)
-    rows = []
-    for (src, syscall, dst, effect), edge in quads.items():
-        attrs = {"bytes": edge["bytes"]} if edge.get("bytes") is not None else None
-        rows.append((src, syscall, dst, effect, attrs))
     met = rm.evaluate_report(gt_triples, rules, rows, kinds=kinds)
     return {
+        "scoring_protocol": rm.SCORING_PROTOCOL,
         "scenario": scenario,
         "report": str(report_path),
         "gt": str(gt_path),
@@ -128,10 +142,9 @@ def evaluate(report_path, gt_path, scenario=None):
         "precision": met["precision_edges"],
         "kinds_degraded": met["kinds_degraded"],
         "edge_attrs_skipped": met["edge_attrs_skipped"],
-        "effect_unchecked": met["effect_unchecked"],
-        "missed_list": [{"src": m[0], "syscall": m[1], "dst": m[2], "effect": m[3], "phase": m[4]}
+        "missed_list": [{"src": m[0], "syscall": m[1], "dst": m[2], "phase": m[3]}
                         for m in met["must_misses"]],
-        "extra_list": [{"src": e[0], "syscall": e[1], "dst": e[2], "effect": e[3]} for e in met["extras"]],
+        "extra_list": [{"src": e[0], "syscall": e[1], "dst": e[2]} for e in met["extras"]],
     }
 
 
@@ -145,14 +158,11 @@ def print_report(result):
         f"{len(result['rule_hits'])}/{result['rules_total']}）"
     )
     print(
-        f"查准（按边）   {result['correct_edges']}/{result['reported_triples']} = "
+        f"查准（按三元组） {result['correct_edges']}/{result['reported_triples']} = "
         f"{result['precision_edges']:.1%}"
     )
     if result.get("kinds_degraded"):
         print("提示: 未取到场景库的顶点种类，规则里的 vertex 条件未参与判定")
-    if result.get("effect_unchecked"):
-        print(f"提示: 规则 {', '.join(result['effect_unchecked'])} 写了 effect 条件，"
-              "但报告边不带成败，该条件按「不否决」处理")
     if result.get("edge_attrs_skipped"):
         print(f"提示: 规则 {', '.join(result['edge_attrs_skipped'])} 的 edge 数值条件"
               "缺报告边属性，未参与判定")
@@ -187,8 +197,13 @@ def main():
         gt_dir = Path(args.gt_dir)
         if not results_dir.is_dir():
             sys.exit(f"结果目录不存在: {results_dir}")
-        for report_path in sorted(results_dir.glob("*.json")):
-            scenario = report_path.stem
+        report_paths = sorted([*results_dir.glob("*.json"), *results_dir.glob("*.json.gz")])
+        seen_scenarios = set()
+        for report_path in report_paths:
+            scenario = report_path.name.removesuffix(".gz").removesuffix(".json")
+            if scenario in seen_scenarios:
+                ap.error(f"同一场景存在多份报告：{scenario}")
+            seen_scenarios.add(scenario)
             gt_path = gt_dir / f"{scenario}.groundtruth.json"
             if not gt_path.exists():
                 print(f"跳过 {report_path.name}: 找不到 {gt_path.name}")
@@ -210,10 +225,11 @@ def main():
         tot_tri = sum(r["reported_triples"] for r in results)
         print("\n== 合计（micro）==")
         print(f"场景数 {len(results)}  召回（按步骤）{tot_steps_hit}/{tot_steps} = "
-              f"{(tot_steps_hit/tot_steps if tot_steps else 0):.1%}  查准（按边）{tot_correct}/{tot_tri} = "
+                    f"{(tot_steps_hit/tot_steps if tot_steps else 0):.1%}  查准（按三元组）{tot_correct}/{tot_tri} = "
               f"{(tot_correct/tot_tri if tot_tri else 0):.1%}")
         if args.json_out:
             out = {
+                "scoring_protocol": rm.SCORING_PROTOCOL,
                 "convention": "边=(源内容,syscall,目标内容) 精确三元组；召回按步骤（必须条目 + 规则），查准按边（命中条目边 + 满足规则的边）/报告去重三元组（无豁免清单）；规则 action 支持动作名与 syscall 名两种词表",
                 "scenarios": [{k: v for k, v in r.items() if k not in ("missed_list", "extra_list")} for r in results],
                 "totals": {

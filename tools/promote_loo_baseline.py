@@ -123,6 +123,8 @@ def check(modes) -> dict:
         if not sp.is_file():
             raise SystemExit(f"[阻断] 缺少汇总：{sp}")
         s = load_json(sp)
+        if s.get("scoring_protocol") != "triplet-v1":
+            raise SystemExit(f"评分协议不兼容：{sp}")
         got = [r["scenario"] for r in s["results"]]
         if sorted(got) != expected:
             raise SystemExit(f"[阻断] {sp.name} 场景集与场景清单不符：{sorted(got)} != {expected}")
@@ -491,7 +493,9 @@ def main() -> None:
     old = {}
     for name in ("summary_rules.json", "summary_hybrid.json"):
         if (old_src / name).is_file():
-            old[name] = load_json(old_src / name)
+            candidate = load_json(old_src / name)
+            if candidate.get("scoring_protocol") == "triplet-v1":
+                old[name] = candidate
     data["old"] = old
     old_overview = old_src / "OVERVIEW.md"
     data["old_is_loo"] = (old_overview.is_file()

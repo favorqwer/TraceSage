@@ -27,14 +27,12 @@ import rules_match as rm  # noqa: E402
 
 
 def hit_triples(report_path: Path, gt_path: Path) -> Tuple[set, set]:
-    scenario, quads, _skipped = srp.load_agent_report(str(report_path))
+    _, rows, _skipped = srp.load_agent_report(str(report_path))
     gt, gt_triples = eg.load_gt(str(gt_path))
     rules = rm.load_rules(gt)
+    if any(rule.get("edge") for _, rule in rules):
+        rows = srp.event_attribute_rows(str(report_path), rows)
     kinds = rm.VertexKinds.for_gt(gt)
-    rows = []
-    for (src, syscall, dst, effect), edge in quads.items():
-        attrs = {"bytes": edge["bytes"]} if edge.get("bytes") is not None else None
-        rows.append((src, syscall, dst, effect, attrs))
     met = rm.evaluate_report(gt_triples, rules, rows, kinds=kinds)
     hits = {(t[0], t[1], t[2]) for t in met["must_hits"]}
     rule_hits = set()
