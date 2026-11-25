@@ -45,6 +45,12 @@ class RawEvent:
     via_kind: str = ""
     via_key: str = ""
     support: int = 0
+    llm_verdict: str = ""
+    decision_source: str = ""
+    llm_bundle_id: str = ""
+    llm_bundle_level: Optional[int] = None
+    llm_bundle_size: Optional[int] = None
+    rag_rules: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     memberships: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
     @property
@@ -143,6 +149,12 @@ def _parse_event(item: dict[str, Any]) -> RawEvent:
         via_kind=str(item.get("via_kind") or ""),
         via_key=str(item.get("via_key") or ""),
         support=int(item.get("support") or 0),
+        llm_verdict=str(item.get("llm_verdict") or item.get("verdict") or ""),
+        decision_source=str(item.get("decision_source") or ""),
+        llm_bundle_id=str(item.get("llm_bundle_id") or ""),
+        llm_bundle_level=(int(item["llm_bundle_level"]) if item.get("llm_bundle_level") is not None else None),
+        llm_bundle_size=(int(item["llm_bundle_size"]) if item.get("llm_bundle_size") is not None else None),
+        rag_rules=tuple(dict(r) for r in (item.get("rag_rules") or ())),
         memberships=tuple(dict(m) for m in (item.get("memberships") or ())),
     )
 
