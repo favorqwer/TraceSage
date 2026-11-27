@@ -1,0 +1,781 @@
+{
+  "scenario": "9_Site_Defacement",
+  "entry": {
+    "src": "n:9_Site_Defacement:192.168.122.128:56600->192.168.122.129:8081",
+    "action": "accept",
+    "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+    "effect": "success",
+    "edge_key": "NetworkToProcess:68505:accept",
+    "syscall": "accept",
+    "time": "21:00:17.408",
+    "why": "外部攻击机在日志窗口中最早向目标 Web 服务发起的可归属 HTTP 侦察入口（56600->8081 accept）"
+  },
+  "poi": {
+    "src": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+    "action": "send",
+    "dst": "n:9_Site_Defacement:192.168.122.128:50418->192.168.122.129:8081",
+    "effect": "success",
+    "edge_key": "ProcessToNetwork:22520102:send",
+    "syscall": "sendfile",
+    "time": "21:20:40.599",
+    "why": "nginx 通过 sendfile 向攻击机 192.168.122.128:50418 返回被篡改后的 /srv/progql-web/current/index.html（331 字节）"
+  },
+  "counts": {
+    "actions": 7,
+    "must_entries": 74,
+    "rules": 0,
+    "steps_total": 74,
+    "edges_total_with_dupes": 74,
+    "edges_unique": 74,
+    "must_edges": 74
+  },
+  "attack_path": [
+    {
+      "id": "A1",
+      "phase": "[A1] 外部攻击机 HTTP 侦察与基线探测（Entry: 8081 端口访问）",
+      "time": "21:00:17.408~21:01:44.219",
+      "what": "外部攻击机（192.168.122.128）先后通过 56600、57028、57034、60934 端口访问受害主机 nginx 8081 端口，探测首页、静态资源、版本文件及探测路径状态。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:56600->192.168.122.129:8081",
+          "action": "accept",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:68505:accept",
+          "syscall": "accept",
+          "edge_id": "A1.1"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:56600->192.168.122.129:8081",
+          "action": "recv",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:68511:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.2"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "action": "send",
+          "dst": "n:9_Site_Defacement:192.168.122.128:56600->192.168.122.129:8081",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:68527:send",
+          "syscall": "write",
+          "edge_id": "A1.3"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:57028->192.168.122.129:8081",
+          "action": "accept",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:120753:accept",
+          "syscall": "accept",
+          "edge_id": "A1.4"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:57028->192.168.122.129:8081",
+          "action": "recv",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:120759:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.5"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "action": "send",
+          "dst": "n:9_Site_Defacement:192.168.122.128:57028->192.168.122.129:8081",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:120769:send",
+          "syscall": "write",
+          "edge_id": "A1.6"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:57034->192.168.122.129:8081",
+          "action": "accept",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:120817:accept",
+          "syscall": "accept",
+          "edge_id": "A1.7"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:57034->192.168.122.129:8081",
+          "action": "recv",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:120823:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.8"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "action": "send",
+          "dst": "n:9_Site_Defacement:192.168.122.128:57034->192.168.122.129:8081",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:120833:send",
+          "syscall": "write",
+          "edge_id": "A1.9"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:60934->192.168.122.129:8081",
+          "action": "accept",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3133578:accept",
+          "syscall": "accept",
+          "edge_id": "A1.10"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:60934->192.168.122.129:8081",
+          "action": "recv",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:3133584:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A1.11"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "action": "send",
+          "dst": "n:9_Site_Defacement:192.168.122.128:60934->192.168.122.129:8081",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:3133598:send",
+          "syscall": "write",
+          "edge_id": "A1.12"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "phase": "[A2] 攻击者登录 SSH 并经 SCP/SFTP 投递恶意替换包与校验文件（47550->22）",
+      "time": "21:11:06.561~21:11:07.023",
+      "what": "攻击机通过 47550->22 建立 SSH 会话，sshd 派生 bash 后启动 sftp-server，经匿名管道 pipe:[78870] 写入 /home/labweb/incoming/deface_release.tar.gz 与 deface_release.sha256。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:47550->192.168.122.129:22",
+          "action": "accept",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4034395:accept",
+          "syscall": "accept",
+          "edge_id": "A2.1"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:47550->192.168.122.129:22",
+          "action": "recv",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:4245707:recv",
+          "syscall": "read",
+          "edge_id": "A2.2"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/sbin/sshd",
+          "action": "exec",
+          "dst": "p:9_Site_Defacement/host:/bin/bash",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4269437:exec",
+          "syscall": "execve",
+          "edge_id": "A2.3"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:9_Site_Defacement/host:/usr/lib/openssh/sftp-server",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:4270559:exec",
+          "syscall": "execve",
+          "edge_id": "A2.4"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/sbin/sshd",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:pipe:[78870]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4269323:write",
+          "syscall": "write",
+          "edge_id": "A2.5"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:pipe:[78870]",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/lib/openssh/sftp-server",
+          "effect": "success",
+          "edge_key": "FileToProcess:4272337:read",
+          "syscall": "read",
+          "edge_id": "A2.6"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/lib/openssh/sftp-server",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/home/labweb/incoming/deface_release.tar.gz",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4273981:write",
+          "syscall": "write",
+          "edge_id": "A2.7"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/lib/openssh/sftp-server",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/home/labweb/incoming/deface_release.sha256",
+          "effect": "success",
+          "edge_key": "ProcessToFile:4274505:write",
+          "syscall": "write",
+          "edge_id": "A2.8"
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "phase": "[A3] 第二条 SSH 会话执行 sha256sum -c 校验替换包完整性（39066->22）",
+      "time": "21:14:07.003~21:14:07.528",
+      "what": "攻击机建立第二条 SSH 会话（39066->22），调用 sha256sum 读取 deface_release.sha256 与 deface_release.tar.gz，经 pipe:[86846] 将校验结果传回 sshd 并返回攻击机。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:39066->192.168.122.129:22",
+          "action": "accept",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:6484557:accept",
+          "syscall": "accept",
+          "edge_id": "A3.1"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:39066->192.168.122.129:22",
+          "action": "recv",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:6785365:recv",
+          "syscall": "read",
+          "edge_id": "A3.2"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/sha256sum",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:6788149:exec",
+          "syscall": "execve",
+          "edge_id": "A3.3"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/home/labweb/incoming/deface_release.sha256",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/sha256sum",
+          "effect": "success",
+          "edge_key": "FileToProcess:6789319:read",
+          "syscall": "read",
+          "edge_id": "A3.4"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/home/labweb/incoming/deface_release.tar.gz",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/sha256sum",
+          "effect": "success",
+          "edge_key": "FileToProcess:6789434:read",
+          "syscall": "read",
+          "edge_id": "A3.5"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/sha256sum",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:pipe:[86846]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:6791068:write",
+          "syscall": "write",
+          "edge_id": "A3.6"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:pipe:[86846]",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "FileToProcess:6791908:read",
+          "syscall": "read",
+          "edge_id": "A3.7"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/sbin/sshd",
+          "action": "send",
+          "dst": "n:9_Site_Defacement:192.168.122.128:39066->192.168.122.129:22",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:6791993:send",
+          "syscall": "write",
+          "edge_id": "A3.8"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "phase": "[A4] 第三条 SSH 会话下发部署命令并创建发布与备份目录（48008->22）",
+      "time": "21:17:26.951~21:17:27.288",
+      "what": "攻击机建立第三条 SSH 会话（48008->22）启动部署脚本，调用 mkdir 创建 releases/release_20260531-211727 与 releases/current_before_20260531-211727。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:48008->192.168.122.129:22",
+          "action": "accept",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:8929454:accept",
+          "syscall": "accept",
+          "edge_id": "A4.1"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:48008->192.168.122.129:22",
+          "action": "recv",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/sshd",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:9121969:recv",
+          "syscall": "read",
+          "edge_id": "A4.2"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/mkdir",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:9125448:exec",
+          "syscall": "execve",
+          "edge_id": "A4.3"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/mkdir",
+          "action": "create",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/release_20260531-211727",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9126029:create",
+          "syscall": "mkdir",
+          "edge_id": "A4.4"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/mkdir",
+          "action": "create",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/current_before_20260531-211727",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9126624:create",
+          "syscall": "mkdir",
+          "edge_id": "A4.5"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "phase": "[A5] 篡改前对原站点执行 tar -czf 压缩备份与 cp -a 快照",
+      "time": "21:17:27.289~21:17:27.295",
+      "what": "部署脚本调用 tar -> sh -> gzip 将 /srv/progql-web/current/ 原文件打包写入 backups/site-before-20260531-211727.tar.gz，并调用 cp 将原站点文件复制至 releases/current_before_20260531-211727/。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:9_Site_Defacement/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:9126896:exec",
+          "syscall": "execve",
+          "edge_id": "A5.1"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "action": "create",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/backups/site-before-20260531-211727.tar.gz",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9128101:create",
+          "syscall": "open",
+          "edge_id": "A5.2"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "action": "exec",
+          "dst": "p:9_Site_Defacement/host:/bin/sh",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:9128291:exec",
+          "syscall": "execve",
+          "edge_id": "A5.3"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/bin/sh",
+          "action": "exec",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/gzip",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:9128915:exec",
+          "syscall": "execve",
+          "edge_id": "A5.4"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/current/release.txt",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "FileToProcess:9128462:read",
+          "syscall": "read",
+          "edge_id": "A5.5"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/current/assets/site.css",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "FileToProcess:9129015:read",
+          "syscall": "read",
+          "edge_id": "A5.6"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/current/index.html",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "FileToProcess:9129101:read",
+          "syscall": "read",
+          "edge_id": "A5.7"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/gzip",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/backups/site-before-20260531-211727.tar.gz",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9129904:write",
+          "syscall": "write",
+          "edge_id": "A5.8"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/bin/bash",
+          "action": "exec",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:9130414:exec",
+          "syscall": "execve",
+          "edge_id": "A5.9"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "action": "create",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/current_before_20260531-211727/assets",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9131127:create",
+          "syscall": "mkdir",
+          "edge_id": "A5.10"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/current/assets/site.css",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "effect": "success",
+          "edge_key": "FileToProcess:9131324:read",
+          "syscall": "read",
+          "edge_id": "A5.11"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/current_before_20260531-211727/assets/site.css",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9131327:write",
+          "syscall": "write",
+          "edge_id": "A5.12"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/current/index.html",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "effect": "success",
+          "edge_key": "FileToProcess:9131507:read",
+          "syscall": "read",
+          "edge_id": "A5.13"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/current_before_20260531-211727/index.html",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9131513:write",
+          "syscall": "write",
+          "edge_id": "A5.14"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/current/release.txt",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "effect": "success",
+          "edge_key": "FileToProcess:9131587:read",
+          "syscall": "read",
+          "edge_id": "A5.15"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/current_before_20260531-211727/release.txt",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9131592:write",
+          "syscall": "write",
+          "edge_id": "A5.16"
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "phase": "[A6] 解包 deface_release.tar.gz 至 releases 目录",
+      "time": "21:17:27.296~21:17:27.297",
+      "what": "tar 派生 gzip 读取 /home/labweb/incoming/deface_release.tar.gz 经 pipe:[90379] 解压，并创建 assets 子目录及写出 release.txt、index.html、notice.txt、assets/site.css。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "action": "exec",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/gzip",
+          "effect": "success",
+          "edge_key": "ProcessToProcess:9132859:exec",
+          "syscall": "execve",
+          "edge_id": "A6.1"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/home/labweb/incoming/deface_release.tar.gz",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/gzip",
+          "effect": "success",
+          "edge_key": "FileToProcess:9133163:read",
+          "syscall": "read",
+          "edge_id": "A6.2"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/gzip",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:pipe:[90379]",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9133306:write",
+          "syscall": "write",
+          "edge_id": "A6.3"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:pipe:[90379]",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "effect": "success",
+          "edge_key": "FileToProcess:9132725:read",
+          "syscall": "read",
+          "edge_id": "A6.4"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/release_20260531-211727/release.txt",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9133593:write",
+          "syscall": "write",
+          "edge_id": "A6.5"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/release_20260531-211727/index.html",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9133614:write",
+          "syscall": "write",
+          "edge_id": "A6.6"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/release_20260531-211727/notice.txt",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9133641:write",
+          "syscall": "write",
+          "edge_id": "A6.7"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "action": "create",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/release_20260531-211727/assets",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9133652:create",
+          "syscall": "mkdir",
+          "edge_id": "A6.8"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/tar",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/releases/release_20260531-211727/assets/site.css",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9133695:write",
+          "syscall": "write",
+          "edge_id": "A6.9"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "phase": "[A7] 覆盖 /srv/progql-web/current/ 目录完成网站篡改",
+      "time": "21:17:27.298~21:17:27.304",
+      "what": "cp 读取新版本 release_20260531-211727 中的 index.html、release.txt、notice.txt 与 assets/site.css，覆盖写入线上服务目录 /srv/progql-web/current/。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/releases/release_20260531-211727/index.html",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "effect": "success",
+          "edge_key": "FileToProcess:9134338:read",
+          "syscall": "read",
+          "edge_id": "A7.1"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/current/index.html",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9134340:write",
+          "syscall": "write",
+          "edge_id": "A7.2"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/releases/release_20260531-211727/release.txt",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "effect": "success",
+          "edge_key": "FileToProcess:9136150:read",
+          "syscall": "read",
+          "edge_id": "A7.3"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/current/release.txt",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9136155:write",
+          "syscall": "write",
+          "edge_id": "A7.4"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/releases/release_20260531-211727/notice.txt",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "effect": "success",
+          "edge_key": "FileToProcess:9137088:read",
+          "syscall": "read",
+          "edge_id": "A7.5"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/current/notice.txt",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9137093:write",
+          "syscall": "write",
+          "edge_id": "A7.6"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/releases/release_20260531-211727/assets/site.css",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "effect": "success",
+          "edge_key": "FileToProcess:9138293:read",
+          "syscall": "read",
+          "edge_id": "A7.7"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/cp",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/current/assets/site.css",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9138295:write",
+          "syscall": "write",
+          "edge_id": "A7.8"
+        }
+      ]
+    },
+    {
+      "id": "A8",
+      "phase": "[A8] 记录部署日志与写入篡改标记文件",
+      "time": "21:17:27.306~21:17:27.309",
+      "what": "部署脚本 bash 与 sha256sum 将变更摘要写入 /srv/progql-web/deploy.log，并在 /srv/progql-web/current/ 下写出 COMPROMISED_MARKER.txt。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "p:9_Site_Defacement/host:/bin/bash",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/deploy.log",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9139559:write",
+          "syscall": "write",
+          "edge_id": "A8.1"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/bin/sha256sum",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/deploy.log",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9140512:write",
+          "syscall": "write",
+          "edge_id": "A8.2"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/bin/bash",
+          "action": "write",
+          "dst": "f:9_Site_Defacement/host:/srv/progql-web/current/COMPROMISED_MARKER.txt",
+          "effect": "success",
+          "edge_key": "ProcessToFile:9141125:write",
+          "syscall": "write",
+          "edge_id": "A8.3"
+        }
+      ]
+    },
+    {
+      "id": "A9",
+      "phase": "[A9] 攻击者访问 8081 端口验证篡改生效（POI：nginx sendfile 返回篡改首页）",
+      "time": "21:20:40.599",
+      "what": "攻击机发起 50418->8081 HTTP GET / 请求，nginx 读取已被篡改的 /srv/progql-web/current/index.html 并通过 sendfile 返回响应，构成终点告警事实 POI。",
+      "collection": "must",
+      "edges": [
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:50418->192.168.122.129:8081",
+          "action": "accept",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:22520078:accept",
+          "syscall": "accept",
+          "edge_id": "A9.1"
+        },
+        {
+          "src": "n:9_Site_Defacement:192.168.122.128:50418->192.168.122.129:8081",
+          "action": "recv",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "NetworkToProcess:22520084:recv",
+          "syscall": "recvfrom",
+          "edge_id": "A9.2"
+        },
+        {
+          "src": "f:9_Site_Defacement/host:/srv/progql-web/current/index.html",
+          "action": "read",
+          "dst": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "effect": "success",
+          "edge_key": "FileToProcess:22520102:read",
+          "syscall": "sendfile",
+          "edge_id": "A9.3"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "action": "send",
+          "dst": "n:9_Site_Defacement:192.168.122.128:50418->192.168.122.129:8081",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:22520100:send",
+          "syscall": "write",
+          "edge_id": "A9.4"
+        },
+        {
+          "src": "p:9_Site_Defacement/host:/usr/sbin/nginx",
+          "action": "send",
+          "dst": "n:9_Site_Defacement:192.168.122.128:50418->192.168.122.129:8081",
+          "effect": "success",
+          "edge_key": "ProcessToNetwork:22520102:send",
+          "syscall": "sendfile",
+          "edge_id": "A9.5"
+        }
+      ]
+    }
+  ]
+}

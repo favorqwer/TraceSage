@@ -326,7 +326,7 @@
           "edge_id": "A5.5"
         },
         {
-          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:<NA>",
+          "src": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/usr/sbin/php-fpm8.1",
           "action": "exec",
           "dst": "p:8_FTP_WeakCreds_WebShell_Exfiltration/host:/bin/sh",
           "effect": "success",

@@ -11,6 +11,8 @@ tmp/
 tmp.md
 provenance-agent/tests/
 attack/
+开题报告v2.docx
+*.patch
 
 # Java 编译产物与字节码
 *.class

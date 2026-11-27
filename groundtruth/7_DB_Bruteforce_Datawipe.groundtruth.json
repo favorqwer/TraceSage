@@ -406,7 +406,7 @@
           "edge_id": "A4.2"
         },
         {
-          "src": "p:7_DB_BruteForce_DataWipe/host:<NA>",
+          "src": "p:7_DB_BruteForce_DataWipe/host:/usr/lib/postgresql/14/bin/postgres",
           "action": "exec",
           "dst": "p:7_DB_BruteForce_DataWipe/host:/bin/sh",
           "effect": "success",
