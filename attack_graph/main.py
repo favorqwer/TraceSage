@@ -99,7 +99,7 @@ def main() -> int:
     parser.add_argument("--output", default=None,
                         help="输出报告（默认 output/attack-graph-runs/<运行编号>/report.json）")
     parser.add_argument("--fold", default=None,
-                        help="折库路径（默认 output/provenance-baseline/distill/fold-libraries/<场景>.json）")
+                        help="折库路径（默认 output/rule-kg/v1/fold-libraries/<场景>.json）")
     parser.add_argument("--replay-trace", default=None,
                         help="从已有 .trace.jsonl 重放大模型判定，跳过真实 LLM 调用")
     parser.add_argument("--preflight", action="store_true",

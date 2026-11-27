@@ -39,7 +39,7 @@ SCENARIOS: Tuple[Tuple[str, str], ...] = (
     ("6_Web_SQLi_Data_Exfiltration", "6_Web_SQLi_Data_Exfiltration-r3"),
     ("7_DB_Bruteforce_Datawipe", "7_DB_BruteForce_DataWipe-r3"),
     ("8_FTP_WeakCreds_WebShell_Exfiltration", "8_FTP_WeakCreds_WebShell_Exfiltration-r3"),
-    ("9_Exposed_Container_Escape", "9_Exposed_Container_Escape-r9"),
+    ("9_Site_Defacement", "9_Site_Defacement"),
     ("10_Tomcat_Weakcreds_DNS_Exfiltration", "10_Tomcat_Weakcreds_DNS_Exfiltration-r3"),
 )
 

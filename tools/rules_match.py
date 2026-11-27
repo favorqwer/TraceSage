@@ -341,7 +341,7 @@ def scenario_database(scenario):
     """场景名 -> -v2 库名。
 
     默认按项目命名规范推导：attack-<场景名小写、下划线换连字符>-v2
-    （例：9_Exposed_Container_Escape -> attack-9-exposed-container-escape-v2）；
+    （例：9_Site_Defacement -> attack-9-site-defacement-v2）；
     provenance/config/scenarios.json 里若显式登记了 database，则用它覆盖。
     """
     if not scenario:

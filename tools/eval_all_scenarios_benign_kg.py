@@ -78,10 +78,10 @@ SCENARIOS = [
     },
     {
         "id": 9,
-        "name": "9_Exposed_Container_Escape",
-        "dir": "output/parser-v2/9_Exposed_Container_Escape-r3",
-        "gt": "groundtruth/9_Exposed_Container_Escape.groundtruth.json",
-        "desc": "特权容器配置缺陷与宿主机挂载逃逸"
+        "name": "9_Site_Defacement",
+        "dir": "output/parser-v2/9_Site_Defacement",
+        "gt": "groundtruth/9_Site_Defacement.groundtruth.json",
+        "desc": "Web 站点篡改与文件替换"
     },
     {
         "id": 10,

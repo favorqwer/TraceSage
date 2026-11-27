@@ -58,10 +58,10 @@ SCENARIOS = {
         "poi_args": ["--poi-endpoints", "100.86.108.4:48182->100.74.213.15:8888", "--poi-optype", "sendto"],
         "gt": "groundtruth/8_FTP_WeakCreds_WebShell_Exfiltration.groundtruth.json",
     },
-    "9_Exposed_Container_Escape": {
-        "db_new": "attack-9-exposed-container-escape-v2",
-        "poi_args": ["--poi-endpoints", "172.17.0.2:56186->100.74.213.15:8808", "--poi-optype", "sendto"],
-        "gt": "groundtruth/9_Exposed_Container_Escape.groundtruth.json",
+    "9_Site_Defacement": {
+        "db_new": "attack-9-site-defacement-v2",
+        "poi_args": ["--poi-endpoints", "192.168.122.128:50418->192.168.122.129:8081", "--poi-optype", "sendfile"],
+        "gt": "groundtruth/9_Site_Defacement.groundtruth.json",
     },
     "10_Tomcat_Weakcreds_DNS_Exfiltration": {
         "db_new": "attack-10-tomcat-weakcreds-dns-exfiltration-v2",
