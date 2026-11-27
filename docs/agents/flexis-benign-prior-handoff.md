@@ -95,7 +95,7 @@
 | `6_Web_SQLi_Data_Exfiltration` | `output/parser-v2/6_Web_SQLi_Data_Exfiltration-r3/` |
 | `7_DB_Bruteforce_Datawipe` | `output/parser-v2/7_DB_BruteForce_DataWipe-r3/` |
 | `8_FTP_WeakCreds_WebShell_Exfiltration` | `output/parser-v2/8_FTP_WeakCreds_WebShell_Exfiltration-r3/` |
-| `9_Exposed_Container_Escape` | `output/parser-v2/9_Exposed_Container_Escape-r9/` |
+| `9_Site_Defacement` | `output/parser-v2/9_Site_Defacement/` |
 | `10_Tomcat_Weakcreds_DNS_Exfiltration` | `output/parser-v2/10_Tomcat_Weakcreds_DNS_Exfiltration-r3/` |
 
 脚本中的固定场景映射在 `tools/mine_flexis_benign_prior.py:33` 附近的 `SCENARIOS` 常量中。

@@ -87,7 +87,7 @@ bash experiments/DEPIMPACT/baseline/run-baseline.sh \
   output/engine-runs/<场景全名> \
   <POI 参数...>
 ```
-POI 参数没有默认值，从 `provenance/config/scenarios.json` 的 `poi` 字段展开。场景 1 用 `--poi-file /srv/data/README_RESTORE.txt --poi-optype write`；场景 2 用 `--poi-endpoints 100.116.135.31:45794->100.86.108.4:22 --poi-optype write`。
+POI 参数没有默认值，从 `attack_graph/config/scenarios.json` 的 `poi` 字段展开。场景 1 用 `--poi-file /srv/data/README_RESTORE.txt --poi-optype write`；场景 2 用 `--poi-endpoints 100.116.135.31:45794->100.86.108.4:22 --poi-optype write`。
 
 **评测（按产物类型选脚本，两者口径相同但输入 schema 不同）：**
 
